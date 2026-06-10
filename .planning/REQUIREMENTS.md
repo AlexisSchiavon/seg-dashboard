@@ -86,37 +86,37 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | TBD | Pending |
-| AUTH-02 | TBD | Pending |
-| AUTH-03 | TBD | Pending |
-| TAL-01 | TBD | Pending |
-| TAL-02 | TBD | Pending |
-| PIPE-01 | TBD | Pending |
-| PIPE-02 | TBD | Pending |
-| PIPE-03 | TBD | Pending |
-| PIPE-04 | TBD | Pending |
-| PIPE-05 | TBD | Pending |
-| SHEET-01 | TBD | Pending |
-| SHEET-02 | TBD | Pending |
-| TRELLO-01 | TBD | Pending |
-| TRELLO-02 | TBD | Pending |
-| TRELLO-03 | TBD | Pending |
-| DASH-01 | TBD | Pending |
-| DASH-02 | TBD | Pending |
-| DASH-03 | TBD | Pending |
-| DASH-04 | TBD | Pending |
-| DASH-05 | TBD | Pending |
-| REPORT-01 | TBD | Pending |
-| REPORT-02 | TBD | Pending |
-| AGENT-01 | TBD | Pending |
-| DEPLOY-01 | TBD | Pending |
-| DEPLOY-02 | TBD | Pending |
+| AUTH-01 | Phase 1 | Mapped |
+| AUTH-02 | Phase 1 | Mapped |
+| AUTH-03 | Phase 1 | Mapped |
+| TAL-01 | Phase 1 | Mapped |
+| TAL-02 | Phase 1 | Mapped |
+| PIPE-01 | Phase 2 | Mapped |
+| PIPE-02 | Phase 2 | Mapped |
+| PIPE-03 | Phase 2 | Mapped |
+| PIPE-04 | Phase 2 | Mapped |
+| PIPE-05 | Phase 2 | Mapped |
+| SHEET-01 | Phase 3 | Mapped |
+| SHEET-02 | Phase 3 | Mapped |
+| TRELLO-01 | Phase 4 | Mapped |
+| TRELLO-02 | Phase 4 | Mapped |
+| TRELLO-03 | Phase 4 | Mapped |
+| DASH-01 | Phase 2 | Mapped |
+| DASH-02 | Phase 4 | Mapped |
+| DASH-03 | Phase 2 | Mapped |
+| DASH-04 | Phase 3 | Mapped |
+| DASH-05 | Phase 5 | Mapped |
+| REPORT-01 | Phase 5 | Mapped |
+| REPORT-02 | Phase 5 | Mapped |
+| AGENT-01 | Phase 6 | Mapped |
+| DEPLOY-01 | Phase 7 | Mapped |
+| DEPLOY-02 | Phase 7 | Mapped |
 
 **Coverage:**
 - v1 requirements: 25 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 25 ⚠️ (will be resolved by roadmap creation)
+- Mapped to phases: 25
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-09*
-*Last updated: 2026-06-09 after initial definition*
+*Last updated: 2026-06-09 after roadmap creation*
