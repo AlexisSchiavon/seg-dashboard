@@ -4,7 +4,10 @@ import tempfile
 # Set test env vars BEFORE importing anything that loads app.config.settings,
 # so `uv run pytest` is self-contained and doesn't depend on a developer .env file.
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-only-not-for-prod")
-os.environ.setdefault("ADMIN_EMAIL", "admin@seg.test")
+# NOTE: email-validator rejects the IANA "special-use" .test TLD as
+# non-deliverable, so use example.com (RFC 2606 reserved, accepted by
+# email-validator) for the test admin account.
+os.environ.setdefault("ADMIN_EMAIL", "admin@example.com")
 os.environ.setdefault("ADMIN_PASSWORD", "test-admin-password")
 os.environ.setdefault("COOKIE_SECURE", "False")
 

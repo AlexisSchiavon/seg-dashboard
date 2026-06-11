@@ -1,0 +1,142 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg:#0c0c0e; --bg2:#111114; --bg3:#18181c; --bg4:#1f1f24; --bg5:#26262c;
+  --border:rgba(255,255,255,0.06); --borderM:rgba(255,255,255,0.11); --borderH:rgba(255,255,255,0.18);
+  --text:#eeede6; --text2:#8a8980; --text3:#4e4e4a;
+  --accent:#e8520a; --accentD:rgba(232,82,10,0.12); --accentB:rgba(232,82,10,0.25);
+  --green:#1a9e6e; --greenD:rgba(26,158,110,0.12); --greenT:#3dcf96;
+  --amber:#c97c14; --amberD:rgba(201,124,20,0.12); --amberT:#f0a93a;
+  --blue:#2472c8; --blueD:rgba(36,114,200,0.12); --blueT:#6aabf0;
+  --purple:#6b54d6; --purpleD:rgba(107,84,214,0.12); --purpleT:#a594f0;
+  --red:#c43232; --redD:rgba(196,50,50,0.12); --redT:#f07070;
+  --r:10px; --rL:14px; --rXL:18px;
+}
+
+html {
+  background: var(--bg);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+.card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--rL);
+  padding: 18px;
+  margin-bottom: 12px;
+}
+
+.btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--rL);
+  border: 1px solid var(--borderM);
+  background: var(--bg4);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'DM Sans', sans-serif;
+  margin-bottom: 10px;
+}
+
+.btn:hover {
+  background: var(--bg5);
+  border-color: var(--borderH);
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+.btn.primary:hover {
+  background: #d44808;
+}
+
+/* Login page */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+}
+
+.login-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+  margin-bottom: 4px;
+}
+
+.login-title span {
+  color: var(--accent);
+}
+
+.login-sub {
+  font-size: 12px;
+  color: var(--text3);
+  margin-bottom: 20px;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text3);
+  margin-bottom: 6px;
+}
+
+.field input {
+  width: 100%;
+  padding: 11px 12px;
+  font-size: 14px;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--text);
+  background: var(--bg4);
+  border: 1px solid var(--borderM);
+  border-radius: var(--r);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#error-message {
+  font-size: 12px;
+  color: var(--redT);
+  margin-bottom: 12px;
+  min-height: 16px;
+}
