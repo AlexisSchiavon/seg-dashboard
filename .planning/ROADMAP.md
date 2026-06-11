@@ -45,7 +45,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Talent catalog vertical slice: protected CRUD + product mapping endpoints, idempotent 21-talent seed (TAL-01, TAL-02)
+- [x] 01-02-PLAN.md — Talent catalog vertical slice: protected CRUD + product mapping endpoints, idempotent 21-talent seed (TAL-01, TAL-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -153,7 +153,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation — Auth, Talent Catalog & Health Check | 1/3 | In Progress|  |
+| 1. Foundation — Auth, Talent Catalog & Health Check | 2/3 | In Progress|  |
 | 2. Pipedrive Integration & Core Dashboard | 0/TBD | Not started | - |
 | 3. Google Sheets Leads Integration | 0/TBD | Not started | - |
 | 4. Trello Integration & Collection Automation | 0/TBD | Not started | - |
