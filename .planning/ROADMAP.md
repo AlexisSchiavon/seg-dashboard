@@ -13,7 +13,7 @@ This roadmap delivers the SEG Talent Intelligence Dashboard through seven strict
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation — Auth, Talent Catalog & Health Check** - FastAPI base structure with JWT auth, SQLite (WAL), talent catalog DB table, and `/health` endpoint
+- [x] **Phase 1: Foundation — Auth, Talent Catalog & Health Check** - FastAPI base structure with JWT auth, SQLite (WAL), talent catalog DB table, and `/health` endpoint (completed 2026-06-11)
 - [ ] **Phase 2: Pipedrive Integration & Core Dashboard** - Live Pipedrive sync powers Resumen, Por talento, and Funnel tabs with real deal/revenue data
 - [ ] **Phase 3: Google Sheets Leads Integration** - Gmail-fed leads sync populates the Leads dashboard tab
 - [ ] **Phase 4: Trello Integration & Collection Automation** - Campaign execution/collection tracking and Pipedrive→Trello automation complete the Por talento revenue projection
@@ -49,7 +49,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-PLAN.md — Public /health, change-password + create-user endpoints, frontend 401→login redirect (AUTH-02, AUTH-03)
+- [x] 01-03-PLAN.md — Public /health, change-password + create-user endpoints, frontend 401→login redirect (AUTH-02, AUTH-03)
 
 **UI hint**: yes
 
@@ -153,7 +153,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation — Auth, Talent Catalog & Health Check | 2/3 | In Progress|  |
+| 1. Foundation — Auth, Talent Catalog & Health Check | 3/3 | Complete   | 2026-06-11 |
 | 2. Pipedrive Integration & Core Dashboard | 0/TBD | Not started | - |
 | 3. Google Sheets Leads Integration | 0/TBD | Not started | - |
 | 4. Trello Integration & Collection Automation | 0/TBD | Not started | - |
