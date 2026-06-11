@@ -73,6 +73,18 @@ def test_change_password(auth_client):
     )
     assert new_login.status_code == 200
 
+    # Restore the original admin password so other tests sharing the
+    # session-scoped test DB (seed_test_user / auth_client) keep working —
+    # the test DB persists across the whole pytest session (StaticPool).
+    restore = auth_client.post(
+        "/auth/change-password",
+        json={
+            "current_password": "new-test-password",
+            "new_password": settings.ADMIN_PASSWORD,
+        },
+    )
+    assert restore.status_code == 200
+
 
 def test_change_password_wrong_current(auth_client):
     response = auth_client.post(

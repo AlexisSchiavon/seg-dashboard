@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.auth.security import verify_password, create_access_token
+from app.auth.security import verify_password, create_access_token, get_password_hash
 from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.models import User
-from app.schemas.auth import UserRead
+from app.schemas.auth import ChangePasswordRequest, UserCreate, UserRead
 from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -52,3 +52,48 @@ def logout(response: Response, current_user: User = Depends(get_current_user)):
 @router.get("/me", response_model=UserRead)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # T-03-02: re-verify current_password before accepting new_password —
+    # operates only on current_user (cannot change another user's password).
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid current password",
+        )
+
+    current_user.hashed_password = get_password_hash(payload.new_password)
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+def create_user(
+    payload: UserCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # T-03-03: any authenticated user may create users — single-tier auth,
+    # FUT-03 RBAC deferred. T-03-05: 409 on duplicate email is acceptable
+    # disclosure for an auth-gated, single-internal-admin endpoint.
+    existing = db.query(User).filter(User.email == payload.email).first()
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A user with this email already exists",
+        )
+
+    user = User(
+        email=payload.email,
+        hashed_password=get_password_hash(payload.password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
