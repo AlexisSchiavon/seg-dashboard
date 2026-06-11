@@ -33,3 +33,11 @@ async function apiFetch(url, options = {}) {
   }
   return res;
 }
+
+// Shared logout helper: POSTs /auth/logout via apiFetch (so a stale/expired
+// session also bounces through the 401 interceptor above), then sends the
+// user back to the login page.
+async function logout() {
+  await apiFetch("/auth/logout", { method: "POST" });
+  window.location.href = "/login.html";
+}
