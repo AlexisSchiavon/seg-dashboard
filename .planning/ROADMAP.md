@@ -33,7 +33,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. `GET /health` returns service status without authentication
   4. The 21 initial talents are stored in the database and can be listed/added/edited without code changes
   5. Each talent record can be mapped to one or more Pipedrive product IDs (field exists and is settable, even if Pipedrive sync isn't live yet)
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 01-01-PLAN.md — Walking Skeleton: scaffold, config, DB (WAL), models, Alembic, admin seed, login/logout cookie auth + login UI, test infra (AUTH-01, AUTH-02)
+- [ ] 01-02-PLAN.md — Talent catalog vertical slice: protected CRUD + product mapping endpoints, idempotent 21-talent seed (TAL-01, TAL-02)
+- [ ] 01-03-PLAN.md — Public /health, change-password + create-user endpoints, frontend 401→login redirect (AUTH-02, AUTH-03)
 **UI hint**: yes
 
 ### Phase 2: Pipedrive Integration & Core Dashboard
@@ -118,7 +122,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation — Auth, Talent Catalog & Health Check | 0/TBD | Not started | - |
+| 1. Foundation — Auth, Talent Catalog & Health Check | 0/3 | Not started | - |
 | 2. Pipedrive Integration & Core Dashboard | 0/TBD | Not started | - |
 | 3. Google Sheets Leads Integration | 0/TBD | Not started | - |
 | 4. Trello Integration & Collection Automation | 0/TBD | Not started | - |
