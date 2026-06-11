@@ -1,3 +1,7 @@
+from app.scripts.seed_talents import TALENT_NAMES, seed_talents
+from tests.conftest import TestSessionLocal
+
+
 def test_talents_require_auth(client):
     response = client.get("/talents")
 
@@ -64,3 +68,25 @@ def test_add_talent_product(auth_client):
     assert list_response.status_code == 200
     products = list_response.json()
     assert any(p["pipedrive_product_id"] == 12345 for p in products)
+
+
+def test_seeded_talents_present(auth_client):
+    seed_talents(session_factory=TestSessionLocal)
+
+    response = auth_client.get("/talents")
+    assert response.status_code == 200
+    talents = response.json()
+
+    assert len(talents) >= len(TALENT_NAMES)
+    names = {t["name"] for t in talents}
+    assert "Navarretes Show" in names
+    assert "Casandra Salinas" in names
+
+    count_after_first_seed = len(talents)
+
+    # Idempotency: re-running the seed must not create duplicates.
+    seed_talents(session_factory=TestSessionLocal)
+
+    response_again = auth_client.get("/talents")
+    assert response_again.status_code == 200
+    assert len(response_again.json()) == count_after_first_seed
