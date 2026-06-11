@@ -116,3 +116,13 @@ None - no external service configuration required.
 ---
 *Phase: 01-foundation-auth-talent-catalog-health-check*
 *Completed: 2026-06-11*
+
+## Self-Check: PASSED
+
+- FOUND: app/routers/health.py
+- FOUND: tests/test_health.py
+- FOUND: .planning/phases/01-foundation-auth-talent-catalog-health-check/01-03-SUMMARY.md
+- FOUND: change-password route in app/auth/router.py
+- FOUND: include_router(health.router) in app/main.py
+- FOUND: logout() helper in frontend/js/auth.js
+- FOUND: commits 9fbdc61, 2e3eeed, 42c851f, 41dbb11
