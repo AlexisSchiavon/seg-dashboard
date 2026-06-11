@@ -1,0 +1,19 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+
+# Reports output (M5+)
+reports/
+
+# Editor / OS
+.DS_Store
