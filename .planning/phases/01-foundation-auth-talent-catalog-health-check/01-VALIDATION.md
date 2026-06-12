@@ -1,9 +1,9 @@
 ---
 phase: 01
 slug: foundation-auth-talent-catalog-health-check
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-06-10
 ---
 
@@ -17,11 +17,11 @@ created: 2026-06-10
 
 | Property | Value |
 |----------|-------|
-| **Framework** | pytest (latest 8.x) + httpx `ASGITransport` / FastAPI `TestClient` |
-| **Config file** | none yet — Wave 0 creates `pyproject.toml` `[tool.pytest.ini_options]` (or `pytest.ini`) |
+| **Framework** | pytest 9.x + httpx `ASGITransport` / FastAPI `TestClient` |
+| **Config file** | `pyproject.toml` `[tool.pytest.ini_options]` (`testpaths = ["tests"]`) |
 | **Quick run command** | `uv run pytest tests/ -x -q` |
 | **Full suite command** | `uv run pytest tests/ -v` |
-| **Estimated runtime** | ~10-20 seconds (SQLite in-memory/test-file, no external network calls in Phase 1) |
+| **Estimated runtime** | ~1 second (17 tests, SQLite in-memory, no external network calls) |
 
 ---
 
@@ -38,30 +38,32 @@ created: 2026-06-10
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | AUTH-01 | V2/V3 | Login with correct email/password returns 200 + sets httpOnly `access_token` cookie | integration | `uv run pytest tests/test_auth.py::test_login_success -x` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | AUTH-01 | V2 (D-06) | Login with wrong password returns 401 with generic "Invalid email or password" (no user enumeration) | integration | `uv run pytest tests/test_auth.py::test_login_invalid_credentials -x` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | AUTH-02 | V4 | Protected endpoint without cookie returns 401 | integration | `uv run pytest tests/test_auth.py::test_protected_requires_auth -x` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | AUTH-02 | V3/Tampering | Protected endpoint with expired/invalid JWT returns 401 (explicit `algorithms=["HS256"]` allowlist) | integration | `uv run pytest tests/test_auth.py::test_protected_rejects_invalid_token -x` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | AUTH-02 | V3 (D-05) | Logout clears cookie server-side; subsequent protected request returns 401 | integration | `uv run pytest tests/test_auth.py::test_logout_clears_session -x` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | AUTH-02 | — (D-11) | Authenticated user can change their own password via change-password endpoint | integration | `uv run pytest tests/test_auth.py::test_change_password -x` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | AUTH-03 | — | `GET /health` returns 200 without authentication | integration | `uv run pytest tests/test_health.py::test_health_no_auth -x` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | AUTH-03 | — | `GET /health` reflects DB connectivity status (`{"database": "ok"|"error"}`) | unit/integration | `uv run pytest tests/test_health.py::test_health_db_check -x` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | TAL-01 | — | Talent CRUD (create/list/edit) works without code changes — 21 seeded talents present | integration | `uv run pytest tests/test_talents.py::test_seeded_talents_present -x` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | TAL-01 | V5 | Adding a new talent via `POST /talents` persists and appears in `GET /talents` (Pydantic validation, 422 on bad input) | integration | `uv run pytest tests/test_talents.py::test_create_talent -x` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | TAL-02 | V5 | Talent can have one or more `talent_products` rows added/listed via API | integration | `uv run pytest tests/test_talents.py::test_add_talent_product -x` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | (foundation) | V6 | Password hash/verify roundtrip works on clean install (`pwdlib[argon2]`, Pitfall 1) | unit | `uv run pytest tests/test_security.py::test_password_hash_roundtrip -x` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | (foundation) | — | SQLite WAL mode + `busy_timeout` pragmas active on engine connection (Pitfall 3) | unit | `uv run pytest tests/test_database.py::test_sqlite_pragmas -x` | ❌ W0 | ⬜ pending |
+| 01-01-02 | 01 | 1 | AUTH-01 | V2/V3 | Login with correct email/password returns 200 + sets httpOnly `access_token` cookie | integration | `uv run pytest tests/test_auth.py::test_login_success -x` | ✅ | ✅ green |
+| 01-01-02 | 01 | 1 | AUTH-01 | V2 (D-06) | Login with wrong password returns 401 with generic "Invalid email or password" (no user enumeration) | integration | `uv run pytest tests/test_auth.py::test_login_invalid_credentials -x` | ✅ | ✅ green |
+| 01-01-02 | 01 | 1 | AUTH-02 | V4 | Protected endpoint without cookie returns 401 | integration | `uv run pytest tests/test_auth.py::test_protected_requires_auth -x` | ✅ | ✅ green |
+| 01-01-02 | 01 | 1 | AUTH-02 | V3/Tampering | Protected endpoint with expired/invalid JWT returns 401 (explicit `algorithms=["HS256"]` allowlist) | integration | `uv run pytest tests/test_auth.py::test_protected_rejects_invalid_token -x` | ✅ | ✅ green |
+| 01-01-02 | 01 | 1 | AUTH-02 | V3 (D-05) | Logout clears cookie server-side; subsequent protected request returns 401 | integration | `uv run pytest tests/test_auth.py::test_logout_clears_session -x` | ✅ | ✅ green |
+| 01-03-01 | 03 | 3 | AUTH-02 | — (D-11) | Authenticated user can change their own password via change-password endpoint | integration | `uv run pytest tests/test_auth.py::test_change_password -x` | ✅ | ✅ green |
+| 01-03-01 | 03 | 3 | AUTH-03 | — | `GET /health` returns 200 without authentication | integration | `uv run pytest tests/test_health.py::test_health_no_auth -x` | ✅ | ✅ green |
+| 01-03-01 | 03 | 3 | AUTH-03 | — | `GET /health` reflects DB connectivity status (`{"database": "ok"|"error"}`) | unit/integration | `uv run pytest tests/test_health.py::test_health_db_check -x` | ✅ | ✅ green |
+| 01-02-02 | 02 | 2 | TAL-01 | — | Talent CRUD (create/list/edit) works without code changes — 21 seeded talents present | integration | `uv run pytest tests/test_talents.py::test_seeded_talents_present -x` | ✅ | ✅ green |
+| 01-02-01 | 02 | 2 | TAL-01 | V5 | Adding a new talent via `POST /talents` persists and appears in `GET /talents` (Pydantic validation, 422 on bad input) | integration | `uv run pytest tests/test_talents.py::test_create_talent -x` | ✅ | ✅ green |
+| 01-02-01 | 02 | 2 | TAL-02 | V5 | Talent can have one or more `talent_products` rows added/listed via API | integration | `uv run pytest tests/test_talents.py::test_add_talent_product -x` | ✅ | ✅ green |
+| 01-01-01 | 01 | 1 | (foundation) | V6 | Password hash/verify roundtrip works on clean install (`pwdlib[argon2]`, Pitfall 1) | unit | `uv run pytest tests/test_security.py::test_password_hash_roundtrip -x` | ✅ | ✅ green |
+| 01-01-01 | 01 | 1 | (foundation) | — | SQLite WAL mode + `busy_timeout` pragmas active on engine connection (Pitfall 3) | unit | `uv run pytest tests/test_database.py::test_sqlite_pragmas -x` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+
+Additional tests beyond the original map (also green, full suite = 17/17): `test_talents.py::test_talents_require_auth`, `test_talents.py::test_update_talent`, `test_auth.py::test_change_password_wrong_current`, `test_auth.py::test_create_user`.
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `pyproject.toml` `[tool.pytest.ini_options]` (or `pytest.ini`) — pytest config + test path, plus bump `requires-python` to `>=3.12` and update `.python-version` to `3.12`
-- [ ] `tests/conftest.py` — shared fixtures: test DB engine (separate SQLite file or `:memory:` with `StaticPool`), `TestClient`/`ASGITransport` app fixture, seeded test user fixture
-- [ ] `tests/test_auth.py`, `tests/test_health.py`, `tests/test_talents.py`, `tests/test_security.py`, `tests/test_database.py` — all new
-- [ ] Framework install: `uv add --dev pytest` (httpx already present transitively via `fastapi[standard]`)
+- [x] `pyproject.toml` `[tool.pytest.ini_options]` — pytest config + test path; `requires-python` bumped to `>=3.12`, `.python-version` set to `3.12`
+- [x] `tests/conftest.py` — shared fixtures: test DB engine (in-memory SQLite with `StaticPool`), `TestClient`/`ASGITransport` app fixture, seeded test user fixture, `auth_client`
+- [x] `tests/test_auth.py`, `tests/test_health.py`, `tests/test_talents.py`, `tests/test_security.py`, `tests/test_database.py` — all created
+- [x] Framework install: `uv add --dev pytest ruff`
 
 ---
 
@@ -76,11 +78,23 @@ created: 2026-06-10
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 20s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 20s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-06-11
+
+---
+
+## Validation Audit 2026-06-11
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+All 13 mapped requirements have automated tests committed across Plans 01-01, 01-02, and 01-03. Full suite (`uv run pytest tests/ -q`) reports 17/17 passed.
