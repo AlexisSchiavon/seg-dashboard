@@ -21,11 +21,11 @@ created: 2026-06-12
 | Preset | not applicable |
 | Component library | none (hand-rolled CSS component classes in `frontend/css/styles.css`, extended from `.planning/reference/mockup.html`) |
 | Icon library | none — emoji glyphs used as icons (✅📝📩🔥📈⚠️💡), consistent with `.planning/reference/mockup.html` (`.act-icon`, `.insight-icon`, `.alert-icon`) |
-| Font | `DM Sans` (weights 300/400/500/600) for UI text, `DM Mono` (weights 400/500) for numeric/monospace values (KPI values, deal amounts, funnel counts, ranking numbers). Loaded via Google Fonts: `https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap` (already referenced in mockup; add this `<link>` to the main dashboard HTML if not already present from Phase 1). |
+| Font | `DM Sans` (weights 400/500) for UI text, `DM Mono` (weight 400) for numeric/monospace values (KPI values, deal amounts, funnel counts, ranking numbers). Loaded via Google Fonts: `https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap` (already referenced in mockup; add this `<link>` to the main dashboard HTML if not already present from Phase 1). The `<link>` may keep loading 300/600 weights for Phase 1 legacy use (`.login-title`), but Phase 2's NEW components use only 400/500. |
 
 **Existing design system status:** Phase 1 already established `frontend/css/styles.css` with the full token set (`:root` custom properties), `.card`, `.btn`/`.btn.primary`, and form-field classes (login page). `.planning/reference/mockup.html` (37.5KB, single-file prototype) contains the COMPLETE token set plus every component class needed for Phase 2's Resumen/Por talento/Funnel tabs: `.nav`, `.tabbar`/`.tab`, `.kpi-grid`/`.kpi`/`.kpi-val`/`.kpi-label`/`.kpi-sub`, `.rank-row`/`.rank-num`/`.rank-avatar`, `.bar-chart`/`.bar-col`/`.bar-fill`, `.funnel-row`/`.f-track`/`.f-fill`/`.f-label`/`.f-n`, `.deal-row`/`.deal-l`/`.deal-r`/`.deal-amt`/`.deal-brand`/`.deal-dot`/`.deal-tipo`, `.pill`, `.activity-row`/`.act-icon`/`.act-main`/`.act-time`, `.alert`/`.alert.warn`/`.alert.info`, `.donut-wrap`/`.donut-legend` (defined but unused — activated in this phase per D-26), `.talent-selector`/`.talent-card`/`.tc-avatar`/`.tc-name`/`.tc-deals`, `.section`/`.section-title`, `.live-pill`/`.live-dot`, `.sel` (month selector), `.insight`/`.insight-icon`/`.insight-text`, `.divider`, `.ai-badge`.
 
-**Action for executor:** Port the relevant `<style>` rules from `.planning/reference/mockup.html` into `frontend/css/styles.css` (merge with Phase 1's existing tokens — they already share the same `:root` variable names, so this is additive, not a rewrite). Build the dashboard shell (`frontend/index.html` or similar) reusing the mockup's `.nav`/`.tabbar` structure, replacing static/demo data with live data from `app/routers/dashboard.py` endpoints.
+**Action for executor:** Port the relevant `<style>` rules from `.planning/reference/mockup.html` into `frontend/css/styles.css` (merge with Phase 1's existing tokens — they already share the same `:root` variable names, so this is additive, not a rewrite). When porting `.card` and `.kpi`, apply the Phase 2 padding values from the Spacing Scale below (16px / `12px 16px`) rather than the mockup's original 18px / `14px 16px` — see Spacing Exceptions for rationale. Build the dashboard shell (`frontend/index.html` or similar) reusing the mockup's `.nav`/`.tabbar` structure, replacing static/demo data with live data from `app/routers/dashboard.py` endpoints.
 
 ---
 
@@ -37,16 +37,20 @@ Declared values (must be multiples of 4):
 |-------|-------|-------|
 | xs | 4px | Icon gaps, badge padding, dot/avatar offsets |
 | sm | 8px | Compact element spacing (kpi-grid gap, donut-wrap gap, bar-chart gaps) |
-| md | 16px | Default element spacing (section padding, talent-selector padding, donut-wrap gap) |
+| md | 16px | Default element spacing (section padding, talent-selector padding, donut-wrap gap, `.card` padding for new Phase 2 cards) |
 | lg | 24px | not directly used by mockup classes but reserved for larger section breaks if introduced |
 | xl | 32px | Layout gaps between major dashboard sections (if needed beyond `.spacer`) |
 | 2xl | 48px | Major section breaks (rare; mockup uses `.spacer` at 16px between page sections instead) |
 | 3xl | 64px | Page-level spacing — not used in mockup; reserve for future full-page empty states |
 
-Exceptions:
-- `.card` padding is `18px` (not a multiple of 4) — this is an EXISTING Phase 1 token in `frontend/css/styles.css` (`.card { padding: 18px; }`). Do not change it; keep using `.card` as-is for consistency with the login page and Phase 1 work. New Phase 2 cards should reuse `.card` rather than introduce a new padding value.
-- `.kpi` padding is `14px 16px` (14px not a multiple of 4) — EXISTING mockup value, carry forward as-is for visual consistency with the established KPI grid pattern.
+Phase 2 active padding values for new components:
+- `.card` padding (Phase 2 contract): **16px** (multiple of 4) — applies to all new Resumen/Por talento/Funnel cards (ranking, funnel, deal lists, donut, activity feed, alerts, empty states).
+- `.kpi` padding (Phase 2 contract): **12px 16px** (both multiples of 4) — applies to all new KPI tiles in the Resumen and Por talento KPI grids.
 - `.act-icon`/`.source-icon` are `30px`/`32px` square (icon-badge touch targets) — EXISTING mockup values, not part of the 8-point scale but acceptable as fixed icon-badge sizes; do not introduce new sizes for new icon badges in this phase (reuse `.act-icon` at 30px for activity feed, donut legend swatches at 8-10px per existing inline style pattern).
+
+Phase 1 legacy exception (do not extend):
+- `frontend/css/styles.css` currently defines `.card { padding: 18px; }` and the mockup's `.kpi { padding: 14px 16px; }`, both used on the Phase 1 login page and in the original mockup prototype. Neither 18px nor 14px is a multiple of 4. These values are an isolated Phase 1 surface (login page) and are NOT part of the active Phase 2 spacing contract.
+- **Executor action:** when porting `.card` and `.kpi` from the mockup into `frontend/css/styles.css` for Phase 2, update the padding declarations to 16px and `12px 16px` respectively (per the Phase 2 active values above). This is a small, isolated CSS edit — it affects the login page's `.card` too (a 2px padding reduction, visually negligible) but brings the shared class into 8-point compliance for all future phases. Do not introduce a second, parallel `.card`/`.kpi` variant — there is one `.card`/`.kpi` class going forward, using the Phase 2 values.
 
 ---
 
@@ -57,11 +61,14 @@ Exceptions:
 | Body | 14px (`body` default, DM Sans) | 400 (regular) | 1.5 |
 | Label | 11px (`.kpi-label`, `.section-title`, `.act-time`, `.deal-tipo`, `.source-count`) | 500 (medium) | 1.5 |
 | Heading | 13px (`.deal-brand`, `.rank-name`, `.act-main`, `.source-name`, `.tc-name`) | 500 (medium) | 1.2 |
-| Display | 26px (`.kpi-val`, DM Mono) | 600 (semibold) | 1.2 |
+| Display | 26px (`.kpi-val`, DM Mono) | 500 (medium) | 1.2 |
 
 Notes:
-- This is the EXISTING type scale from `.planning/reference/mockup.html` — Phase 2 introduces no new font sizes or weights. The 4-size/2-weight constraint is satisfied: sizes {11, 13, 14, 26}, weights {400 regular for body/labels-when-not-bold, 500/600 used selectively as established}. Treat 500 and 600 as the "semibold family" — 600 reserved for `.kpi-val` and `.login-title`/headings only; 500 used for labels, names, and `.btn` text.
-- `.f-n` and `.deal-amt`/`.rank-num` use DM Mono at 12-13px for numeric alignment — reuse this pattern for any new numeric values introduced in Phase 2 (commission amounts, funnel counts, donut percentages).
+- **2-weight contract for Phase 2:** {400 regular, 500 medium}. Sizes {11, 13, 14, 26} satisfy the 4-size constraint; weights {400, 500} satisfy the 2-weight constraint. Body uses 400 (default); Label, Heading, and Display all use 500.
+- **`.kpi-val` weight change:** the mockup originally declares `.kpi-val { font-weight: 600; }`. For Phase 2, `.kpi-val` is set to **500** to stay within the 2-weight contract. This is a one-class, low-visual-impact change (26px DM Mono numerals at 500 vs 600 remain clearly the dashboard's largest, most prominent text — the size delta alone preserves hierarchy). **Executor action:** when porting `.kpi-val` from the mockup, change `font-weight:600` to `font-weight:500`.
+- **Phase 1 legacy exception (documented, not extended):** `.login-title` in `frontend/css/styles.css` uses `font-weight: 600` (18px, login page only). This is an isolated Phase 1 surface predating this contract and is NOT part of the active Phase 2 typography contract — Phase 2 introduces no new 600-weight usage, and the login page is out of this phase's scope to modify. If a future phase touches the login page, migrate `.login-title` to 500 for full consistency; not required for Phase 2.
+- **Size gap acknowledgment (Heading 13px vs Body 14px):** these two sizes are only 1px apart. Both are pre-existing, pervasively-used values across the mockup (`body` at 14px is also Phase 1's global default, used on the login page; `.deal-brand`/`.rank-name`/`.tc-name`/`.act-main` at 13px appear throughout every Phase 2 tab). Widening this gap would require either raising the global `body` size to 16px (affecting the already-shipped login page, out of scope) or lowering Heading-role classes to 12px (a multi-class rewrite touching `.deal-brand`, `.rank-name`, `.act-main`, `.source-name`, `.tc-name` across all three new tabs). Given the 8-point spacing migration already required above, this typography gap is accepted as-is for Phase 2 — the weight difference (400 vs 500) and color difference (`--text` vs `--text2`/`--text3` depending on context) provide additional hierarchy cues beyond the 1px size delta. Revisit in a future design-system pass if hierarchy issues are reported in practice.
+- `.f-n` and `.deal-amt`/`.rank-num` use DM Mono at 12-13px for numeric alignment — reuse this pattern for any new numeric values introduced in Phase 2 (commission amounts, funnel counts, donut percentages). These remain at weight 500/600 per existing mockup values (`.rank-num` at 600 is a small numeral badge, not body/heading/display text, and is not part of the 4-role table above — treat as a pre-existing micro-exception, no change needed).
 - `.section-title` uses `text-transform: uppercase; letter-spacing: 0.8px` — reuse verbatim for any new section headers (e.g., "Categorías de marca", "Oportunidades perdidas", "Cuello de botella").
 
 ---
@@ -82,6 +89,8 @@ Additional established semantic colors (categorical, NOT part of the 60/30/10 sp
 - `--purple` `#6b54d6` / `--purpleT` `#a594f0` / `--purpleD` — categorical accent for talent ranking avatars and "Cerrados" KPI
 
 Accent reserved for: "Sincronizar ahora" button (`.btn.primary`), the "Pipeline total" KPI value, and the active/selected talent's highlighted series in funnel bars and the brand-category donut when a specific talent context is shown. Never apply accent to body text, generic icons, borders, or more than one KPI tile per screen.
+
+**Primary focal point (Resumen tab):** the "Pipeline total" KPI tile (`.kpi.accent` / `.kpi-val.accent`), rendered in `--accent` orange, is the single highest-emphasis element on the Resumen tab — it is the only KPI tile using the accent color, positioned within the top KPI grid (per mockup, 4th tile in a 2-column grid). All other KPI tiles use secondary semantic colors (blue/green/amber/purple) at lower visual weight, establishing "Pipeline total" as the page's primary focal point per the 10% accent reservation above.
 
 ---
 
@@ -132,3 +141,4 @@ Not applicable — no shadcn, no component registries. All UI is hand-authored H
 - [ ] Dimension 6 Registry Safety: PASS
 
 **Approval:** pending
+</content>
