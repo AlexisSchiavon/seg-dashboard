@@ -68,7 +68,20 @@ Plans:
   5. The Funnel tab shows all 6 stages (Llamada → Cotización → Negociación → Contrato → En ejecución → Cobranza) with deal count, amount, and bottleneck detection
   6. The Por talento tab shows per-talent KPIs, individual funnel, lost opportunities (with reason), and brand category breakdown from real data (revenue projection/collection calendar/campaign table land in Phase 4 once Trello data is available)
 
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+**Wave 1**
+
+- [x] 02-01-PLAN.md — Pipedrive v2 sync vertical slice: Deal/DealStageEvent/SyncLog models + migration, x-api-token client, sync job (commission/Sin-cotizar/custom-fields/event-diffing), hourly scheduler, "Sincronizar ahora" + "Última sync" indicator, talent↔product auto-match (PIPE-01..05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-02-PLAN.md — Resumen + Funnel dashboard slice: kpis/funnel services, /dashboard/summary + /dashboard/funnel endpoints, global KPIs + talent ranking + activity feed + 6-stage funnel + bottleneck detection (DASH-01, DASH-03)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 02-03-PLAN.md — Por talento dashboard slice: talent_detail service, /dashboard/talents/{id} endpoint, per-talent KPIs/funnel, brand-category donut (by deal count), lost opportunities by reason (DASH-02)
+
 **UI hint**: yes
 
 ### Phase 3: Google Sheets Leads Integration
@@ -154,7 +167,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation — Auth, Talent Catalog & Health Check | 3/3 | Complete   | 2026-06-11 |
-| 2. Pipedrive Integration & Core Dashboard | 0/TBD | Not started | - |
+| 2. Pipedrive Integration & Core Dashboard | 1/3 | In progress | - |
 | 3. Google Sheets Leads Integration | 0/TBD | Not started | - |
 | 4. Trello Integration & Collection Automation | 0/TBD | Not started | - |
 | 5. AI-Generated PDF Reports | 0/TBD | Not started | - |
