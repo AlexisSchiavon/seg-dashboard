@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-13T19:31:44.311Z",
+  "phase": "02",
+  "phase_name": "pipedrive-integration-core-dashboard",
+  "phase_dir": ".planning/phases/02-pipedrive-integration-core-dashboard",
+  "plan": 1,
+  "task": 1,
+  "total_tasks": 4,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Wave 0 — install deps, models, migration, test scaffolding", "status": "in_progress", "progress": "deps added (apscheduler/rapidfuzz/respx), Deal/DealStageEvent/SyncLog models added to app/models.py, alembic migration 8e59350e6c1a generated and reordered — all uncommitted in worktree, not yet verified (alembic upgrade head not re-run, conftest fixtures and test stubs not written)"}
+  ],
+  "remaining_tasks": [
+    {"id": 1, "name": "Wave 0 — install deps, models, migration, test scaffolding", "status": "in_progress"},
+    {"id": 2, "name": "Pipedrive v2 client + sync job (TDD)", "status": "not_started"},
+    {"id": 3, "name": "Sync endpoint, scheduler, dashboard shell + Última sync indicator", "status": "not_started"},
+    {"id": 4, "name": "checkpoint:human-verify (blocking) — real Pipedrive sync against live SEG account", "status": "not_started"}
+  ],
+  "blockers": [
+    {"description": "Background-agent Bash sandbox started denying all 'uv run'/python executable invocations mid-session (plain shell builtins still worked); main/foreground session confirmed 'uv run python -c \"print(\\'ok\\')\"' works fine in the same worktree. Appears to be a background-agent-only sandbox quirk, not an environment issue.", "type": "technical", "workaround": "Re-run the wave-1 executor in the foreground (no run_in_background) so any permission prompts surface interactively."}
+  ],
+  "human_actions_pending": [
+    {"action": "When Task 4 (checkpoint) is reached: run the live Pipedrive sync verification (script + dev server + DB inspection) per 02-01-PLAN.md's <how-to-verify>", "context": "PIPEDRIVE_API_TOKEN/PIPEDRIVE_DOMAIN already set in .env — this is the planned blocking checkpoint, not a new issue", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Resume by re-running /gsd-execute-phase 02 with the wave-1 executor in the foreground (not run_in_background)", "rationale": "Background agent hit unresolvable sandbox permission denials on uv/python; foreground avoids this and lets prompts surface to the user", "phase": "02"}
+  ],
+  "uncommitted_files": [
+    ".claude/worktrees/agent-a8470bcb3ee34cf32/app/models.py",
+    ".claude/worktrees/agent-a8470bcb3ee34cf32/pyproject.toml",
+    ".claude/worktrees/agent-a8470bcb3ee34cf32/uv.lock",
+    ".claude/worktrees/agent-a8470bcb3ee34cf32/alembic/versions/8e59350e6c1a_add_deals_deal_stage_events_sync_logs.py",
+    ".claude/worktrees/agent-a8470bcb3ee34cf32/.planning/STATE.md"
+  ],
+  "next_action": "Re-run /gsd-execute-phase 02. Wave 1 (02-01) is incomplete (no SUMMARY.md). Decide first whether to reuse the existing worktree branch worktree-agent-a8470bcb3ee34cf32 (has uncommitted, unverified Task 1 work) or start Task 1 fresh — then run the executor in the foreground.",
+  "context_notes": "Phase 02 = 3 sequential single-plan waves (02-01 -> 02-02 -> 02-03), each plan ends in a blocking human-verify checkpoint requiring live app/dashboard interaction. .env already has real PIPEDRIVE_API_TOKEN/PIPEDRIVE_DOMAIN. uv/alembic/pytest all confirmed working from the main session."
+}
