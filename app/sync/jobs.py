@@ -21,8 +21,8 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from app.integrations import pipedrive
-from app.models import Deal, DealStageEvent, SyncLog, TalentProduct
+from app.integrations import pipedrive, sheets
+from app.models import Deal, DealStageEvent, Lead, SyncLog, Talent, TalentProduct
 
 # If a SyncLog has been "running" for longer than this, treat it as stale
 # (e.g. the process crashed mid-sync) and allow a new sync to start.
@@ -210,6 +210,101 @@ def sync_pipedrive(db: Session) -> SyncLog:
         sync_log.status = "error"
         sync_log.finished_at = datetime.now(timezone.utc)
         sync_log.error_message = str(exc)
+        db.commit()
+        db.refresh(sync_log)
+
+    return sync_log
+
+
+def _parse_fecha(raw: str) -> "datetime | None":
+    """Parse Fecha_Recepcion from Sheet. Two observed variants:
+      - '2026-03-30T17:39:37Z'      (no milliseconds)
+      - '2026-03-30T17:45:02.000Z'  (with milliseconds)
+    Python 3.12 fromisoformat handles Z natively; .replace() is defensive belt-and-suspenders.
+    Returns None for empty string or unparseable values.
+    """
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def sync_sheets(db: Session) -> SyncLog:
+    """Sync leads from Google Sheets into the local Lead table.
+
+    Upserts by sheet_row_id (natural key under append-only assumption A1).
+    Second run with identical rows inserts zero new Lead rows (idempotent).
+
+    Concurrency guard filters by source='sheets' so a running pipedrive sync
+    does NOT block this function (Pitfall 6 — source filter is mandatory).
+
+    Security (T-03-01): on error, persist only str(exc) to SyncLog.error_message
+    — never log gspread client/worksheet/response objects (may reflect SA credentials).
+    """
+    # 1. Concurrency guard — filter by source='sheets' only (Pitfall 6).
+    running = (
+        db.query(SyncLog)
+        .filter(SyncLog.source == "sheets", SyncLog.status == "running")
+        .order_by(SyncLog.started_at.desc())
+        .first()
+    )
+    if running is not None and not _is_stale(running):
+        return running
+
+    # 2. Write SyncLog row immediately so concurrent callers see "running".
+    sync_log = SyncLog(
+        source="sheets",
+        started_at=datetime.now(timezone.utc),
+        status="running",
+    )
+    db.add(sync_log)
+    db.commit()
+    db.refresh(sync_log)
+
+    try:
+        rows = sheets.get_leads_rows()  # Single API call, ~0.40s for 730 rows
+
+        # Build talent name → id map once (avoid N+1 per-row queries — Anti-Pattern in RESEARCH.md)
+        talent_map: dict[str, int] = {
+            t.name: t.id for t in db.query(Talent).all()
+        }
+
+        records_synced = 0
+        for row in rows:
+            # None = "Sin talento asignado" bucket (D-33)
+            talent_id = talent_map.get(row.talento_mencionado) if row.talento_mencionado else None
+
+            existing = db.query(Lead).filter(Lead.sheet_row_id == row.sheet_row_id).first()
+            if existing is None:
+                existing = Lead(sheet_row_id=row.sheet_row_id)
+                db.add(existing)
+
+            existing.remitente_email = row.remitente_email
+            existing.remitente_nombre = row.remitente_nombre
+            existing.asunto = row.asunto
+            existing.fecha_recepcion = _parse_fecha(row.fecha_recepcion)
+            existing.talent_id = talent_id
+            existing.status_filtrado = row.status_filtrado
+            existing.fuente = "Gmail"
+            existing.score_calidad = row.score_calidad
+            existing.bloqueado = row.bloqueado
+            existing.convertido_a_prospecto = row.convertido_a_prospecto
+            records_synced += 1
+
+        db.commit()
+        sync_log.status = "success"
+        sync_log.finished_at = datetime.now(timezone.utc)
+        sync_log.records_synced = records_synced
+        db.commit()
+        db.refresh(sync_log)
+
+    except Exception as exc:  # noqa: BLE001 - persist only str(exc); never store gspread objects
+        db.rollback()
+        sync_log.status = "error"
+        sync_log.finished_at = datetime.now(timezone.utc)
+        sync_log.error_message = str(exc)  # str() only — never repr(response) or log objects
         db.commit()
         db.refresh(sync_log)
 

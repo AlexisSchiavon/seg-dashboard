@@ -87,3 +87,32 @@ class SyncLog(Base):
     status: Mapped[str] = mapped_column(String)  # running/success/error
     records_synced: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class Lead(Base):
+    __tablename__ = "leads"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Natural key: sheet row number (header=row 1, first data row=2).
+    # ID_Lead column is empty for all 730 live rows — do not use as key.
+    # ASSUMPTION (A1): Sheet is append-only; row numbers are stable across syncs.
+    sheet_row_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+
+    remitente_email: Mapped[str] = mapped_column(String)
+    remitente_nombre: Mapped[str] = mapped_column(String, default="")
+    asunto: Mapped[str] = mapped_column(String, default="")
+    fecha_recepcion: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # D-32/D-33: nullable FK — None = "Sin talento asignado" bucket (mirrors Deal.talent_id)
+    talent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("talents.id"), nullable=True, index=True
+    )
+
+    status_filtrado: Mapped[str] = mapped_column(String, index=True)
+    fuente: Mapped[str] = mapped_column(String, default="Gmail")  # D-35: extensible for Phase 4
+    score_calidad: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bloqueado: Mapped[bool] = mapped_column(Boolean, default=False)
+    convertido_a_prospecto: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    talent: Mapped["Talent | None"] = relationship("Talent", lazy="select")
