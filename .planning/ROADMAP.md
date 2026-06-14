@@ -14,7 +14,7 @@ This roadmap delivers the SEG Talent Intelligence Dashboard through seven strict
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation — Auth, Talent Catalog & Health Check** - FastAPI base structure with JWT auth, SQLite (WAL), talent catalog DB table, and `/health` endpoint (completed 2026-06-11)
-- [ ] **Phase 2: Pipedrive Integration & Core Dashboard** - Live Pipedrive sync powers Resumen, Por talento, and Funnel tabs with real deal/revenue data
+- [x] **Phase 2: Pipedrive Integration & Core Dashboard** - Live Pipedrive sync powers Resumen, Por talento, and Funnel tabs with real deal/revenue data (completed 2026-06-14)
 - [ ] **Phase 3: Google Sheets Leads Integration** - Gmail-fed leads sync populates the Leads dashboard tab
 - [ ] **Phase 4: Trello Integration & Collection Automation** - Campaign execution/collection tracking and Pipedrive→Trello automation complete the Por talento revenue projection
 - [ ] **Phase 5: AI-Generated PDF Reports** - Claude-narrated monthly reports with downloadable history in the Reportes tab
@@ -80,7 +80,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-03-PLAN.md — Por talento dashboard slice: talent_detail service, /dashboard/talents/{id} endpoint, per-talent KPIs/funnel, brand-category donut (by deal count), lost opportunities by reason (DASH-02)
+- [x] 02-03-PLAN.md — Por talento dashboard slice: talent_detail service, /dashboard/talents/{id} endpoint, per-talent KPIs/funnel, brand-category donut (by deal count), lost opportunities by reason (DASH-02)
 
 **UI hint**: yes
 
@@ -167,7 +167,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation — Auth, Talent Catalog & Health Check | 3/3 | Complete   | 2026-06-11 |
-| 2. Pipedrive Integration & Core Dashboard | 2/3 | In Progress|  |
+| 2. Pipedrive Integration & Core Dashboard | 3/3 | Complete   | 2026-06-14 |
 | 3. Google Sheets Leads Integration | 0/TBD | Not started | - |
 | 4. Trello Integration & Collection Automation | 0/TBD | Not started | - |
 | 5. AI-Generated PDF Reports | 0/TBD | Not started | - |
