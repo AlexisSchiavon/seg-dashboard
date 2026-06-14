@@ -8,14 +8,25 @@ T-02B-01 mitigated: all routes require a valid JWT cookie.
 T-02B-02 mitigated: response_model validates the shape at the boundary.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.database import get_db
-from app.models import Deal, SyncLog
-from app.schemas.dashboard import DashboardSummary, FunnelOverview, KpiTile, RankingRow, ActivityItem
+from app.models import Deal, SyncLog, Talent
+from app.schemas.dashboard import (
+    DashboardSummary,
+    FunnelOverview,
+    KpiTile,
+    RankingRow,
+    ActivityItem,
+    TalentDetail,
+    LostReasonSummary,
+    LostOpportunity,
+    BrandCategorySlice,
+    StageBucket,
+)
 from app.services import kpis as kpi_service
 from app.services import funnel as funnel_service
 
@@ -98,4 +109,42 @@ def get_funnel(db: Session = Depends(get_db)):
         bottleneck=bottleneck,
         insufficient_data=funnel_data["insufficient_data"],
         has_data=funnel_data["has_data"],
+    )
+
+
+@router.get("/talents/{talent_id}", response_model=TalentDetail)
+def get_talent_detail(talent_id: int, db: Session = Depends(get_db)):
+    """Return per-talent KPIs, funnel, lost opportunities, and brand categories.
+
+    T-02C-01 mitigated: inherited from router-level dependencies=[Depends(get_current_user)].
+    T-02C-02 mitigated: FastAPI coerces talent_id: int (422 on non-int); 404 via db.get guard.
+    T-02C-03 mitigated: response_model=TalentDetail validates and filters output shape.
+    T-02C-04 mitigated: loss_reason stored as resolved label by Plan 02-01 (never re-resolved).
+    """
+    # 404 guard — same pattern as talents.py (02-PATTERNS.md)
+    talent = db.get(Talent, talent_id)
+    if talent is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Talent not found",
+        )
+
+    detail = kpi_service.talent_detail(db, talent_id)
+
+    # Build typed Pydantic models from service dicts
+    kpi_tiles = [KpiTile(**kpi) for kpi in detail["kpis"]]
+    funnel_stages = [StageBucket(**s) for s in detail["funnel"]]
+    lost_summary = [LostReasonSummary(**s) for s in detail["lost_summary"]]
+    lost_opps = [LostOpportunity(**o) for o in detail["lost_opportunities"]]
+    brand_cats = [BrandCategorySlice(**b) for b in detail["brand_categories"]]
+
+    return TalentDetail(
+        talent_id=detail["talent_id"],
+        name=detail["name"],
+        category=detail["category"],
+        kpis=kpi_tiles,
+        funnel=funnel_stages,
+        lost_summary=lost_summary,
+        lost_opportunities=lost_opps,
+        brand_categories=brand_cats,
     )

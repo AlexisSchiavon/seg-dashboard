@@ -163,6 +163,68 @@ def test_funnel_all_stages_have_count_and_amount(auth_client, seed_deals):
         assert isinstance(stage["amount"], float)
 
 
+# ---------------------------------------------------------------------------
+# Per-talent endpoint tests (Plan 02-03, T-02C-01/02/03)
+# ---------------------------------------------------------------------------
+
+def test_talent_detail_requires_auth(client):
+    """GET /dashboard/talents/1 returns 401 when unauthenticated (T-02C-01)."""
+    response = client.get("/dashboard/talents/1")
+    assert response.status_code == 401
+
+
+def test_talent_detail_404(auth_client):
+    """GET /dashboard/talents/{id} returns 404 for a non-existent talent id (T-02C-02)."""
+    response = auth_client.get("/dashboard/talents/99999")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Talent not found"
+
+
+def test_talent_detail_endpoint(auth_client, seed_deals):
+    """GET /dashboard/talents/{id} returns 200 with a valid TalentDetail shape (T-02C-03)."""
+    from tests.conftest import TestSessionLocal
+    from app.models import Talent
+
+    # Get the first seeded talent's id
+    db = TestSessionLocal()
+    try:
+        talent = db.query(Talent).first()
+        assert talent is not None, "seed_deals must create at least one talent"
+        talent_id = talent.id
+    finally:
+        db.close()
+
+    response = auth_client.get(f"/dashboard/talents/{talent_id}")
+    assert response.status_code == 200
+
+    data = response.json()
+
+    # Required shape fields
+    assert "talent_id" in data
+    assert data["talent_id"] == talent_id
+    assert "name" in data
+    assert "kpis" in data
+    assert "funnel" in data
+    assert "lost_summary" in data
+    assert "lost_opportunities" in data
+    assert "brand_categories" in data
+
+    # Funnel must have exactly 6 stages
+    assert len(data["funnel"]) == 6
+    stage_names = [s["stage"] for s in data["funnel"]]
+    assert stage_names == CANONICAL_STAGES
+
+    # KPI tiles present and non-empty
+    assert len(data["kpis"]) >= 1
+
+    # Each lost opportunity's loss_reason (if set) must be a string label (T-02C-04 / Pitfall 2)
+    for opp in data["lost_opportunities"]:
+        if opp.get("loss_reason") is not None:
+            assert isinstance(opp["loss_reason"], str), (
+                f"loss_reason must be a Spanish label string, not {type(opp['loss_reason'])}: {opp['loss_reason']}"
+            )
+
+
 def test_funnel_bottleneck_detected_with_large_dataset(auth_client, db_session, seed_test_user):
     """Funnel returns bottleneck info when >=10 deals exist."""
     from app.models import Deal
