@@ -1,37 +1,55 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-14T19:36:55.463Z",
+  "timestamp": "2026-06-14T21:07:39.936Z",
   "phase": "02",
   "phase_name": "pipedrive-integration-core-dashboard",
-  "phase_dir": "02-pipedrive-integration-core-dashboard",
-  "plan": 1,
-  "task": 4,
-  "total_tasks": 4,
+  "phase_dir": ".planning/phases/02-pipedrive-integration-core-dashboard",
+  "plan": 3,
+  "task": "post-execution",
+  "total_tasks": 3,
   "status": "paused",
   "completed_tasks": [
-    {"id": 1, "name": "Wave 0 - install deps, models, migration, test scaffolding", "status": "done", "commit": "af9907e"},
-    {"id": 2, "name": "Pipedrive v2 client + sync job (TDD)", "status": "done", "commit": "5adbced"},
-    {"id": 3, "name": "Sync endpoint, scheduler, dashboard shell + Ultima sync indicator", "status": "done", "commit": "6862dd1"},
-    {"id": 4, "name": "checkpoint:human-verify - live Pipedrive sync verification", "status": "in_progress", "progress": "Backend/data verification DONE and committed (eaab460): talent-product mapping fixed for all 21 talents, build_field_maps v2 shape bug fixed, live sync succeeded (476 deals across the 4 real Pipedrive stages, correct talent/commission/sin-cotizar fields), all 31 tests pass. Only the frontend visual check (toast + 'Ultima sync' pill in browser) and SUMMARY.md remain."}
+    {"id": "02-01", "name": "Pipedrive sync vertical slice", "status": "done", "commit": "fb035ff"},
+    {"id": "02-02", "name": "Resumen + Funnel dashboard tabs", "status": "done", "commit": "bce8763"},
+    {"id": "02-03", "name": "Por talento tab — all 3 auto tasks + human checkpoint approved", "status": "done", "commit": "2fcd8d9"},
+    {"id": "code-review", "name": "Code review (2 blockers + 5 warnings) + 7 fixes applied", "status": "done", "commit": "c91e4eb"},
+    {"id": "verification", "name": "Phase verification: 6/6 automated must-haves PASSED, human_needed", "status": "done", "commit": "pending"}
   ],
   "remaining_tasks": [
-    {"id": 4, "name": "Optional browser visual check + write 02-01-SUMMARY.md + update STATE/ROADMAP for plan 02-01 complete", "status": "not_started"}
+    {
+      "id": "final-approval",
+      "name": "User says 'approved' confirming phase 02 human verification items",
+      "status": "awaiting_human",
+      "notes": "All 6 human items already covered by in-plan checkpoints (02-01, 02-02, 02-03 all user-approved). Just needs verbal confirmation."
+    },
+    {
+      "id": "update-roadmap",
+      "name": "gsd-sdk query phase.complete '02' + commit tracking files",
+      "status": "not_started"
+    },
+    {
+      "id": "offer-next",
+      "name": "Present Phase 03 next-step options to user",
+      "status": "not_started"
+    }
   ],
   "blockers": [],
   "human_actions_pending": [
-    {"action": "Optional: open http://127.0.0.1:8000, log in as santillan@talentagency.mx / ChangeMe123!, click 'Sincronizar ahora', confirm 'Ultima sync' pill updates and a completion toast appears", "context": "Backend already verified via direct API call (sync succeeded, 476 deals, status=success) - this step only confirms the frontend renders that result correctly", "blocking": false}
+    {
+      "action": "Say 'approved' to confirm phase 02 human verification items and trigger phase.complete",
+      "context": "VERIFICATION.md has human_needed with 6 items — all covered by in-plan checkpoints already approved by user. This is the final gate to mark Phase 02 complete.",
+      "blocking": true
+    }
   ],
   "decisions": [
-    {"decision": "Renamed 8 talents in seed_talents.py to their exact Pipedrive product names (Deliberracion, Mama mecanic, Mariana Sanchez, Ale Voale, Elissa, Edgar Cardenas, Victor H, Dr Fitness) per user-supplied ground-truth mapping.", "rationale": "rapidfuzz auto-match failed because system talent names diverged from Pipedrive product names; renaming to exact names lets fuzzy match score 100 for all of these.", "phase": "02"},
-    {"decision": "Don Silverio and Don Wicho keep distinct Talent.name values (UNIQUE constraint on Talent.name) but both map to pipedrive_product_id=1 ('Don Silverio y Don Wicho') via a MANUAL_PRODUCT_MATCHES override dict in match_talent_products.py.", "rationale": "One Pipedrive product covers two talents performing together; renaming both talents to the identical product name would violate D-13's UNIQUE constraint.", "phase": "02"},
-    {"decision": "Added NO_PRODUCT_TALENTS = {Dulce, Tony Franco, Casandra Salinas} in match_talent_products.py - always reported unmatched regardless of fuzzy score.", "rationale": "These 3 talents have no Pipedrive product yet (D-15); explicit list guarantees they never get a false-positive fuzzy match.", "phase": "02"},
-    {"decision": "Fixed pipedrive.build_field_maps to read field_name/field_code (v2 shape) instead of name/key; updated tests/conftest.py PIPEDRIVE_DEAL_FIELDS mock to match.", "rationale": "Live /dealFields returns field_name/field_code, not v1-style name/key. The old code raised KeyError('name') and crashed every sync (SyncLog status=error).", "phase": "02"},
-    {"decision": "Ran 'alembic upgrade head' on the live seg.db (was at 324116cbf0dd, one revision behind c35f623eaa21).", "rationale": "Missing deals/deal_stage_events/sync_logs tables caused 'OperationalError: no such table: sync_logs' on /sync/status and /sync/pipedrive.", "phase": "02"},
-    {"decision": "Ran seed_admin to create user santillan@talentagency.mx / ChangeMe123! (values already in .env).", "rationale": ".env ADMIN_EMAIL didn't match the only seeded user (admin@santillanent.com, from earlier Phase 1 setup) - login with .env credentials was failing.", "phase": "02"},
-    {"decision": "Documented in app/sync/jobs.py that PIPE-05's 6-stage funnel is 4 stages from Pipedrive (ids 6-9: Llamada/Cotizacion/Negociacion/Contrato y factura) + 2 stages ('En ejecucion', 'Cobranza') from Trello in Phase 4 - confirmed live and by user.", "rationale": "Critical for Wave 2 (02-02) funnel.py - must not assume Pipedrive /stages returns all 6 PIPE-05 stages.", "phase": "02"},
-    {"decision": "Audited all integration code (app/integrations/, app/sync/, app/scripts/) and confirmed every Pipedrive call is GET-only via get_with_retry/paginate; no Trello/Sheets integration exists yet.", "rationale": "User issued an explicit production-safety directive: dashboard must be read-only against Pipedrive/Trello/Sheets, writes only to local seg.db.", "phase": "02"}
+    {"decision": "Stage names normalized at sync time (strip whitespace, canonicalize 'Contrato y factura')", "rationale": "API returns trailing spaces that broke stage matching", "phase": "02"},
+    {"decision": "Per-talent Pipeline KPI filters to open deals only (WR-05)", "rationale": "Lost deals inflate pipeline figure on same view showing lost opportunities", "phase": "02"},
+    {"decision": "escHtml() helper added for all API-sourced innerHTML (CR-02)", "rationale": "Stored XSS prevention — Pipedrive data is user-influenced", "phase": "02"}
   ],
-  "uncommitted_files": [],
-  "next_action": "Optional browser visual check (see human_actions_pending), then write .planning/phases/02-pipedrive-integration-core-dashboard/02-01-SUMMARY.md, commit it, update STATE.md/ROADMAP.md to mark plan 02-01 complete, then continue /gsd-execute-phase 02 for Wave 2 (02-02 Resumen+Funnel).",
-  "context_notes": "Plan 02-01 is functionally complete and fully verified end-to-end against real Pipedrive data (476 deals synced, correct talent/commission/sin-cotizar fields, all 21 talents correctly mapped to Pipedrive products or explicitly unmapped). All code changes committed to main at eaab460. Remaining work is documentation-only (SUMMARY.md, STATE/ROADMAP) plus an optional, non-blocking UI visual confirmation."
+  "uncommitted_files": [
+    ".planning/phases/02-pipedrive-integration-core-dashboard/02-VERIFICATION.md",
+    ".planning/phases/02-pipedrive-integration-core-dashboard/02-REVIEW-FIX.md"
+  ],
+  "next_action": "Resume with: user says 'approved' → gsd-sdk query phase.complete '02' → git add .planning/ROADMAP.md .planning/STATE.md .planning/phases/02-*/02-VERIFICATION.md → commit → present Phase 03 options",
+  "context_notes": "Phase 02 is 99% complete. All 3 plans executed, 7 code review fixes applied, 65/65 tests pass, verification automated checks all pass. Only pending step is user confirming 'approved' on the human_needed verification items (which were all cleared via in-plan human checkpoints during this session)."
 }
