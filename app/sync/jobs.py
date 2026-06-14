@@ -77,8 +77,16 @@ def sync_pipedrive(db: Session) -> SyncLog:
         # Pipedrive pipeline 2 has 4 stages (6 Llamada, 7 Cotizacion,
         # 8 Negociacion, 9 Contrato y factura). "En ejecucion" and "Cobranza"
         # come from Trello (Phase 4), not Pipedrive.
+        #
+        # Normalize: strip whitespace (live API returns "Negociación " with a
+        # trailing space) and map Pipedrive's verbose label to the canonical
+        # STAGES name used by services/funnel.py ("Contrato y factura" → "Contrato").
+        _STAGE_CANONICAL = {"Contrato y factura": "Contrato"}
         stage_name_by_id: dict[int, str] = {
-            stage["id"]: stage["name"] for stage in pipedrive.get_stages(client)
+            stage["id"]: _STAGE_CANONICAL.get(
+                stage["name"].strip(), stage["name"].strip()
+            )
+            for stage in pipedrive.get_stages(client)
         }
 
         # 4. Determine updated_since for incremental sync (omit on first sync).
