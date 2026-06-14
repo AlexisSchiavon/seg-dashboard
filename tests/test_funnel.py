@@ -264,6 +264,65 @@ def test_recent_activity_returns_deal_title_and_talent(db_session):
     assert item["detected_at"] == datetime(2026, 6, 10, 12, 0, 0)
 
 
+# ---------------------------------------------------------------------------
+# Per-talent funnel tests (Plan 02-03)
+# ---------------------------------------------------------------------------
+
+def test_talent_funnel_filters(db_session):
+    """Per-talent funnel returns 6 STAGES in order with counts from ONLY that talent's open deals."""
+    talent_a = Talent(name="Talento Funnel A", active=True, category="Lifestyle")
+    talent_b = Talent(name="Talento Funnel B", active=True, category="Gaming")
+    db_session.add_all([talent_a, talent_b])
+    db_session.commit()
+    db_session.refresh(talent_a)
+    db_session.refresh(talent_b)
+
+    # Talent A: 2 open deals in Llamada
+    for pid in [30001, 30002]:
+        db_session.add(Deal(
+            pipedrive_id=pid,
+            title=f"Deal A {pid}",
+            value=10000.0,
+            currency="MXN",
+            stage_id=1,
+            stage_name="Llamada",
+            status="open",
+            talent_id=talent_a.id,
+            commission_amount=7000.0,
+            is_sin_cotizar=False,
+            update_time="2026-06-01T10:00:00Z",
+        ))
+
+    # Talent B: 1 open deal in Cotización (must not appear in talent_a's funnel)
+    db_session.add(Deal(
+        pipedrive_id=30003,
+        title="Deal B 30003",
+        value=15000.0,
+        currency="MXN",
+        stage_id=2,
+        stage_name="Cotización",
+        status="open",
+        talent_id=talent_b.id,
+        commission_amount=10500.0,
+        is_sin_cotizar=False,
+        update_time="2026-06-01T10:00:00Z",
+    ))
+    db_session.commit()
+
+    result = funnel_service.talent_funnel(db_session, talent_a.id)
+
+    # Must return exactly 6 stages in canonical order
+    stage_names = [s["stage"] for s in result]
+    assert stage_names == CANONICAL_STAGES, f"Stage order mismatch: {stage_names}"
+    assert len(result) == 6
+
+    # Talent A has 2 deals in Llamada — only Llamada should have count=2
+    stage_map = {s["stage"]: s for s in result}
+    assert stage_map["Llamada"]["count"] == 2
+    # Cotización must be 0 — talent_b's deal must NOT be counted
+    assert stage_map["Cotización"]["count"] == 0
+
+
 def test_recent_activity_sin_talento(db_session):
     """Activity items with no talent assigned use 'Sin talento' as talent_name."""
     deal = Deal(

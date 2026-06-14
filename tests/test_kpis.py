@@ -170,3 +170,136 @@ def test_empty_global_kpis(db_session):
     assert len(result["kpis"]) == 4
     for tile in result["kpis"]:
         assert tile["value"] == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# Per-talent KPI tests (Plan 02-03)
+# ---------------------------------------------------------------------------
+
+def test_talent_detail_only_own_deals(seed_deals):
+    """talent_detail(db, talent_id) computes KPIs from ONLY that talent's deals.
+
+    Deals for other talents and talent_id=None deals must be excluded (Pitfall 4).
+    """
+    db = TestSessionLocal()
+    try:
+        talent_a = seed_deals["deal_open"].talent_id  # talent_a's id
+        result = kpi_service.talent_detail(db, talent_a)
+
+        # seed_deals: deal_open (50000, open, talent_a), deal_lost (15000, lost, talent_a)
+        # sin-cotizar deal and sin-talento deal must NOT appear
+        kpi_dict = {kpi["label"]: kpi["value"] for kpi in result["kpis"]}
+
+        # Pipeline = sum of talent_a's deals = 50000 + 15000 = 65000
+        assert kpi_dict["Pipeline"] == pytest.approx(65000.0), (
+            f"Expected 65000 but got {kpi_dict.get('Pipeline')} — "
+            "other-talent and null-talent deals must be excluded"
+        )
+    finally:
+        db.close()
+
+
+def test_lost_opportunities_grouped(seed_deals):
+    """talent_detail returns per-reason summary and itemized list; loss_reason is a label not int."""
+    db = TestSessionLocal()
+    try:
+        talent_a_id = seed_deals["deal_open"].talent_id
+        result = kpi_service.talent_detail(db, talent_a_id)
+
+        # seed_deals has deal_lost with loss_reason="Presupuesto insuficiente"
+        lost_summary = result["lost_summary"]
+        lost_opps = result["lost_opportunities"]
+
+        assert len(lost_opps) == 1
+        # Reason must be a Spanish label string, never an integer
+        opp = lost_opps[0]
+        assert isinstance(opp["loss_reason"], str), "loss_reason must be a string label, not an int"
+        assert opp["loss_reason"] == "Presupuesto insuficiente"
+
+        # Summary should have one entry for "Presupuesto insuficiente"
+        assert len(lost_summary) == 1
+        summary = lost_summary[0]
+        assert summary["reason"] == "Presupuesto insuficiente"
+        assert summary["count"] == 1
+    finally:
+        db.close()
+
+
+def test_brand_category_by_count(db_session):
+    """brand_categories are % by DEAL COUNT (D-27), not by revenue; sum to ~100."""
+    talent = Talent(name="Talento Marcas", active=True, category="Lifestyle")
+    db_session.add(talent)
+    db_session.commit()
+    db_session.refresh(talent)
+
+    # 3 deals: 2 Moda/Retail, 1 Agencias
+    deals_data = [
+        (10001, 10000.0, "Moda/Retail"),
+        (10002, 50000.0, "Moda/Retail"),   # higher revenue but same count weight as the one above
+        (10003, 5000.0, "Agencias"),
+    ]
+    for pid, val, cat in deals_data:
+        db_session.add(Deal(
+            pipedrive_id=pid,
+            title=f"Deal {pid}",
+            value=val,
+            currency="MXN",
+            stage_id=1,
+            stage_name="Llamada",
+            status="open",
+            talent_id=talent.id,
+            commission_amount=val * 0.7,
+            is_sin_cotizar=False,
+            brand_category=cat,
+            update_time="2026-06-01T10:00:00Z",
+        ))
+    db_session.commit()
+
+    result = kpi_service.talent_detail(db_session, talent.id)
+    brand_cats = result["brand_categories"]
+
+    # 2 categories should be present
+    assert len(brand_cats) == 2
+
+    # Percentages must sum to ~100 (by count, not revenue)
+    total_pct = sum(s["pct"] for s in brand_cats)
+    assert total_pct == pytest.approx(100.0, abs=1.0)
+
+    # Moda/Retail = 2/3 = 66.7%, Agencias = 1/3 = 33.3%
+    cat_map = {s["category"]: s for s in brand_cats}
+    assert cat_map["Moda/Retail"]["count"] == 2
+    assert cat_map["Agencias"]["count"] == 1
+    assert cat_map["Moda/Retail"]["pct"] == pytest.approx(66.67, abs=0.5)
+
+
+def test_talent_detail_empty(db_session):
+    """A talent with no lost deals / no brand categories returns empty lists."""
+    talent = Talent(name="Talento Vacio", active=True, category="Tech")
+    db_session.add(talent)
+    db_session.commit()
+    db_session.refresh(talent)
+
+    # One open deal with no loss_reason and no brand_category
+    db_session.add(Deal(
+        pipedrive_id=20001,
+        title="Deal abierto",
+        value=12000.0,
+        currency="MXN",
+        stage_id=2,
+        stage_name="Cotización",
+        status="open",
+        talent_id=talent.id,
+        commission_amount=8400.0,
+        is_sin_cotizar=False,
+        update_time="2026-06-01T10:00:00Z",
+    ))
+    db_session.commit()
+
+    result = kpi_service.talent_detail(db_session, talent.id)
+
+    # Empty lost opportunities
+    assert result["lost_opportunities"] == []
+    assert result["lost_summary"] == []
+
+    # Empty brand categories
+    assert result["brand_categories"] == []
