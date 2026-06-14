@@ -37,12 +37,15 @@ function escHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
-function setPage(name) {
+function setPage(name, e) {
   document.querySelectorAll(".page").forEach((el) => el.classList.remove("active"));
   document.querySelectorAll(".tab").forEach((el) => el.classList.remove("active"));
   document.getElementById("page-" + name).classList.add("active");
-  if (event && event.target) {
-    event.target.classList.add("active");
+  // Use the explicitly passed event (e) — window.event is deprecated and
+  // undefined in Firefox (WR-01). Use currentTarget (the element with the
+  // listener) not target (which may be a text-node child of the div).
+  if (e && e.currentTarget) {
+    e.currentTarget.classList.add("active");
   }
 
   // Load data for the activated tab
