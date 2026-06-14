@@ -26,7 +26,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, engine, get_db
 from app.main import app
-from app.models import Deal, DealStageEvent, Talent, TalentProduct, User
+from app.models import Deal, DealStageEvent, Lead, Talent, TalentProduct, User
 from app.auth.security import get_password_hash
 from app.config import settings
 
@@ -351,6 +351,125 @@ PIPEDRIVE_DEAL_PRODUCTS = {
     ],
     "additional_data": {"next_cursor": None},
 }
+
+
+@pytest.fixture()
+def seed_leads(db_session, seed_talent_products):
+    """Create Lead rows covering the three Status_Filtrado values (SHEET-01/SHEET-02).
+
+    Three rows:
+    - lead_aprobado: linked to talent_a, status = QUALIFIED_STATUS
+    - lead_bloqueado: linked to talent_b, status = 'Remitente bloqueado'
+    - lead_revision: talent_id=None (Sin talento asignado), status = 'En revisión'
+    """
+    talent_a = seed_talent_products["talent_a"]
+    talent_b = seed_talent_products["talent_b"]
+
+    lead_aprobado = Lead(
+        sheet_row_id=2,
+        remitente_email="aprobado@example.com",
+        remitente_nombre="Remitente Aprobado",
+        asunto="Colaboración pagada TikTok",
+        talent_id=talent_a.id,
+        status_filtrado="✅ Aprobado - Respuesta enviada",
+        fuente="Gmail",
+        score_calidad=80,
+        bloqueado=False,
+        convertido_a_prospecto=False,
+    )
+    lead_bloqueado = Lead(
+        sheet_row_id=3,
+        remitente_email="spam@example.com",
+        remitente_nombre="Spam Sender",
+        asunto="Oferta sospechosa",
+        talent_id=talent_b.id,
+        status_filtrado="🚫 Remitente bloqueado",
+        fuente="Gmail",
+        score_calidad=5,
+        bloqueado=True,
+        convertido_a_prospecto=False,
+    )
+    lead_revision = Lead(
+        sheet_row_id=4,
+        remitente_email="revision@example.com",
+        remitente_nombre="Pendiente Review",
+        asunto="Propuesta de colaboración",
+        talent_id=None,
+        status_filtrado="En revisión",
+        fuente="Gmail",
+        score_calidad=45,
+        bloqueado=False,
+        convertido_a_prospecto=False,
+    )
+    db_session.add_all([lead_aprobado, lead_bloqueado, lead_revision])
+    db_session.commit()
+    for lead in (lead_aprobado, lead_bloqueado, lead_revision):
+        db_session.refresh(lead)
+
+    return {
+        "lead_aprobado": lead_aprobado,
+        "lead_bloqueado": lead_bloqueado,
+        "lead_revision": lead_revision,
+    }
+
+
+@pytest.fixture()
+def mock_sheets_rows(monkeypatch):
+    """Replace sheets.get_leads_rows() with a list of SheetLeadRow fixtures.
+
+    Covers all 3 Status_Filtrado values from RESEARCH.md live data.
+    One row has talento_mencionado="" to exercise the Sin-talento path.
+    Uses monkeypatch on the jobs module (NOT httpx.MockTransport —
+    gspread is NOT an httpx client).
+    """
+    from app.integrations.sheets import SheetLeadRow
+
+    sample = [
+        SheetLeadRow(
+            sheet_row_id=2,
+            remitente_email="a@example.com",
+            remitente_nombre="A",
+            asunto="Collab TikTok",
+            fecha_recepcion="2026-04-01T10:00:00Z",
+            talento_mencionado="Emicanico",
+            status_filtrado="✅ Aprobado - Respuesta enviada",
+            score_calidad=85,
+            bloqueado=False,
+            convertido_a_prospecto=False,
+        ),
+        SheetLeadRow(
+            sheet_row_id=3,
+            remitente_email="b@example.com",
+            remitente_nombre="B",
+            asunto="Spam promo",
+            fecha_recepcion="2026-04-02T10:00:00Z",
+            talento_mencionado="Mariana",
+            status_filtrado="🚫 Remitente bloqueado",
+            score_calidad=10,
+            bloqueado=False,
+            convertido_a_prospecto=False,
+        ),
+        SheetLeadRow(
+            sheet_row_id=4,
+            remitente_email="c@example.com",
+            remitente_nombre="C",
+            asunto="Propuesta",
+            fecha_recepcion="2026-04-03T10:00:00Z",
+            talento_mencionado="",
+            status_filtrado="En revisión",
+            score_calidad=45,
+            bloqueado=False,
+            convertido_a_prospecto=False,
+        ),
+    ]
+    import app.sync.jobs as jobs_module
+
+    monkeypatch.setattr(
+        jobs_module,
+        "sheets",
+        type("_MockSheets", (), {"get_leads_rows": lambda: sample})(),
+    )
+    return sample
 
 
 @pytest.fixture()
