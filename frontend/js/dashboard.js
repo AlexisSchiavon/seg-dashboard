@@ -55,6 +55,9 @@ function setPage(name, e) {
     loadFunnel();
   } else if (name === "talent") {
     loadTalentSelector();
+  } else if (name === "leads") {
+    loadLeadsSummary();
+    loadLeads();
   }
 }
 

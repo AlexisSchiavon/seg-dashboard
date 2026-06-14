@@ -19,6 +19,7 @@
     <div class="tab active" onclick="setPage('overview', event)">Resumen</div>
     <div class="tab" onclick="setPage('talent', event)">Por talento</div>
     <div class="tab" onclick="setPage('funnel', event)">Funnel</div>
+    <div class="tab" onclick="setPage('leads', event)">Leads</div>
   </div>
 
   <div id="toast" class="toast"></div>
@@ -150,7 +151,54 @@
     <div class="spacer"></div>
   </div>
 
+  <!-- ========== LEADS TAB ========== -->
+  <!-- D-36: score pills colored by range; T-03B-01: all Sheet strings via escHtml -->
+  <div class="page" id="page-leads">
+    <div class="spacer"></div>
+
+    <!-- KPI tiles: Leads totales, Calificados, Gmail (source breakdown) -->
+    <div class="section">
+      <div class="kpi-grid" id="leads-kpi-grid">
+        <!-- Populated by loadLeadsSummary() -->
+      </div>
+    </div>
+
+    <!-- Per-talent bars: count + calificados -->
+    <div class="section">
+      <div class="section-title">Leads por talento</div>
+      <div class="card" id="leads-by-talent">
+        <!-- Populated by loadLeadsSummary() -->
+      </div>
+    </div>
+
+    <!-- Filterable leads list -->
+    <div class="section">
+      <div class="section-title">Leads recientes</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <select id="filter-talent" style="flex:1;min-width:120px;background:var(--bg3);color:var(--text1);border:1px solid var(--bg5);border-radius:8px;padding:6px 10px;font-size:13px;">
+          <option value="">Todos los talentos</option>
+        </select>
+        <select id="filter-status" style="flex:1;min-width:120px;background:var(--bg3);color:var(--text1);border:1px solid var(--bg5);border-radius:8px;padding:6px 10px;font-size:13px;">
+          <option value="">Todos los estados</option>
+          <option value="✅ Aprobado - Respuesta enviada">Aprobado</option>
+          <option value="🚫 Remitente bloqueado">Bloqueado</option>
+          <option value="En revisión">En revisión</option>
+        </select>
+        <select id="filter-fuente" style="flex:1;min-width:100px;background:var(--bg3);color:var(--text1);border:1px solid var(--bg5);border-radius:8px;padding:6px 10px;font-size:13px;">
+          <option value="">Todas las fuentes</option>
+          <option value="Gmail">Gmail</option>
+        </select>
+      </div>
+      <div class="card" id="leads-list">
+        <!-- Populated by loadLeads() -->
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+  </div>
+
   <script src="/js/auth.js"></script>
   <script src="/js/dashboard.js"></script>
+  <script src="/js/leads.js"></script>
 </body>
 </html>
