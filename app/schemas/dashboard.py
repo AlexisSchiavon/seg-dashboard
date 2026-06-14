@@ -55,3 +55,35 @@ class FunnelOverview(BaseModel):
     bottleneck: BottleneckInfo | None = None
     insufficient_data: bool = False
     has_data: bool
+
+
+# ---------------------------------------------------------------------------
+# Plan 02-03: Per-talent detail schemas
+# ---------------------------------------------------------------------------
+
+class LostReasonSummary(BaseModel):
+    reason: str
+    count: int
+
+
+class LostOpportunity(BaseModel):
+    title: str
+    amount: float
+    loss_reason: str | None = None
+
+
+class BrandCategorySlice(BaseModel):
+    category: str
+    count: int
+    pct: float
+
+
+class TalentDetail(BaseModel):
+    talent_id: int
+    name: str
+    category: str | None = None
+    kpis: list[KpiTile]
+    funnel: list[StageBucket]
+    lost_summary: list[LostReasonSummary]
+    lost_opportunities: list[LostOpportunity]
+    brand_categories: list[BrandCategorySlice]

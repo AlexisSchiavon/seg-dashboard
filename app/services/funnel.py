@@ -141,6 +141,37 @@ def funnel_overview(db: Session) -> dict:
     }
 
 
+def talent_funnel(db: Session, talent_id: int) -> list[dict]:
+    """Return the 6-stage funnel for a specific talent's open deals only.
+
+    Reuses the shared STAGES constant — does NOT redefine it.
+    Returns a list of StageBucket-shaped dicts for only that talent's deals.
+    Bottleneck and insufficient_data are not computed here (that's a global metric).
+    """
+    rows = (
+        db.query(
+            Deal.stage_name,
+            func.count(Deal.id),
+            func.coalesce(func.sum(Deal.value), 0.0),
+        )
+        .filter(Deal.status == "open", Deal.talent_id == talent_id)
+        .group_by(Deal.stage_name)
+        .all()
+    )
+
+    stage_map: dict[str, tuple[int, float]] = {}
+    for row in rows:
+        stage_map[row[0]] = (row[1], float(row[2]))
+
+    # Always emit all 6 stages, even with 0 count (same invariant as funnel_overview)
+    stages = []
+    for stage in STAGES:
+        count, amount = stage_map.get(stage, (0, 0.0))
+        stages.append({"stage": stage, "count": count, "amount": amount})
+
+    return stages
+
+
 def recent_activity(db: Session, limit: int = 20) -> list[dict]:
     """Return the most recent DealStageEvents ordered by detected_at desc.
 
