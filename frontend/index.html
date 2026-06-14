@@ -60,8 +60,72 @@
   </div>
 
   <!-- ========== POR TALENTO TAB ========== -->
+  <!-- D-28 section order: Selector → KPIs → Funnel → Deals activos → Categorías de marca → Oportunidades perdidas -->
   <div class="page" id="page-talent">
-    <!-- Plan 02-03 populates "Por talento" content -->
+    <div class="spacer"></div>
+
+    <!-- (1) Talent selector — horizontal scrollable row of talent cards -->
+    <div class="section">
+      <div id="talent-selector" class="talent-selector">
+        <!-- Populated by loadTalentSelector() -->
+      </div>
+    </div>
+
+    <!-- (2) Per-talent KPI grid -->
+    <div class="section">
+      <div class="kpi-grid" id="talent-kpis">
+        <!-- Populated by loadTalentDetail() → renderKpis() into talent-kpis -->
+      </div>
+    </div>
+
+    <!-- (3) Per-talent funnel -->
+    <div class="section">
+      <div class="section-title">Funnel</div>
+      <div class="card">
+        <div id="talent-funnel">
+          <!-- Populated by loadTalentDetail() → renderTalentFunnel() -->
+        </div>
+      </div>
+    </div>
+
+    <!-- (4) Deals activos -->
+    <div class="section">
+      <div class="section-title">Deals activos</div>
+      <div class="card" id="talent-deals">
+        <!-- Populated by loadTalentDetail() → renderTalentDeals() -->
+      </div>
+    </div>
+
+    <!-- (5) Categorías de marca — donut chart + legend (D-26/D-27) -->
+    <div class="section">
+      <div class="section-title">Categorías de marca</div>
+      <div class="card" id="brand-donut-card">
+        <div class="donut-wrap">
+          <div id="brand-donut">
+            <!-- SVG conic-gradient donut populated by renderBrandDonut() -->
+          </div>
+          <div id="brand-legend" class="donut-legend">
+            <!-- Legend rows populated by renderBrandDonut() -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- (6) Oportunidades perdidas — per-reason summary + deal list (D-25) -->
+    <!-- NOTE: Lead-source section intentionally absent per D-28 (no data source until Phase 3) -->
+    <div class="section">
+      <div class="section-title">Oportunidades perdidas</div>
+      <div class="card">
+        <div id="lost-summary">
+          <!-- Per-reason summary line populated by renderLostOpportunities() -->
+        </div>
+        <div id="lost-list">
+          <!-- Itemized lost deals populated by renderLostOpportunities() -->
+        </div>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
   </div>
 
   <!-- ========== FUNNEL TAB ========== -->

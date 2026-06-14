@@ -36,6 +36,8 @@ function setPage(name) {
     loadSummary();
   } else if (name === "funnel") {
     loadFunnel();
+  } else if (name === "talent") {
+    loadTalentSelector();
   }
 }
 
@@ -444,6 +446,331 @@ async function loadFunnel() {
 
   renderFunnel(data.stages);
   renderBottleneck(data.bottleneck, data.insufficient_data);
+}
+
+// ============================================================
+// Por talento tab rendering (Plan 02-03)
+// ============================================================
+
+// Donut color palette (6 brand categories)
+const DONUT_COLORS = [
+  "var(--accent)",
+  "var(--purple)",
+  "var(--green)",
+  "var(--amber)",
+  "var(--blue)",
+  "var(--text2)",
+];
+
+/**
+ * Render KPIs into a specific container id (reuses existing KPI tile markup).
+ * Allows loadTalentDetail to render into talent-kpis rather than kpi-grid.
+ */
+function renderKpisInto(kpis, containerId) {
+  const grid = document.getElementById(containerId);
+  if (!grid) return;
+
+  if (!kpis || kpis.length === 0) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">Sin KPIs disponibles</div>`;
+    return;
+  }
+
+  grid.innerHTML = kpis.map((tile) => `
+    <div class="kpi ${tile.variant}">
+      <div class="kpi-label">${tile.label}</div>
+      <div class="kpi-val ${tile.variant}">${formatMXN(tile.value)}</div>
+      <div class="kpi-sub">MXN${tile.count !== null && tile.count !== undefined ? ` · ${tile.count} deals` : ""}</div>
+    </div>
+  `).join("");
+}
+
+/**
+ * Render the 6-stage per-talent funnel into talent-funnel container.
+ * Reuses same markup as global renderFunnel() but targets a different container.
+ */
+function renderTalentFunnel(stages) {
+  const container = document.getElementById("talent-funnel");
+  if (!container) return;
+
+  if (!stages || stages.length === 0) {
+    container.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">Sin datos de funnel</div>`;
+    return;
+  }
+
+  const maxCount = Math.max(...stages.map((s) => s.count), 1);
+
+  container.innerHTML = stages.map((stage, idx) => {
+    const pct = Math.max((stage.count / maxCount) * 100, stage.count > 0 ? 4 : 0);
+    const color = FUNNEL_COLORS[idx % FUNNEL_COLORS.length];
+    const countDisplay = stage.count > 0
+      ? `<span style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.9);">${stage.count}</span>`
+      : "";
+    return `
+      <div class="funnel-row">
+        <span class="f-label">${stage.stage}</span>
+        <div class="f-track">
+          <div class="f-fill" style="width:${pct}%;background:${color};">${countDisplay}</div>
+        </div>
+        <span class="f-n">${stage.count}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+/**
+ * Render active deals into talent-deals container.
+ * Shows open deals only (those already in the funnel).
+ */
+function renderTalentDeals(deals) {
+  const container = document.getElementById("talent-deals");
+  if (!container) return;
+
+  if (!deals || deals.length === 0) {
+    container.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">Sin deals activos</div>`;
+    return;
+  }
+
+  container.innerHTML = deals.map((deal, idx) => {
+    const dotColor = FUNNEL_COLORS[idx % FUNNEL_COLORS.length];
+    const sinCotizar = deal.is_sin_cotizar
+      ? `<span class="pill" style="background:var(--bg5);color:var(--text2);">Sin cotizar</span>`
+      : "";
+    return `
+      <div class="deal-row">
+        <div class="deal-l">
+          <div class="deal-dot" style="background:${dotColor};"></div>
+          <div>
+            <div class="deal-brand">${deal.title || "Sin título"}</div>
+            <div class="deal-tipo">${deal.stage_name || ""}</div>
+          </div>
+        </div>
+        <div class="deal-r">
+          <div class="deal-amt">${formatMXN(deal.value || 0)}</div>
+          ${sinCotizar}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+/**
+ * Render brand-category donut (conic-gradient) + legend into brand-donut / brand-legend.
+ * D-26/D-27: % by deal COUNT, not revenue.
+ * Legend format: "{Categoría} — {pct}% ({count} deals)"
+ */
+function renderBrandDonut(brandCategories) {
+  const donutEl = document.getElementById("brand-donut");
+  const legendEl = document.getElementById("brand-legend");
+  if (!donutEl || !legendEl) return;
+
+  if (!brandCategories || brandCategories.length === 0) {
+    donutEl.innerHTML = "";
+    // Replace the .donut-wrap card content with empty state
+    const card = document.getElementById("brand-donut-card");
+    if (card) {
+      card.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">Sin categorías de marca registradas todavía</div>`;
+    }
+    return;
+  }
+
+  // Build conic-gradient stops from percentages
+  let conicStops = [];
+  let cumPct = 0;
+  brandCategories.forEach((slice, idx) => {
+    const color = DONUT_COLORS[idx % DONUT_COLORS.length];
+    conicStops.push(`${color} ${cumPct}% ${cumPct + slice.pct}%`);
+    cumPct += slice.pct;
+  });
+  // Fill remainder if rounding leaves a gap
+  if (cumPct < 100) {
+    conicStops.push(`var(--bg5) ${cumPct}% 100%`);
+  }
+
+  const conicGradient = `conic-gradient(${conicStops.join(", ")})`;
+
+  // Donut via conic-gradient with a circular cutout using radial-gradient mask
+  donutEl.innerHTML = `
+    <div style="
+      width:80px;
+      height:80px;
+      border-radius:50%;
+      background:${conicGradient};
+      -webkit-mask:radial-gradient(circle, transparent 30px, black 30px);
+      mask:radial-gradient(circle, transparent 30px, black 30px);
+      flex-shrink:0;
+    "></div>
+  `;
+
+  // Legend rows: "{Categoría} — {pct}% ({count} deals)"
+  legendEl.innerHTML = brandCategories.map((slice, idx) => {
+    const color = DONUT_COLORS[idx % DONUT_COLORS.length];
+    const pctDisplay = Number.isFinite(slice.pct) ? slice.pct.toFixed(1) : "0.0";
+    return `
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></div>
+        <div style="color:var(--text2);">${slice.category} — ${pctDisplay}% (${slice.count} deal${slice.count !== 1 ? "s" : ""})</div>
+      </div>
+    `;
+  }).join("");
+}
+
+/**
+ * Render lost opportunities: per-reason summary line + itemized deal list.
+ * D-25: each deal shows a .pill with the resolved razón de pérdida label (never an integer).
+ * Empty state: "Sin oportunidades perdidas este periodo"
+ */
+function renderLostOpportunities(lostSummary, lostOpportunities) {
+  const summaryEl = document.getElementById("lost-summary");
+  const listEl = document.getElementById("lost-list");
+  if (!summaryEl || !listEl) return;
+
+  if (!lostOpportunities || lostOpportunities.length === 0) {
+    summaryEl.innerHTML = "";
+    listEl.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">Sin oportunidades perdidas este periodo</div>`;
+    return;
+  }
+
+  // Per-reason summary line: "{N} por {razón}" joined by ", "
+  const summaryParts = (lostSummary || []).map((s) => `${s.count} por ${s.reason}`);
+  summaryEl.innerHTML = summaryParts.length > 0
+    ? `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">${summaryParts.join(", ")}</div>`
+    : "";
+
+  // Itemized list: each lost deal with a .pill showing the loss_reason label
+  listEl.innerHTML = lostOpportunities.map((opp) => {
+    const pillHtml = opp.loss_reason
+      ? `<span class="pill" style="background:var(--blueD);color:var(--blueT);">${opp.loss_reason}</span>`
+      : "";
+    return `
+      <div class="deal-row">
+        <div class="deal-l">
+          <div class="deal-dot" style="background:var(--red);"></div>
+          <div>
+            <div class="deal-brand">${opp.title || "Sin título"}</div>
+          </div>
+        </div>
+        <div class="deal-r">
+          <div class="deal-amt">${formatMXN(opp.amount || 0)}</div>
+          ${pillHtml}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+/**
+ * Populate the talent selector from the /dashboard/summary ranking.
+ * Clicking a .talent-card calls loadTalentDetail(talentId).
+ * Auto-loads the first talent's detail on activation.
+ */
+async function loadTalentSelector() {
+  const selectorEl = document.getElementById("talent-selector");
+  if (!selectorEl) return;
+
+  // Reuse already-loaded summary ranking data; fetch if needed
+  const res = await apiFetch("/dashboard/summary");
+  if (!res) return; // 401 redirected
+
+  const data = await res.json();
+  const ranking = (data.ranking || []).filter((r) => !r.is_sin_talento && r.talent_id !== null);
+
+  if (ranking.length === 0) {
+    selectorEl.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">Sin talentos disponibles</div>`;
+    return;
+  }
+
+  selectorEl.innerHTML = ranking.map((talent, idx) => {
+    const colorPair = AVATAR_COLORS[idx % AVATAR_COLORS.length];
+    const initials = getInitials(talent.name);
+    return `
+      <div class="talent-card${idx === 0 ? " active" : ""}"
+           onclick="selectTalentCard(this, ${talent.talent_id})"
+           data-talent-id="${talent.talent_id}">
+        <div class="tc-avatar" style="background:${colorPair.bg};color:${colorPair.text};">${initials}</div>
+        <div class="tc-name">${talent.name}</div>
+        <div class="tc-deals">${talent.deal_count} deals</div>
+      </div>
+    `;
+  }).join("");
+
+  // Auto-load the first talent's detail
+  const firstTalent = ranking[0];
+  if (firstTalent && firstTalent.talent_id !== null) {
+    loadTalentDetail(firstTalent.talent_id);
+  }
+}
+
+/**
+ * Handle talent card selection: update active state + load detail.
+ */
+function selectTalentCard(cardEl, talentId) {
+  // Update active state on all cards in the selector
+  const selectorEl = document.getElementById("talent-selector");
+  if (selectorEl) {
+    selectorEl.querySelectorAll(".talent-card").forEach((c) => c.classList.remove("active"));
+  }
+  cardEl.classList.add("active");
+  loadTalentDetail(talentId);
+}
+
+/**
+ * Load and render full per-talent detail from GET /dashboard/talents/{id}.
+ * Renders into: talent-kpis, talent-funnel, talent-deals, brand-donut/brand-legend, lost-summary/lost-list.
+ */
+async function loadTalentDetail(talentId) {
+  const res = await apiFetch("/dashboard/talents/" + talentId);
+  if (!res) return; // 401 redirected
+
+  if (!res.ok) {
+    // 404 or other error — show a brief message
+    const lostList = document.getElementById("lost-list");
+    if (lostList) lostList.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">No se pudo cargar el detalle del talento</div>`;
+    return;
+  }
+
+  const data = await res.json();
+
+  // (2) KPIs
+  renderKpisInto(data.kpis, "talent-kpis");
+
+  // (3) Funnel
+  renderTalentFunnel(data.funnel);
+
+  // (4) Active deals — derive from funnel stages (open deals are tracked in funnel)
+  // The endpoint returns funnel stages; for "Deals activos" we show a simplified
+  // placeholder based on funnel counts since TalentDetail doesn't include raw deal rows.
+  // We render the funnel stage rows as a deal activity summary.
+  const activeFunnelStages = (data.funnel || []).filter((s) => s.count > 0);
+  const talentDealsEl = document.getElementById("talent-deals");
+  if (talentDealsEl) {
+    if (activeFunnelStages.length === 0) {
+      talentDealsEl.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">Sin deals activos</div>`;
+    } else {
+      talentDealsEl.innerHTML = activeFunnelStages.map((stage, idx) => {
+        const dotColor = FUNNEL_COLORS[idx % FUNNEL_COLORS.length];
+        return `
+          <div class="deal-row">
+            <div class="deal-l">
+              <div class="deal-dot" style="background:${dotColor};"></div>
+              <div>
+                <div class="deal-brand">${stage.stage}</div>
+                <div class="deal-tipo">${stage.count} deal${stage.count !== 1 ? "s" : ""} activo${stage.count !== 1 ? "s" : ""}</div>
+              </div>
+            </div>
+            <div class="deal-r">
+              <div class="deal-amt">${formatMXN(stage.amount)}</div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  // (5) Brand donut
+  renderBrandDonut(data.brand_categories);
+
+  // (6) Lost opportunities
+  renderLostOpportunities(data.lost_summary, data.lost_opportunities);
 }
 
 // ============================================================
