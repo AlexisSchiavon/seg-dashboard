@@ -245,8 +245,8 @@ def seed_deals(db_session, seed_talent_products):
 # v2-shaped fixture payloads matching RESEARCH.md Pattern 1/2 response shapes.
 PIPEDRIVE_DEAL_FIELDS = [
     {
-        "key": "razon_perdida_hash",
-        "name": "Razón de pérdida",
+        "field_code": "razon_perdida_hash",
+        "field_name": "Razón de pérdida",
         "options": [
             {"id": 1, "label": "Presupuesto insuficiente"},
             {"id": 2, "label": "Sin respuesta"},
@@ -256,8 +256,8 @@ PIPEDRIVE_DEAL_FIELDS = [
         ],
     },
     {
-        "key": "categoria_marca_hash",
-        "name": "Categoría de marca",
+        "field_code": "categoria_marca_hash",
+        "field_name": "Categoría de marca",
         "options": [
             {"id": 10, "label": "Moda"},
             {"id": 11, "label": "Belleza"},
@@ -268,8 +268,8 @@ PIPEDRIVE_DEAL_FIELDS = [
         ],
     },
     {
-        "key": "fecha_cobro_hash",
-        "name": "Fecha de cobro esperada",
+        "field_code": "fecha_cobro_hash",
+        "field_name": "Fecha de cobro esperada",
         "options": None,
     },
 ]

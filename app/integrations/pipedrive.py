@@ -72,11 +72,11 @@ def build_field_maps(client: httpx.Client) -> tuple[dict[str, str], dict[str, di
     deal — `option_labels` resolves that id to its Spanish label.
     """
     fields = list(_paginate(client, "/dealFields"))
-    key_by_name = {f["name"]: f["key"] for f in fields}
+    key_by_name = {f["field_name"]: f["field_code"] for f in fields}
     option_labels: dict[str, dict[int, str]] = {}
     for f in fields:
         if f.get("options"):
-            option_labels[f["key"]] = {opt["id"]: opt["label"] for opt in f["options"]}
+            option_labels[f["field_code"]] = {opt["id"]: opt["label"] for opt in f["options"]}
     return key_by_name, option_labels
 
 

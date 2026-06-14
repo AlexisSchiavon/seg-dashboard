@@ -73,6 +73,10 @@ def sync_pipedrive(db: Session) -> SyncLog:
         brand_category_key = key_by_name.get("Categoría de marca")
         expected_collection_date_key = key_by_name.get("Fecha de cobro esperada")
 
+        # PIPE-05's 6-stage funnel is only partially sourced from Pipedrive:
+        # Pipedrive pipeline 2 has 4 stages (6 Llamada, 7 Cotizacion,
+        # 8 Negociacion, 9 Contrato y factura). "En ejecucion" and "Cobranza"
+        # come from Trello (Phase 4), not Pipedrive.
         stage_name_by_id: dict[int, str] = {
             stage["id"]: stage["name"] for stage in pipedrive.get_stages(client)
         }
