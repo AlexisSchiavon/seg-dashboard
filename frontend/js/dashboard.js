@@ -404,6 +404,10 @@ function renderBottleneck(bottleneck, insufficientData) {
 async function loadSummary() {
   const res = await apiFetch("/dashboard/summary");
   if (!res) return; // 401 already redirected
+  if (!res.ok) {
+    showToast("Error al cargar el resumen");
+    return;
+  }
 
   const data = await res.json();
 
@@ -439,6 +443,10 @@ async function loadSummary() {
 async function loadFunnel() {
   const res = await apiFetch("/dashboard/funnel");
   if (!res) return; // 401 already redirected
+  if (!res.ok) {
+    showToast("Error al cargar el funnel");
+    return;
+  }
 
   const data = await res.json();
 
@@ -686,6 +694,10 @@ async function loadTalentSelector() {
   // Reuse already-loaded summary ranking data; fetch if needed
   const res = await apiFetch("/dashboard/summary");
   if (!res) return; // 401 redirected
+  if (!res.ok) {
+    showToast("Error al cargar talentos");
+    return;
+  }
 
   const data = await res.json();
   const ranking = (data.ranking || []).filter((r) => !r.is_sin_talento && r.talent_id !== null);
