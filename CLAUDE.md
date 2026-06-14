@@ -1,5 +1,9 @@
 
 
+## ⚠️ RESTRICCIONES CRÍTICAS
+
+Este sistema es SOLO LECTURA para todas las integraciones externas. Bajo ninguna circunstancia modificar, crear o eliminar datos en Pipedrive, Trello o Google Sheets. La única escritura permitida es en la base de datos local SQLite (seg.db).
+
 <!-- GSD:project-start source:PROJECT.md -->
 ## Project
 
