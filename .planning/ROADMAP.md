@@ -96,7 +96,20 @@ Plans:
   2. Each synced lead is classified by talent, source, and status
   3. The Leads tab displays all synced leads, filterable/grouped by talent, source, and status
 
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Sheets→SQLite leads sync vertical slice: Lead model + migration, read-only gspread integration, classification service (QUALIFIED_STATUS), sync_sheets upsert by sheet_row_id, scheduler + manual-sync wiring, /leads/summary endpoint (SHEET-01, SHEET-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-02-PLAN.md — Leads tab UI vertical slice: leads_list filterable endpoint, #page-leads tab, leads.js with per-talent bars + score pills + talent/source/status filters (DASH-04, SHEET-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 03-03-PLAN.md — Resumen tab Leads KPI tiles: extend /dashboard/summary with leads_totales + calificados, wire "Leads totales"/"Calificados" tiles (DASH-04)
+
 **UI hint**: yes
 
 ### Phase 4: Trello Integration & Collection Automation
@@ -168,7 +181,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation — Auth, Talent Catalog & Health Check | 3/3 | Complete   | 2026-06-11 |
 | 2. Pipedrive Integration & Core Dashboard | 3/3 | Complete   | 2026-06-14 |
-| 3. Google Sheets Leads Integration | 0/TBD | Not started | - |
+| 3. Google Sheets Leads Integration | 0/3 | Planned | - |
 | 4. Trello Integration & Collection Automation | 0/TBD | Not started | - |
 | 5. AI-Generated PDF Reports | 0/TBD | Not started | - |
 | 6. Embedded Natural-Language Agent | 0/TBD | Not started | - |
