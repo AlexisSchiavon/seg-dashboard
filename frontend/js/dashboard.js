@@ -597,17 +597,23 @@ function renderBrandDonut(brandCategories) {
     return;
   }
 
-  // Build conic-gradient stops from percentages
+  // Build conic-gradient stops from percentages.
+  // Clamp each stop's end to 100 so that rounding errors (e.g. three slices
+  // each at 33.33% summing to 99.99%, or other distributions summing above
+  // 100%) never produce invalid CSS stop values (WR-04).
   let conicStops = [];
   let cumPct = 0;
   brandCategories.forEach((slice, idx) => {
+    const start = Math.min(cumPct, 100);
+    const end = Math.min(cumPct + slice.pct, 100);
     const color = DONUT_COLORS[idx % DONUT_COLORS.length];
-    conicStops.push(`${color} ${cumPct}% ${cumPct + slice.pct}%`);
+    conicStops.push(`${color} ${start}% ${end}%`);
     cumPct += slice.pct;
   });
-  // Fill remainder if rounding leaves a gap
-  if (cumPct < 100) {
-    conicStops.push(`var(--bg5) ${cumPct}% 100%`);
+  // Fill remainder if rounding leaves a gap (guard uses 99.99 to absorb
+  // floating-point noise; cumPct is clamped before use).
+  if (cumPct < 99.99) {
+    conicStops.push(`var(--bg5) ${Math.min(cumPct, 100)}% 100%`);
   }
 
   const conicGradient = `conic-gradient(${conicStops.join(", ")})`;
