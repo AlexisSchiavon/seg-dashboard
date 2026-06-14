@@ -1,5 +1,7 @@
-// Login form submit handler
-document.getElementById("login-form").addEventListener("submit", async (e) => {
+// Login form submit handler — guard prevents crash when auth.js loads on
+// pages that don't have the login form (e.g. index.html).
+const _loginForm = document.getElementById("login-form");
+if (_loginForm) _loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const formData = new URLSearchParams();
