@@ -168,3 +168,30 @@ def test_stage_id_maps_to_one_of_six_funnel_stages(db_session, seed_talent_produ
     valid_stages = {"Llamada", "Cotización", "Negociación", "Contrato", "En ejecución", "Cobranza"}
     deals = db_session.query(Deal).all()
     assert all(d.stage_name in valid_stages for d in deals)
+
+
+def test_trigger_sync_requires_auth(client):
+    """POST /sync/pipedrive is auth-protected (401 without a session)."""
+    response = client.post("/sync/pipedrive")
+
+    assert response.status_code == 401
+
+
+def test_trigger_sync_returns_202(auth_client):
+    """POST /sync/pipedrive schedules a background sync and returns 202 (D-22/D-23)."""
+    response = auth_client.post("/sync/pipedrive")
+
+    assert response.status_code == 202
+    assert response.json()["status"] in {"accepted", "already_running"}
+
+
+def test_sync_status_endpoint(auth_client):
+    """GET /sync/status returns the latest SyncLog shape for the
+    "Última sync" indicator (D-21) and D-24 failure banner."""
+    response = auth_client.get("/sync/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "status" in body
+    assert "records_synced" in body
+    assert "error_message" in body

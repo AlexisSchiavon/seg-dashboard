@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>SEG · Talent Intelligence</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-logo">SEG <span>·</span> Intelligence</div>
+    <div class="nav-right">
+      <div class="live-pill" id="sync-pill"><span class="live-dot" id="sync-dot"></span><span id="sync-text">Última sync: hace -- min</span></div>
+    </div>
+  </nav>
+
+  <div class="tabbar">
+    <div class="tab active" onclick="setPage('overview')">Resumen</div>
+    <div class="tab" onclick="setPage('talent')">Por talento</div>
+    <div class="tab" onclick="setPage('funnel')">Funnel</div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <div id="sync-banner-wrap"></div>
+
+  <div class="page active" id="page-overview">
+    <div class="spacer"></div>
+    <div class="section">
+      <button class="btn primary" id="sync-btn" onclick="triggerSync()">Sincronizar ahora</button>
+    </div>
+    <div class="section" id="overview-content">
+      <!-- Plan 02-02 populates KPIs, ranking, funnel, activity for this tab -->
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <div class="page" id="page-talent">
+    <!-- Plan 02-03 populates "Por talento" content -->
+  </div>
+
+  <div class="page" id="page-funnel">
+    <!-- Plan 02-02 populates the full funnel content -->
+  </div>
+
+  <script src="/js/auth.js"></script>
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

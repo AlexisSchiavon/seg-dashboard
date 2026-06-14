@@ -24,7 +24,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database import Base, get_db
+from app.database import Base, engine, get_db
 from app.main import app
 from app.models import Deal, DealStageEvent, Talent, TalentProduct, User
 from app.auth.security import get_password_hash
@@ -49,6 +49,14 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):
 TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 Base.metadata.create_all(bind=test_engine)
+
+# app/sync/scheduler.py and app/routers/sync.py's background tasks construct
+# their own `SessionLocal()` (bound to `app.database.engine`, i.e. DATABASE_URL)
+# rather than using the overridden `get_db` dependency -- this is the documented
+# pattern for background/scheduled code (02-PATTERNS.md). So the file-backed
+# test DB also needs its schema created, or sync_pipedrive's first query
+# (SyncLog concurrency guard) raises "no such table: sync_logs".
+Base.metadata.create_all(bind=engine)
 
 
 def override_get_db():
