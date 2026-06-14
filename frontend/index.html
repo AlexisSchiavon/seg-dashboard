@@ -24,23 +24,66 @@
   <div id="toast" class="toast"></div>
   <div id="sync-banner-wrap"></div>
 
+  <!-- ========== RESUMEN TAB ========== -->
   <div class="page active" id="page-overview">
     <div class="spacer"></div>
+
+    <!-- Sincronizar ahora button -->
     <div class="section">
       <button class="btn primary" id="sync-btn" onclick="triggerSync()">Sincronizar ahora</button>
     </div>
-    <div class="section" id="overview-content">
-      <!-- Plan 02-02 populates KPIs, ranking, funnel, activity for this tab -->
+
+    <!-- KPI grid: 4 tiles — Pipeline total (accent), En negociación (amber), Cerrados (purple), En campaña (green) -->
+    <div class="section">
+      <div class="kpi-grid" id="kpi-grid">
+        <!-- Populated by loadSummary() → renderKpis() -->
+      </div>
     </div>
+
+    <!-- Ranking de talentos -->
+    <div class="section">
+      <div class="section-title">Ranking de talentos</div>
+      <div class="card" id="ranking-list">
+        <!-- Populated by loadSummary() → renderRanking() -->
+      </div>
+    </div>
+
+    <!-- Actividad reciente -->
+    <div class="section">
+      <div class="section-title">Actividad reciente</div>
+      <div class="card" id="activity-list">
+        <!-- Populated by loadSummary() → renderActivity() -->
+      </div>
+    </div>
+
     <div class="spacer"></div>
   </div>
 
+  <!-- ========== POR TALENTO TAB ========== -->
   <div class="page" id="page-talent">
     <!-- Plan 02-03 populates "Por talento" content -->
   </div>
 
+  <!-- ========== FUNNEL TAB ========== -->
   <div class="page" id="page-funnel">
-    <!-- Plan 02-02 populates the full funnel content -->
+    <div class="spacer"></div>
+
+    <!-- Funnel completo: 6 stages -->
+    <div class="section">
+      <div class="section-title">Funnel completo</div>
+      <div class="card">
+        <div id="funnel-rows">
+          <!-- Populated by loadFunnel() → renderFunnel() -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottleneck alert slot -->
+    <div class="section" id="bottleneck-slot">
+      <!-- Populated by loadFunnel(): .alert.warn or .alert.info -->
+    </div>
+
+    <div class="spacer"></div>
   </div>
 
   <script src="/js/auth.js"></script>
