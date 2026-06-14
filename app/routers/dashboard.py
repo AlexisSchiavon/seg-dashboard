@@ -129,7 +129,16 @@ def get_talent_detail(talent_id: int, db: Session = Depends(get_db)):
             detail="Talent not found",
         )
 
-    detail = kpi_service.talent_detail(db, talent_id)
+    try:
+        detail = kpi_service.talent_detail(db, talent_id)
+    except ValueError:
+        # Defensive catch for the unlikely race where a talent is deleted
+        # between the guard above and the service lookup (WR-03). Surfaces
+        # as 404 rather than an uncaught ValueError → 500.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Talent not found",
+        )
 
     # Build typed Pydantic models from service dicts
     kpi_tiles = [KpiTile(**kpi) for kpi in detail["kpis"]]
