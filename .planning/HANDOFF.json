@@ -1,38 +1,31 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-13T19:31:44.311Z",
+  "timestamp": "2026-06-14T01:17:30.203Z",
   "phase": "02",
   "phase_name": "pipedrive-integration-core-dashboard",
-  "phase_dir": ".planning/phases/02-pipedrive-integration-core-dashboard",
+  "phase_dir": "02-pipedrive-integration-core-dashboard",
   "plan": 1,
-  "task": 1,
+  "task": 2,
   "total_tasks": 4,
   "status": "paused",
   "completed_tasks": [
-    {"id": 1, "name": "Wave 0 — install deps, models, migration, test scaffolding", "status": "in_progress", "progress": "deps added (apscheduler/rapidfuzz/respx), Deal/DealStageEvent/SyncLog models added to app/models.py, alembic migration 8e59350e6c1a generated and reordered — all uncommitted in worktree, not yet verified (alembic upgrade head not re-run, conftest fixtures and test stubs not written)"}
+    {"id": 1, "name": "Wave 0 - install deps, models, migration, test scaffolding", "status": "done", "commit": "af9907e"}
   ],
   "remaining_tasks": [
-    {"id": 1, "name": "Wave 0 — install deps, models, migration, test scaffolding", "status": "in_progress"},
     {"id": 2, "name": "Pipedrive v2 client + sync job (TDD)", "status": "not_started"},
-    {"id": 3, "name": "Sync endpoint, scheduler, dashboard shell + Última sync indicator", "status": "not_started"},
-    {"id": 4, "name": "checkpoint:human-verify (blocking) — real Pipedrive sync against live SEG account", "status": "not_started"}
+    {"id": 3, "name": "Sync endpoint, scheduler, dashboard shell + Ultima sync indicator", "status": "not_started"},
+    {"id": 4, "name": "checkpoint:human-verify - live Pipedrive sync verification", "status": "not_started"}
   ],
   "blockers": [
-    {"description": "Background-agent Bash sandbox started denying all 'uv run'/python executable invocations mid-session (plain shell builtins still worked); main/foreground session confirmed 'uv run python -c \"print(\\'ok\\')\"' works fine in the same worktree. Appears to be a background-agent-only sandbox quirk, not an environment issue.", "type": "technical", "workaround": "Re-run the wave-1 executor in the foreground (no run_in_background) so any permission prompts surface interactively."}
+    {"description": "A background-agent (run_in_background) executor hit a Bash sandbox permission denial mid-Task-1 in a prior attempt; a foreground executor for the same Task 1 hit an account session/rate limit (\"session limit, resets 6pm America/Mexico_City\") before committing, but completed correct work.", "type": "external", "workaround": "Spawn executors in the FOREGROUND (no run_in_background). The session-limit reset is time-based; current time is past the stated 6pm reset so a fresh agent should not hit it immediately. Dispatch Tasks 2-4 with a fresh context budget."}
   ],
   "human_actions_pending": [
-    {"action": "When Task 4 (checkpoint) is reached: run the live Pipedrive sync verification (script + dev server + DB inspection) per 02-01-PLAN.md's <how-to-verify>", "context": "PIPEDRIVE_API_TOKEN/PIPEDRIVE_DOMAIN already set in .env — this is the planned blocking checkpoint, not a new issue", "blocking": false}
+    {"action": "Task 4 of 02-01 is a blocking checkpoint:human-verify - run match_talent_products script, start the app, trigger a real Pipedrive sync, inspect DB output, confirm 6 funnel stage names per PIPE-05", "context": ".env already has real PIPEDRIVE_API_TOKEN/PIPEDRIVE_DOMAIN configured", "blocking": true}
   ],
   "decisions": [
-    {"decision": "Resume by re-running /gsd-execute-phase 02 with the wave-1 executor in the foreground (not run_in_background)", "rationale": "Background agent hit unresolvable sandbox permission denials on uv/python; foreground avoids this and lets prompts surface to the user", "phase": "02"}
+    {"decision": "Committed Task 1 work (789 lines, verified passing) on the worktree branch, merged (fast-forward) into main, then removed the worktree/branch", "rationale": "Two prior executor attempts both failed to commit before hitting agent-specific limits (sandbox denial, then session limit). Task 1's acceptance checks (model imports, alembic upgrade head, apscheduler/rapidfuzz imports) were independently re-verified and passed before merging.", "phase": "02"}
   ],
-  "uncommitted_files": [
-    ".claude/worktrees/agent-a8470bcb3ee34cf32/app/models.py",
-    ".claude/worktrees/agent-a8470bcb3ee34cf32/pyproject.toml",
-    ".claude/worktrees/agent-a8470bcb3ee34cf32/uv.lock",
-    ".claude/worktrees/agent-a8470bcb3ee34cf32/alembic/versions/8e59350e6c1a_add_deals_deal_stage_events_sync_logs.py",
-    ".claude/worktrees/agent-a8470bcb3ee34cf32/.planning/STATE.md"
-  ],
-  "next_action": "Re-run /gsd-execute-phase 02. Wave 1 (02-01) is incomplete (no SUMMARY.md). Decide first whether to reuse the existing worktree branch worktree-agent-a8470bcb3ee34cf32 (has uncommitted, unverified Task 1 work) or start Task 1 fresh — then run the executor in the foreground.",
-  "context_notes": "Phase 02 = 3 sequential single-plan waves (02-01 -> 02-02 -> 02-03), each plan ends in a blocking human-verify checkpoint requiring live app/dashboard interaction. .env already has real PIPEDRIVE_API_TOKEN/PIPEDRIVE_DOMAIN. uv/alembic/pytest all confirmed working from the main session."
+  "uncommitted_files": [],
+  "next_action": "Spawn a fresh gsd-executor agent (foreground, isolation=worktree) for plan 02-01 Tasks 2-4, forking from main @ af9907e which already includes Task 1.",
+  "context_notes": "Task 1 is done and merged to main (commit af9907e). Tasks 2 (TDD: pipedrive client + sync job), 3 (sync endpoint/scheduler/dashboard shell), and 4 (blocking live-Pipedrive checkpoint) remain for plan 02-01. After 02-01 finishes, Wave 2 (02-02) and Wave 3 (02-03) remain, each ending in its own blocking checkpoint."
 }
