@@ -1,31 +1,30 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-14T01:17:30.203Z",
+  "timestamp": "2026-06-14T06:33:01.056Z",
   "phase": "02",
   "phase_name": "pipedrive-integration-core-dashboard",
   "phase_dir": "02-pipedrive-integration-core-dashboard",
   "plan": 1,
-  "task": 2,
+  "task": 4,
   "total_tasks": 4,
   "status": "paused",
   "completed_tasks": [
-    {"id": 1, "name": "Wave 0 - install deps, models, migration, test scaffolding", "status": "done", "commit": "af9907e"}
+    {"id": 1, "name": "Wave 0 - install deps, models, migration, test scaffolding", "status": "done", "commit": "af9907e"},
+    {"id": 2, "name": "Pipedrive v2 client + sync job (TDD)", "status": "done", "commit": "5adbced"},
+    {"id": 3, "name": "Sync endpoint, scheduler, dashboard shell + Ultima sync indicator", "status": "done", "commit": "6862dd1"}
   ],
   "remaining_tasks": [
-    {"id": 2, "name": "Pipedrive v2 client + sync job (TDD)", "status": "not_started"},
-    {"id": 3, "name": "Sync endpoint, scheduler, dashboard shell + Ultima sync indicator", "status": "not_started"},
     {"id": 4, "name": "checkpoint:human-verify - live Pipedrive sync verification", "status": "not_started"}
   ],
-  "blockers": [
-    {"description": "A background-agent (run_in_background) executor hit a Bash sandbox permission denial mid-Task-1 in a prior attempt; a foreground executor for the same Task 1 hit an account session/rate limit (\"session limit, resets 6pm America/Mexico_City\") before committing, but completed correct work.", "type": "external", "workaround": "Spawn executors in the FOREGROUND (no run_in_background). The session-limit reset is time-based; current time is past the stated 6pm reset so a fresh agent should not hit it immediately. Dispatch Tasks 2-4 with a fresh context budget."}
-  ],
+  "blockers": [],
   "human_actions_pending": [
-    {"action": "Task 4 of 02-01 is a blocking checkpoint:human-verify - run match_talent_products script, start the app, trigger a real Pipedrive sync, inspect DB output, confirm 6 funnel stage names per PIPE-05", "context": ".env already has real PIPEDRIVE_API_TOKEN/PIPEDRIVE_DOMAIN configured", "blocking": true}
+    {"action": "Run match_talent_products, start the app (uv run uvicorn app.main:app --reload), log in, click 'Sincronizar ahora', confirm 'Ultima sync' + toast update, inspect DB for correct Deal fields, confirm 6 funnel stage names match PIPE-05", "context": ".env already has real PIPEDRIVE_API_TOKEN/PIPEDRIVE_DOMAIN configured in the main checkout (no worktree needed)", "blocking": true}
   ],
   "decisions": [
-    {"decision": "Committed Task 1 work (789 lines, verified passing) on the worktree branch, merged (fast-forward) into main, then removed the worktree/branch", "rationale": "Two prior executor attempts both failed to commit before hitting agent-specific limits (sandbox denial, then session limit). Task 1's acceptance checks (model imports, alembic upgrade head, apscheduler/rapidfuzz imports) were independently re-verified and passed before merging.", "phase": "02"}
+    {"decision": "Tasks 1-3 each completed by a foreground worktree executor that hit an agent session-limit before returning cleanly; orchestrator verified and merged each task's commits directly to main (af9907e, then 5adbced+6862dd1) rather than discarding correct work.", "rationale": "Both cutoffs were time-based account limits (6pm then 12am America/Mexico_City), not code defects. All 14 tests pass and app boots after each merge.", "phase": "02"},
+    {"decision": "Copy .env into any fresh worktree before app-boot/live verification.", "rationale": "Fresh git worktrees don't include gitignored .env, causing pydantic Settings validation errors unrelated to the actual code.", "phase": "02"}
   ],
   "uncommitted_files": [],
-  "next_action": "Spawn a fresh gsd-executor agent (foreground, isolation=worktree) for plan 02-01 Tasks 2-4, forking from main @ af9907e which already includes Task 1.",
-  "context_notes": "Task 1 is done and merged to main (commit af9907e). Tasks 2 (TDD: pipedrive client + sync job), 3 (sync endpoint/scheduler/dashboard shell), and 4 (blocking live-Pipedrive checkpoint) remain for plan 02-01. After 02-01 finishes, Wave 2 (02-02) and Wave 3 (02-03) remain, each ending in its own blocking checkpoint."
+  "next_action": "Run Task 4's live-verify checkpoint (see .continue-here.md <remaining_work>) in the main checkout. On approval, write 02-01-SUMMARY.md, commit, update ROADMAP/STATE for plan 02-01 complete, then continue /gsd-execute-phase 02 for Wave 2 (02-02).",
+  "context_notes": "Plan 02-01 is functionally complete and merged to main (6862dd1) - only the live human-verification checkpoint and SUMMARY.md remain. After that, Wave 2 (02-02, Resumen+Funnel) and Wave 3 (02-03, Por talento) remain, each ending in its own blocking checkpoint."
 }
