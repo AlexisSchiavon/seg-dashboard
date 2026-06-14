@@ -3,8 +3,8 @@
 Functions take db: Session as the first parameter — Depends() wiring belongs
 in app/routers/leads.py, not here (pattern from 02-PATTERNS.md / kpis.py).
 """
-from sqlalchemy import Integer, desc, func
-from sqlalchemy.orm import Session
+from sqlalchemy import Integer, desc, func, nullslast
+from sqlalchemy.orm import Session, joinedload
 
 from app.models import Lead, Talent
 
@@ -98,3 +98,56 @@ def leads_by_talent(db: Session) -> list[dict]:
         )
 
     return results
+
+
+def leads_list(
+    db: Session,
+    talent_id: int | None = None,
+    status: str | None = None,
+    fuente: str | None = None,
+) -> list[dict]:
+    """Return a list of leads with talent_name and status_display resolved.
+
+    Optionally filtered by talent_id, status_filtrado, or fuente.
+    Ordered by fecha_recepcion descending (nulls last), then sheet_row_id descending.
+
+    talent_name is None when talent_id is None (Sin talento asignado bucket).
+    status_display is mapped via STATUS_DISPLAY; falls back to raw status_filtrado
+    when not mapped (T-03B-03: parameterized filter values only, no raw SQL).
+    """
+    query = db.query(Lead).options(joinedload(Lead.talent))
+
+    if talent_id is not None:
+        query = query.filter(Lead.talent_id == talent_id)
+    if status is not None:
+        query = query.filter(Lead.status_filtrado == status)
+    if fuente is not None:
+        query = query.filter(Lead.fuente == fuente)
+
+    # Order: fecha_recepcion DESC nulls last, then sheet_row_id DESC
+    query = query.order_by(
+        nullslast(desc(Lead.fecha_recepcion)),
+        desc(Lead.sheet_row_id),
+    )
+
+    leads = query.all()
+
+    return [
+        {
+            "id": lead.id,
+            "sheet_row_id": lead.sheet_row_id,
+            "remitente_nombre": lead.remitente_nombre,
+            "remitente_email": lead.remitente_email,
+            "asunto": lead.asunto,
+            "fecha_recepcion": lead.fecha_recepcion,
+            "talent_id": lead.talent_id,
+            "talent_name": lead.talent.name if lead.talent is not None else None,
+            "status_filtrado": lead.status_filtrado,
+            "status_display": STATUS_DISPLAY.get(lead.status_filtrado, lead.status_filtrado),
+            "fuente": lead.fuente,
+            "score_calidad": lead.score_calidad,
+            "bloqueado": lead.bloqueado,
+            "convertido_a_prospecto": lead.convertido_a_prospecto,
+        }
+        for lead in leads
+    ]
