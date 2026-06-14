@@ -100,7 +100,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Sheets→SQLite leads sync vertical slice: Lead model + migration, read-only gspread integration, classification service (QUALIFIED_STATUS), sync_sheets upsert by sheet_row_id, scheduler + manual-sync wiring, /leads/summary endpoint (SHEET-01, SHEET-02)
+- [x] 03-01-PLAN.md — Sheets→SQLite leads sync vertical slice: Lead model + migration, read-only gspread integration, classification service (QUALIFIED_STATUS), sync_sheets upsert by sheet_row_id, scheduler + manual-sync wiring, /leads/summary endpoint (SHEET-01, SHEET-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -181,7 +181,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation — Auth, Talent Catalog & Health Check | 3/3 | Complete   | 2026-06-11 |
 | 2. Pipedrive Integration & Core Dashboard | 3/3 | Complete   | 2026-06-14 |
-| 3. Google Sheets Leads Integration | 0/3 | Planned | - |
+| 3. Google Sheets Leads Integration | 1/3 | In Progress|  |
 | 4. Trello Integration & Collection Automation | 0/TBD | Not started | - |
 | 5. AI-Generated PDF Reports | 0/TBD | Not started | - |
 | 6. Embedded Natural-Language Agent | 0/TBD | Not started | - |
