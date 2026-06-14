@@ -564,12 +564,11 @@ function renderBrandDonut(brandCategories) {
   if (!donutEl || !legendEl) return;
 
   if (!brandCategories || brandCategories.length === 0) {
+    // Clear only the donut/legend elements — never destroy the parent card,
+    // which would permanently remove #brand-donut and #brand-legend from the
+    // DOM and break rendering for all subsequent talent selections (CR-01).
     donutEl.innerHTML = "";
-    // Replace the .donut-wrap card content with empty state
-    const card = document.getElementById("brand-donut-card");
-    if (card) {
-      card.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">Sin categorías de marca registradas todavía</div>`;
-    }
+    legendEl.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">Sin categorías de marca registradas todavía</div>`;
     return;
   }
 
