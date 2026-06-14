@@ -39,9 +39,9 @@ Requirements for initial release (M1-M7, built incrementally). Each maps to road
 
 ### Dashboard
 
-- [ ] **DASH-01**: Resumen ejecutivo — global KPIs, talent ranking by revenue, AI-generated insights, recent activity feed
+- [x] **DASH-01**: Resumen ejecutivo — global KPIs, talent ranking by revenue, AI-generated insights, recent activity feed
 - [ ] **DASH-02**: Por talento — KPIs, monthly revenue projection (cobrado/proyección/pendiente as stacked bars), collection calendar, individual funnel, lost opportunities, brand category breakdown, top 3 campaigns of the month, full campaign table (campaign/status/amount)
-- [ ] **DASH-03**: Funnel completo — 6 stages with deal count and amount, bottleneck detection
+- [x] **DASH-03**: Funnel completo — 6 stages with deal count and amount, bottleneck detection
 - [ ] **DASH-04**: Leads Gmail — leads classified by talent, source, and status
 - [ ] **DASH-05**: Reportes — UI to generate AI PDF reports and browse/download report history
 
