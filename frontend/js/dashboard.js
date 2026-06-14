@@ -23,6 +23,20 @@ const AVATAR_COLORS = [
   { bg: "rgba(36,114,200,0.15)", text: "var(--blueT)" },
 ];
 
+// ============================================================
+// HTML escape helper — must be applied to ALL API-sourced strings
+// interpolated into innerHTML to prevent stored XSS (CR-02).
+// ============================================================
+function escHtml(str) {
+  if (str == null) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function setPage(name) {
   document.querySelectorAll(".page").forEach((el) => el.classList.remove("active"));
   document.querySelectorAll(".tab").forEach((el) => el.classList.remove("active"));
@@ -277,15 +291,15 @@ function renderRanking(ranking) {
 
     const avatarContent = isSinTalento ? "?" : getInitials(row.name);
     const subcopy = row.category
-      ? `${row.category} · ${row.deal_count} deal${row.deal_count !== 1 ? "s" : ""}`
+      ? `${escHtml(row.category)} · ${row.deal_count} deal${row.deal_count !== 1 ? "s" : ""}`
       : `${row.deal_count} deal${row.deal_count !== 1 ? "s" : ""}`;
 
     return `
       <div class="rank-row">
         <div${numClass}>${numDisplay}</div>
-        <div class="rank-avatar" ${avatarStyle}>${avatarContent}</div>
+        <div class="rank-avatar" ${avatarStyle}>${escHtml(avatarContent)}</div>
         <div class="rank-info">
-          <div class="rank-name">${row.name}</div>
+          <div class="rank-name">${escHtml(row.name)}</div>
           <div class="rank-nicho">${subcopy}</div>
         </div>
         <div class="rank-right">
@@ -311,12 +325,12 @@ function renderActivity(activity) {
 
   container.innerHTML = activity.map((item) => {
     const relTime = formatRelativeTime(item.detected_at);
-    const title = item.title || "Deal";
+    const title = escHtml(item.title || "Deal");
     return `
       <div class="activity-row">
         <div class="act-icon" style="background:var(--greenD);">📝</div>
         <div class="act-text">
-          <div class="act-main"><strong>${title}</strong> — ${item.talent_name} pasó a ${item.to_stage}</div>
+          <div class="act-main"><strong>${title}</strong> — ${escHtml(item.talent_name)} pasó a ${escHtml(item.to_stage)}</div>
           <div class="act-time">${relTime} · Pipedrive</div>
         </div>
       </div>
@@ -347,7 +361,7 @@ function renderFunnel(stages) {
       : "";
     return `
       <div class="funnel-row">
-        <span class="f-label">${stage.stage}</span>
+        <span class="f-label">${escHtml(stage.stage)}</span>
         <div class="f-track">
           <div class="f-fill" style="width:${pct}%;background:${color};">${countDisplay}</div>
         </div>
@@ -507,7 +521,7 @@ function renderTalentFunnel(stages) {
       : "";
     return `
       <div class="funnel-row">
-        <span class="f-label">${stage.stage}</span>
+        <span class="f-label">${escHtml(stage.stage)}</span>
         <div class="f-track">
           <div class="f-fill" style="width:${pct}%;background:${color};">${countDisplay}</div>
         </div>
@@ -540,8 +554,8 @@ function renderTalentDeals(deals) {
         <div class="deal-l">
           <div class="deal-dot" style="background:${dotColor};"></div>
           <div>
-            <div class="deal-brand">${deal.title || "Sin título"}</div>
-            <div class="deal-tipo">${deal.stage_name || ""}</div>
+            <div class="deal-brand">${escHtml(deal.title || "Sin título")}</div>
+            <div class="deal-tipo">${escHtml(deal.stage_name || "")}</div>
           </div>
         </div>
         <div class="deal-r">
@@ -607,7 +621,7 @@ function renderBrandDonut(brandCategories) {
     return `
       <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
         <div style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></div>
-        <div style="color:var(--text2);">${slice.category} — ${pctDisplay}% (${slice.count} deal${slice.count !== 1 ? "s" : ""})</div>
+        <div style="color:var(--text2);">${escHtml(slice.category)} — ${pctDisplay}% (${slice.count} deal${slice.count !== 1 ? "s" : ""})</div>
       </div>
     `;
   }).join("");
@@ -630,7 +644,7 @@ function renderLostOpportunities(lostSummary, lostOpportunities) {
   }
 
   // Per-reason summary line: "{N} por {razón}" joined by ", "
-  const summaryParts = (lostSummary || []).map((s) => `${s.count} por ${s.reason}`);
+  const summaryParts = (lostSummary || []).map((s) => `${s.count} por ${escHtml(s.reason)}`);
   summaryEl.innerHTML = summaryParts.length > 0
     ? `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">${summaryParts.join(", ")}</div>`
     : "";
@@ -638,14 +652,14 @@ function renderLostOpportunities(lostSummary, lostOpportunities) {
   // Itemized list: each lost deal with a .pill showing the loss_reason label
   listEl.innerHTML = lostOpportunities.map((opp) => {
     const pillHtml = opp.loss_reason
-      ? `<span class="pill" style="background:var(--blueD);color:var(--blueT);">${opp.loss_reason}</span>`
+      ? `<span class="pill" style="background:var(--blueD);color:var(--blueT);">${escHtml(opp.loss_reason)}</span>`
       : "";
     return `
       <div class="deal-row">
         <div class="deal-l">
           <div class="deal-dot" style="background:var(--red);"></div>
           <div>
-            <div class="deal-brand">${opp.title || "Sin título"}</div>
+            <div class="deal-brand">${escHtml(opp.title || "Sin título")}</div>
           </div>
         </div>
         <div class="deal-r">
@@ -685,8 +699,8 @@ async function loadTalentSelector() {
       <div class="talent-card${idx === 0 ? " active" : ""}"
            onclick="selectTalentCard(this, ${talent.talent_id})"
            data-talent-id="${talent.talent_id}">
-        <div class="tc-avatar" style="background:${colorPair.bg};color:${colorPair.text};">${initials}</div>
-        <div class="tc-name">${talent.name}</div>
+        <div class="tc-avatar" style="background:${colorPair.bg};color:${colorPair.text};">${escHtml(initials)}</div>
+        <div class="tc-name">${escHtml(talent.name)}</div>
         <div class="tc-deals">${talent.deal_count} deals</div>
       </div>
     `;
@@ -752,7 +766,7 @@ async function loadTalentDetail(talentId) {
             <div class="deal-l">
               <div class="deal-dot" style="background:${dotColor};"></div>
               <div>
-                <div class="deal-brand">${stage.stage}</div>
+                <div class="deal-brand">${escHtml(stage.stage)}</div>
                 <div class="deal-tipo">${stage.count} deal${stage.count !== 1 ? "s" : ""} activo${stage.count !== 1 ? "s" : ""}</div>
               </div>
             </div>
