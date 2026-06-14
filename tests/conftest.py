@@ -71,6 +71,25 @@ def db_session():
         db.close()
 
 
+@pytest.fixture(autouse=True)
+def _clean_tables():
+    """Truncate all tables after each test.
+
+    The test DB uses a shared in-memory SQLite engine (StaticPool) so rows
+    persist across tests within the same session. Fixtures like
+    seed_talent_products/seed_deals insert rows with unique constraints
+    (e.g. talents.name), which collide across tests without this cleanup.
+    """
+    yield
+    db = TestSessionLocal()
+    try:
+        for table in reversed(Base.metadata.sorted_tables):
+            db.execute(table.delete())
+        db.commit()
+    finally:
+        db.close()
+
+
 @pytest.fixture()
 def client():
     with TestClient(app) as c:
@@ -319,8 +338,8 @@ PIPEDRIVE_PRODUCTS = {
 PIPEDRIVE_DEAL_PRODUCTS = {
     "success": True,
     "data": [
-        {"id": 1001, "product_id": 101, "name": "Producto Talento Uno"},
-        {"id": 1002, "product_id": 202, "name": "Producto Talento Dos"},
+        {"id": 1, "deal_id": 1001, "product_id": 101, "name": "Producto Talento Uno"},
+        {"id": 2, "deal_id": 1002, "product_id": 202, "name": "Producto Talento Dos"},
     ],
     "additional_data": {"next_cursor": None},
 }
@@ -345,10 +364,10 @@ def mock_pipedrive_transport():
                 200,
                 json={"success": True, "data": PIPEDRIVE_DEAL_FIELDS, "additional_data": {"next_cursor": None}},
             )
-        if path.endswith("/products"):
-            return httpx.Response(200, json=PIPEDRIVE_PRODUCTS)
         if path.endswith("/deals/products"):
             return httpx.Response(200, json=PIPEDRIVE_DEAL_PRODUCTS)
+        if path.endswith("/products"):
+            return httpx.Response(200, json=PIPEDRIVE_PRODUCTS)
         if path.endswith("/stages"):
             return httpx.Response(
                 200,

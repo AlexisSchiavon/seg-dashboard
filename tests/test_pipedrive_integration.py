@@ -8,7 +8,6 @@ RED -> GREEN assertions (TDD).
 import pytest
 
 
-@pytest.mark.xfail(reason="app/integrations/pipedrive.py not implemented until Task 2", strict=False)
 def test_client_uses_x_api_token_header(mock_pipedrive_transport, monkeypatch):
     """PipedriveClient must send the `x-api-token` header (v2 auth),
     NOT a `?api_token=` query param (Pitfall 1)."""
@@ -23,10 +22,15 @@ def test_client_uses_x_api_token_header(mock_pipedrive_transport, monkeypatch):
 
     import httpx
 
-    monkeypatch.setattr(pipedrive, "_client", lambda: httpx.Client(
-        base_url=pipedrive.BASE_URL,
-        transport=httpx.MockTransport(handler),
-    ))
+    # Call the REAL _client() (so the x-api-token header it sets is exercised),
+    # but swap httpx.Client's transport for our capturing mock transport.
+    real_client_cls = httpx.Client
+
+    def capturing_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client_cls(*args, **kwargs)
+
+    monkeypatch.setattr(pipedrive.httpx, "Client", capturing_client)
 
     client = pipedrive._client()
     list(pipedrive.get_stages(client))
@@ -35,7 +39,6 @@ def test_client_uses_x_api_token_header(mock_pipedrive_transport, monkeypatch):
     assert "api_token" not in captured["params"]
 
 
-@pytest.mark.xfail(reason="app/integrations/pipedrive.py not implemented until Task 2", strict=False)
 def test_paginate_follows_next_cursor(mock_pipedrive_transport, monkeypatch):
     """_paginate must follow additional_data.next_cursor until null,
     yielding all deals across pages."""
@@ -53,7 +56,6 @@ def test_paginate_follows_next_cursor(mock_pipedrive_transport, monkeypatch):
     assert {d["id"] for d in deals} == {1001, 1002, 1003}
 
 
-@pytest.mark.xfail(reason="app/integrations/pipedrive.py not implemented until Task 2", strict=False)
 def test_resolve_custom_fields(mock_pipedrive_transport, monkeypatch):
     """resolve_custom_field must resolve enum custom_fields (hash -> name,
     option id -> label) per PIPE-04. razon de perdida / categoria de marca
@@ -83,7 +85,6 @@ def test_resolve_custom_fields(mock_pipedrive_transport, monkeypatch):
     assert pipedrive.resolve_custom_field(deal, fecha_key, option_labels) == "2026-07-01"
 
 
-@pytest.mark.xfail(reason="app/integrations/pipedrive.py not implemented until Task 2", strict=False)
 def test_get_deal_products_bulk_chunks_by_100(mock_pipedrive_transport, monkeypatch):
     """get_deal_products_bulk must chunk deal_ids into batches of 100
     when calling /deals/products?deal_ids=..."""

@@ -9,7 +9,6 @@ import pytest
 from app.models import Deal, DealStageEvent, SyncLog
 
 
-@pytest.mark.xfail(reason="app/sync/jobs.py not implemented until Task 2", strict=False)
 def test_sync_paginates_and_upserts_deals(db_session, seed_talent_products, mock_pipedrive_transport, monkeypatch):
     """PIPE-01: sync_pipedrive paginates /deals and upserts Deal rows."""
     from app.sync import jobs
@@ -27,7 +26,6 @@ def test_sync_paginates_and_upserts_deals(db_session, seed_talent_products, mock
     assert {d.pipedrive_id for d in deals} == {1001, 1002, 1003}
 
 
-@pytest.mark.xfail(reason="app/sync/jobs.py not implemented until Task 2", strict=False)
 def test_zero_value_deal_sin_cotizar(db_session, seed_talent_products, mock_pipedrive_transport, monkeypatch):
     """PIPE-03: deals with value $0 are classified is_sin_cotizar=True,
     and commission_amount = value * 0.70 (PIPE-02)."""
@@ -50,7 +48,6 @@ def test_zero_value_deal_sin_cotizar(db_session, seed_talent_products, mock_pipe
     assert deal_priced.commission_amount == deal_priced.value * 0.70
 
 
-@pytest.mark.xfail(reason="app/sync/jobs.py not implemented until Task 2", strict=False)
 def test_talent_matched_via_pipedrive_product_id(db_session, seed_talent_products, mock_pipedrive_transport, monkeypatch):
     """Deal's Pipedrive product resolves to a talent via
     talent_products.pipedrive_product_id (PIPE-02)."""
@@ -75,7 +72,6 @@ def test_talent_matched_via_pipedrive_product_id(db_session, seed_talent_product
     assert deal_sin_talento.talent_id is None
 
 
-@pytest.mark.xfail(reason="app/sync/jobs.py not implemented until Task 2", strict=False)
 def test_first_sync_creates_no_stage_events(db_session, seed_talent_products, mock_pipedrive_transport, monkeypatch):
     """Pitfall 3: first sync of a deal (INSERT) must NOT create a
     DealStageEvent row. Only subsequent UPDATEs that change stage_id
@@ -97,7 +93,6 @@ def test_first_sync_creates_no_stage_events(db_session, seed_talent_products, mo
     assert events_after_first_sync == []
 
 
-@pytest.mark.xfail(reason="app/sync/jobs.py not implemented until Task 2", strict=False)
 def test_second_sync_with_stage_change_creates_one_event(db_session, seed_talent_products, mock_pipedrive_transport, monkeypatch):
     """A subsequent sync that changes a deal's stage_id creates exactly
     one DealStageEvent row (no duplicates, no spurious events for
@@ -129,7 +124,6 @@ def test_second_sync_with_stage_change_creates_one_event(db_session, seed_talent
     assert events[0].to_stage == "Contrato"
 
 
-@pytest.mark.xfail(reason="app/sync/jobs.py not implemented until Task 2", strict=False)
 def test_concurrent_sync_is_noop(db_session, seed_talent_products, mock_pipedrive_transport, monkeypatch):
     """Pitfall 5: if a SyncLog with status="running" already exists,
     a second sync_pipedrive call is a no-op (returns without a second
@@ -156,7 +150,6 @@ def test_concurrent_sync_is_noop(db_session, seed_talent_products, mock_pipedriv
     assert db_session.query(Deal).count() == 0
 
 
-@pytest.mark.xfail(reason="app/sync/jobs.py not implemented until Task 2", strict=False)
 def test_stage_id_maps_to_one_of_six_funnel_stages(db_session, seed_talent_products, mock_pipedrive_transport, monkeypatch):
     """PIPE-05: stage_id resolves to one of the 6 funnel stage names,
     in order (Llamada, Cotización, Negociación, Contrato, En ejecución,
