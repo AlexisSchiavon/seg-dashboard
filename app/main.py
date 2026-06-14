@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.auth import router as auth_router
-from app.routers import dashboard, health, sync, talents
+from app.routers import dashboard, health, leads, sync, talents
 from app.sync import scheduler as sync_scheduler
 
 
@@ -22,7 +22,8 @@ app.include_router(talents.router)
 app.include_router(health.router)
 app.include_router(sync.router)
 app.include_router(dashboard.router)
+app.include_router(leads.router)
 
 # Static frontend mount MUST come last — registered after API routers so it
-# does not shadow /auth/*, /talents, /health, /sync, or /dashboard.
+# does not shadow /auth/*, /talents, /health, /sync, /dashboard, or /leads.
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")

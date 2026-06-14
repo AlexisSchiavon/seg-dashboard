@@ -5,15 +5,20 @@ from app.auth.dependencies import get_current_user
 from app.database import SessionLocal, get_db
 from app.models import SyncLog
 from app.schemas.sync import SyncStatus, SyncTriggerResponse
-from app.sync.jobs import sync_pipedrive
+from app.sync.jobs import sync_pipedrive, sync_sheets
 
 router = APIRouter(prefix="/sync", tags=["sync"], dependencies=[Depends(get_current_user)])
 
 
 def _run_sync_in_background():
+    """Run Pipedrive then Sheets syncs sequentially (manual 'Sincronizar ahora' trigger).
+
+    Each sync has its own SyncLog(source=...) row and concurrency guard.
+    """
     db = SessionLocal()
     try:
         sync_pipedrive(db)
+        sync_sheets(db)
     finally:
         db.close()
 

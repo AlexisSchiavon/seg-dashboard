@@ -464,10 +464,11 @@ def mock_sheets_rows(monkeypatch):
     ]
     import app.sync.jobs as jobs_module
 
+    # Use staticmethod so Python doesn't inject 'self' when called on an instance
     monkeypatch.setattr(
         jobs_module,
         "sheets",
-        type("_MockSheets", (), {"get_leads_rows": lambda: sample})(),
+        type("_MockSheets", (), {"get_leads_rows": staticmethod(lambda: sample)})(),
     )
     return sample
 
