@@ -168,9 +168,12 @@ def talent_detail(db: Session, talent_id: int) -> dict:
         raise ValueError(f"Talent {talent_id} not found")
 
     # 2. Per-talent KPIs (filter by talent_id only — Pitfall 4: no NULL inclusion)
+    # Pipeline = open deals only. Lost deals are shown separately in
+    # lost_opportunities; including them here inflated the "Pipeline" label
+    # with deals already out of play (WR-05).
     pipeline_row = db.query(
         func.coalesce(func.sum(Deal.value), 0.0),
-    ).filter(Deal.talent_id == talent_id).scalar() or 0.0
+    ).filter(Deal.talent_id == talent_id, Deal.status == "open").scalar() or 0.0
 
     won_row = db.query(
         func.count(Deal.id),

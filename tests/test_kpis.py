@@ -190,10 +190,12 @@ def test_talent_detail_only_own_deals(seed_deals):
         # sin-cotizar deal and sin-talento deal must NOT appear
         kpi_dict = {kpi["label"]: kpi["value"] for kpi in result["kpis"]}
 
-        # Pipeline = sum of talent_a's deals = 50000 + 15000 = 65000
-        assert kpi_dict["Pipeline"] == pytest.approx(65000.0), (
-            f"Expected 65000 but got {kpi_dict.get('Pipeline')} — "
-            "other-talent and null-talent deals must be excluded"
+        # Pipeline = open deals only (WR-05 fix: lost deals excluded from pipeline).
+        # seed_deals: deal_open (50000, open, talent_a), deal_lost (15000, lost, talent_a)
+        # Lost deal must NOT appear in Pipeline; it is surfaced in lost_opportunities.
+        assert kpi_dict["Pipeline"] == pytest.approx(50000.0), (
+            f"Expected 50000 (open deals only) but got {kpi_dict.get('Pipeline')} — "
+            "lost deals must be excluded from Pipeline KPI"
         )
     finally:
         db.close()
