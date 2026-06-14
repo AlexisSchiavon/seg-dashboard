@@ -356,3 +356,126 @@ class TestLeadsSummaryEndpoint:
         data = response.json()
         assert data["leads_totales"] == 3
         assert data["calificados"] == 1
+
+
+# ---------------------------------------------------------------------------
+# leads_list service tests (Plan 03-02)
+# ---------------------------------------------------------------------------
+
+class TestLeadsList:
+    """Tests for leads_service.leads_list()."""
+
+    def test_leads_list_all_returns_all_with_talent_name(self, db_session, seed_leads, seed_talent_products):
+        """leads_list with no filters returns all leads with talent_name resolved."""
+        from app.services import leads as leads_service
+        rows = leads_service.leads_list(db_session)
+        assert len(rows) == 3
+        # Check that dict has talent_name key and it resolves to name or None
+        names = [r["talent_name"] for r in rows]
+        assert "Talento Uno" in names
+        assert "Talento Dos" in names
+        assert None in names  # lead_revision has talent_id=None
+
+    def test_leads_list_all_includes_status_display(self, db_session, seed_leads, seed_talent_products):
+        """leads_list resolves status_display via STATUS_DISPLAY mapping."""
+        from app.services import leads as leads_service
+        rows = leads_service.leads_list(db_session)
+        status_displays = {r["status_filtrado"]: r["status_display"] for r in rows}
+        assert status_displays["✅ Aprobado - Respuesta enviada"] == "Aprobado"
+        assert status_displays["🚫 Remitente bloqueado"] == "Bloqueado"
+        assert status_displays["En revisión"] == "En revisión"
+
+    def test_leads_list_filter_talent(self, db_session, seed_leads, seed_talent_products):
+        """leads_list(talent_id=X) returns only leads for that talent."""
+        from app.services import leads as leads_service
+        talent_a = seed_talent_products["talent_a"]
+        rows = leads_service.leads_list(db_session, talent_id=talent_a.id)
+        assert len(rows) == 1
+        assert rows[0]["talent_name"] == "Talento Uno"
+        assert rows[0]["remitente_email"] == "aprobado@example.com"
+
+    def test_leads_list_filter_status(self, db_session, seed_leads):
+        """leads_list(status=QUALIFIED_STATUS) returns only calificado leads."""
+        from app.services import leads as leads_service
+        rows = leads_service.leads_list(db_session, status="✅ Aprobado - Respuesta enviada")
+        assert len(rows) == 1
+        assert rows[0]["status_filtrado"] == "✅ Aprobado - Respuesta enviada"
+        assert rows[0]["status_display"] == "Aprobado"
+
+    def test_leads_list_filter_fuente(self, db_session, seed_leads):
+        """leads_list(fuente='Gmail') returns all leads (all seeds are Gmail)."""
+        from app.services import leads as leads_service
+        rows = leads_service.leads_list(db_session, fuente="Gmail")
+        assert len(rows) == 3
+
+    def test_leads_list_unmapped_status_falls_back_to_raw(self, db_session, seed_talent_products):
+        """status_display falls back to raw status_filtrado when not in STATUS_DISPLAY."""
+        from app.models import Lead
+        from app.services import leads as leads_service
+        # Insert a lead with an unmapped status
+        lead_weird = Lead(
+            sheet_row_id=99,
+            remitente_email="weird@example.com",
+            remitente_nombre="Weird",
+            asunto="Unknown status",
+            talent_id=None,
+            status_filtrado="Estado desconocido",
+            fuente="Gmail",
+            score_calidad=None,
+            bloqueado=False,
+            convertido_a_prospecto=False,
+        )
+        db_session.add(lead_weird)
+        db_session.commit()
+        rows = leads_service.leads_list(db_session)
+        weird_row = next(r for r in rows if r["remitente_email"] == "weird@example.com")
+        assert weird_row["status_display"] == "Estado desconocido"
+
+
+# ---------------------------------------------------------------------------
+# GET /leads endpoint tests (Plan 03-02)
+# ---------------------------------------------------------------------------
+
+class TestLeadsListEndpoint:
+    """Tests for GET /leads."""
+
+    def test_leads_endpoint_auth(self, auth_client, seed_leads):
+        """GET /leads returns 200 with authenticated client."""
+        response = auth_client.get("/leads")
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) == 3
+
+    def test_leads_endpoint_unauth(self, client):
+        """GET /leads returns 401 without authentication."""
+        response = client.get("/leads")
+        assert response.status_code == 401
+
+    def test_leads_endpoint_filter_talent_404(self, auth_client):
+        """GET /leads?talent_id=<nonexistent> returns 404."""
+        response = auth_client.get("/leads?talent_id=99999")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Talent not found"
+
+    def test_leads_endpoint_filter_talent_valid(self, auth_client, seed_leads, seed_talent_products):
+        """GET /leads?talent_id=X returns only leads for that talent."""
+        talent_a = seed_talent_products["talent_a"]
+        response = auth_client.get(f"/leads?talent_id={talent_a.id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["talent_name"] == "Talento Uno"
+
+    def test_leads_endpoint_has_required_fields(self, auth_client, seed_leads):
+        """Each lead row has all LeadRow fields."""
+        response = auth_client.get("/leads")
+        data = response.json()
+        required_fields = {
+            "id", "sheet_row_id", "remitente_nombre", "remitente_email", "asunto",
+            "talent_id", "talent_name", "status_filtrado", "status_display",
+            "fuente", "score_calidad", "bloqueado", "convertido_a_prospecto",
+        }
+        for row in data:
+            for field in required_fields:
+                assert field in row, f"Missing field: {field}"
