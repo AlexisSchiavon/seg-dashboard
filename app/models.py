@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import String, Boolean, Float, Integer, ForeignKey, DateTime, func
+from sqlalchemy import String, Boolean, Float, Integer, ForeignKey, DateTime, Date, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -116,3 +116,34 @@ class Lead(Base):
     convertido_a_prospecto: Mapped[bool] = mapped_column(Boolean, default=False)
 
     talent: Mapped["Talent | None"] = relationship("Talent", lazy="select")
+
+
+class TrelloCard(Base):
+    __tablename__ = "trello_cards"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Natural key — Trello's immutable card ID (T-04-02: unique index prevents duplicate rows)
+    trello_card_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+
+    name: Mapped[str] = mapped_column(String)
+    list_id: Mapped[str] = mapped_column(String)
+    list_name: Mapped[str] = mapped_column(String)
+
+    # Derived from LIST_STATE_MAP in trello.py: ejecucion | cobranza | cerrado
+    list_state: Mapped[str] = mapped_column(String)
+
+    # FK to deals.id (local PK, NOT deals.pipedrive_id) — nullable: card may predate sync
+    deal_id: Mapped[int | None] = mapped_column(
+        ForeignKey("deals.id"), nullable=True, index=True
+    )
+
+    # Pipedrive deal ID parsed from the card description "[seg:deal_id=N]" header
+    pipedrive_deal_id_desc: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Trello card due date, used as collection_date; fallback = add_time + 2 months (TRELLO-02)
+    collection_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    synced_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
