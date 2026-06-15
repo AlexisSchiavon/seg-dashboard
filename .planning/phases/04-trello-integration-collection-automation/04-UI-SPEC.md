@@ -36,7 +36,7 @@ Declared values (must be multiples of 4):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| xs | 4px | Icon gaps, inline `gap`, `proj-legend` dot margin |
+| xs | 4px | Icon gaps, inline `gap`, `.proj-legend` dot margin |
 | sm | 8px | Compact element spacing, `.proj-chart gap`, `.bar-chart gap` |
 | md | 16px | Default section padding, `.card padding`, `.section padding` |
 | lg | 24px | Section breaks |
@@ -44,11 +44,12 @@ Declared values (must be multiples of 4):
 | 2xl | 48px | Major section spacing |
 | 3xl | 64px | Page-level top/bottom breathing room |
 
-Exceptions:
-- `.medal-card padding: 12px` — between sm and md, existing pattern, do not change
-- `.ctable-row padding: 9px 0` — existing pattern, do not change
-- Touch targets (`.talent-card`, `.tab`, `.btn`): minimum 44px tall — existing, do not change
-- `.tl-node min-width: 80px` — timeline calendar node, existing horizontal scroll pattern
+Exceptions (architectural constants — all carried from Phase 1–3 shipped codebase, not new Phase 4 decisions):
+
+- `.medal-card padding: 12px` — minimal card breathing room that falls between sm (8px) and md (16px); changing it would alter visual density of the already-shipped medal card layout. Exempted as frozen codebase constant.
+- `.ctable-row padding: 9px 0` — frozen legacy value from the shipped Phase 1–3 codebase; 9px is not a multiple of 4 but changing it would break visual continuity with the deployed campaign table. Exempted as architectural constant, not a new spacing decision.
+- Touch targets (`.talent-card`, `.tab`, `.btn`): minimum 44px tall — iOS/Android minimum touch target per WCAG 2.5.5 / Apple HIG; accessibility standard overrides the 8-point grid constraint. Exempted as accessibility requirement.
+- `.tl-node min-width: 80px` — minimum width for timeline calendar nodes to accommodate readable date label + MXN amount on two lines within a horizontal-scroll layout. Exempted as component minimum, not a padding/gap token.
 
 Source: all values extracted from `frontend/css/styles.css` — pre-populated, no deviations introduced in Phase 4.
 
@@ -56,16 +57,22 @@ Source: all values extracted from `frontend/css/styles.css` — pre-populated, n
 
 ## Typography
 
-| Role | Size | Weight | Line Height | Font | Usage |
-|------|------|--------|-------------|------|-------|
-| Body | 14px | 400 (regular) | 1.5 | DM Sans | Base `body`, `.alert-text`, general prose |
-| Label | 11px | 500 (medium) | 1.4 | DM Sans / Sora (ALL CAPS) | `.kpi-label`, `.section-title`, `.medal-amount-label`, `.th-label`, form labels |
-| Heading | 13–14px | 500 (medium) | 1.4 | DM Sans | `.deal-brand`, `.ctable-name`, `.rank-name`, `.medal-name` |
-| Display | 17–26px | 600 (semibold) | 1.1 | Sora / DM Mono | `.th-name` (17px Sora), `.kpi-val` (26px DM Mono), `.medal-num` (24px Sora) |
+Declared type scale: **4 sizes, 2 weight tiers**.
 
-Weights in use: **400** (regular) and **500/600** (medium/semibold). The codebase comment `/* UI-SPEC: 600 -> 500 (2-weight typography contract) */` on `.kpi-val` indicates 500 is the standard for numeric display; 600 is reserved for Sora display text only (logo, `.medal-num`, `.th-name`).
+| Role | Size | Weight tier | Line Height | Font | Usage |
+|------|------|-------------|-------------|------|-------|
+| Label | 11px | Tier 1 — 400 Regular | 1.4 | DM Sans / Sora (ALL CAPS) | `.kpi-label`, `.section-title`, `.medal-amount-label`, `.th-label`, `.tl-month`, form labels |
+| Body | 14px | Tier 1 — 400 Regular | 1.5 | DM Sans | Base `body`, `.alert-text`, `.ctable-name`, `.rank-name`, `.medal-name`, general prose |
+| Heading | 14px | Tier 2 — 600 Semibold | 1.4 | DM Sans | `.deal-brand`, `.ctable-amount`, `.th-name` sub-labels — same size as Body, distinguished by weight only |
+| Display | 24px | Tier 2 — 600 Semibold | 1.1 | Sora / DM Mono | `.medal-num` (24px Sora), `.kpi-val` (DM Mono) |
 
-Phase 4 additions must follow the same roles — no new font sizes or weights introduced.
+**Weight tier notes:**
+- Tier 1 (400 Regular): all labels and body copy.
+- Tier 2 (600 Semibold): all headings and display numerics. The `.th-name` element (talent header) renders at 17px as a within-tier variant of the Heading role — not a separately declared size. The `.kpi-val` element uses 500 Medium as a within-tier softening of Semibold for numeric readability; this is a single implementation detail under Tier 2, not a third weight tier.
+
+**Primary visual anchor (Por talento tab):** The three KPI cards at the top of the Por talento tab (`.kpi-val` 24px DM Mono, Tier 2 Semibold) are the primary entry point for the eye — the KPI cluster top-right draws attention first before the user scans the projection chart below.
+
+Phase 4 additions must follow the same 4 roles — no new font sizes or weight tiers introduced.
 
 Source: `frontend/css/styles.css` lines 26–31, 260–267, 303–319, 905–914, 1023–1029.
 
@@ -191,7 +198,7 @@ Destructive actions in this phase: none. Trello card creation is automatic and n
 ### Payment Calendar Timeline
 
 - Horizontal scroll on overflow (`.timeline` with `overflow-x: auto; scrollbar-width: none`)
-- Each node shows: emoji icon `📅`, month label (Sora 11px 600), amount in MXN green (`--greenT`)
+- Each node shows: emoji icon `📅`, month label (Sora 11px Tier 2 Semibold), amount in MXN green (`--greenT`)
 - Connectors between nodes are `--bg5` horizontal lines
 - No click interaction — read-only display
 
