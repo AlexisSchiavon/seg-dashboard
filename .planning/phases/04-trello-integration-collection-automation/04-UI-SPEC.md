@@ -44,10 +44,8 @@ Declared values (must be multiples of 4):
 | 2xl | 48px | Major section spacing |
 | 3xl | 64px | Page-level top/bottom breathing room |
 
-Exceptions (architectural constants — all carried from Phase 1–3 shipped codebase, not new Phase 4 decisions):
+Exceptions (Phase 4 design decisions only):
 
-- `.medal-card padding: 12px` — minimal card breathing room that falls between sm (8px) and md (16px); changing it would alter visual density of the already-shipped medal card layout. Exempted as frozen codebase constant.
-- `.ctable-row padding: 9px 0` — frozen legacy value from the shipped Phase 1–3 codebase; 9px is not a multiple of 4 but changing it would break visual continuity with the deployed campaign table. Exempted as architectural constant, not a new spacing decision.
 - Touch targets (`.talent-card`, `.tab`, `.btn`): minimum 44px tall — iOS/Android minimum touch target per WCAG 2.5.5 / Apple HIG; accessibility standard overrides the 8-point grid constraint. Exempted as accessibility requirement.
 - `.tl-node min-width: 80px` — minimum width for timeline calendar nodes to accommodate readable date label + MXN amount on two lines within a horizontal-scroll layout. Exempted as component minimum, not a padding/gap token.
 
