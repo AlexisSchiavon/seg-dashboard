@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation — Auth, Talent Catalog & Health Check** - FastAPI base structure with JWT auth, SQLite (WAL), talent catalog DB table, and `/health` endpoint (completed 2026-06-11)
 - [x] **Phase 2: Pipedrive Integration & Core Dashboard** - Live Pipedrive sync powers Resumen, Por talento, and Funnel tabs with real deal/revenue data (completed 2026-06-14)
-- [ ] **Phase 3: Google Sheets Leads Integration** - Gmail-fed leads sync populates the Leads dashboard tab
+- [x] **Phase 3: Google Sheets Leads Integration** - Gmail-fed leads sync populates the Leads dashboard tab (completed 2026-06-15)
 - [ ] **Phase 4: Trello Integration & Collection Automation** - Campaign execution/collection tracking and Pipedrive→Trello automation complete the Por talento revenue projection
 - [ ] **Phase 5: AI-Generated PDF Reports** - Claude-narrated monthly reports with downloadable history in the Reportes tab
 - [ ] **Phase 6: Embedded Natural-Language Agent** - Read-only conversational querying of dashboard data
@@ -108,7 +108,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 03-03-PLAN.md — Resumen tab Leads KPI tiles: extend /dashboard/summary with leads_totales + calificados, wire "Leads totales"/"Calificados" tiles (DASH-04)
+- [x] 03-03-PLAN.md — Resumen tab Leads KPI tiles: extend /dashboard/summary with leads_totales + calificados, wire "Leads totales"/"Calificados" tiles (DASH-04)
 
 **UI hint**: yes
 
@@ -181,7 +181,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation — Auth, Talent Catalog & Health Check | 3/3 | Complete   | 2026-06-11 |
 | 2. Pipedrive Integration & Core Dashboard | 3/3 | Complete   | 2026-06-14 |
-| 3. Google Sheets Leads Integration | 2/3 | In Progress|  |
+| 3. Google Sheets Leads Integration | 3/3 | Complete   | 2026-06-15 |
 | 4. Trello Integration & Collection Automation | 0/TBD | Not started | - |
 | 5. AI-Generated PDF Reports | 0/TBD | Not started | - |
 | 6. Embedded Natural-Language Agent | 0/TBD | Not started | - |
