@@ -1,55 +1,44 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-14T21:07:39.936Z",
-  "phase": "02",
-  "phase_name": "pipedrive-integration-core-dashboard",
-  "phase_dir": ".planning/phases/02-pipedrive-integration-core-dashboard",
-  "plan": 3,
-  "task": "post-execution",
-  "total_tasks": 3,
-  "status": "paused",
+  "timestamp": "2026-06-15T01:17:59Z",
+  "phase": "03",
+  "phase_name": "google-sheets-leads-integration",
+  "phase_dir": ".planning/phases/03-google-sheets-leads-integration",
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "phase_complete_ready_for_next",
   "completed_tasks": [
-    {"id": "02-01", "name": "Pipedrive sync vertical slice", "status": "done", "commit": "fb035ff"},
-    {"id": "02-02", "name": "Resumen + Funnel dashboard tabs", "status": "done", "commit": "bce8763"},
-    {"id": "02-03", "name": "Por talento tab — all 3 auto tasks + human checkpoint approved", "status": "done", "commit": "2fcd8d9"},
-    {"id": "code-review", "name": "Code review (2 blockers + 5 warnings) + 7 fixes applied", "status": "done", "commit": "c91e4eb"},
-    {"id": "verification", "name": "Phase verification: 6/6 automated must-haves PASSED, human_needed", "status": "done", "commit": "pending"}
+    {"id": "03-01", "name": "Google Sheets → SQLite Leads Sync", "status": "done", "commit": "0f87b6d"},
+    {"id": "03-02", "name": "Leads Tab UI Vertical Slice", "status": "done", "commit": "ac7b616"},
+    {"id": "03-03", "name": "Resumen Tab Leads KPI Tiles", "status": "done", "commit": "f517707"},
+    {"id": "code-review", "name": "Code review: 3 critical + 5 warnings + 3 info (not yet fixed)", "status": "done", "commit": "9fd3c19"},
+    {"id": "verification", "name": "Phase verification: 9/9 automated PASSED, human approved", "status": "done", "commit": "665c92a"}
   ],
-  "remaining_tasks": [
-    {
-      "id": "final-approval",
-      "name": "User says 'approved' confirming phase 02 human verification items",
-      "status": "awaiting_human",
-      "notes": "All 6 human items already covered by in-plan checkpoints (02-01, 02-02, 02-03 all user-approved). Just needs verbal confirmation."
-    },
-    {
-      "id": "update-roadmap",
-      "name": "gsd-sdk query phase.complete '02' + commit tracking files",
-      "status": "not_started"
-    },
-    {
-      "id": "offer-next",
-      "name": "Present Phase 03 next-step options to user",
-      "status": "not_started"
-    }
-  ],
+  "remaining_tasks": [],
   "blockers": [],
   "human_actions_pending": [
     {
-      "action": "Say 'approved' to confirm phase 02 human verification items and trigger phase.complete",
-      "context": "VERIFICATION.md has human_needed with 6 items — all covered by in-plan checkpoints already approved by user. This is the final gate to mark Phase 02 complete.",
-      "blocking": true
+      "action": "Apply code review fixes: /gsd:code-review 3 --fix (3 critical findings in 03-REVIEW.md)",
+      "context": "CR-01: sync_pipedrive missing source filter on concurrency guard. CR-02: dashboard.js stage names rendered raw in innerHTML (XSS). CR-03: Google Drive OAuth scope too broad (needs spreadsheets.readonly).",
+      "blocking": false
+    },
+    {
+      "action": "Run `alembic upgrade head` in any new environment before starting the server",
+      "context": "The leads table migration (d48d69b17ea6) must be applied. Already done in dev env (seg.db is migrated).",
+      "blocking": false
     }
   ],
   "decisions": [
-    {"decision": "Stage names normalized at sync time (strip whitespace, canonicalize 'Contrato y factura')", "rationale": "API returns trailing spaces that broke stage matching", "phase": "02"},
-    {"decision": "Per-talent Pipeline KPI filters to open deals only (WR-05)", "rationale": "Lost deals inflate pipeline figure on same view showing lost opportunities", "phase": "02"},
-    {"decision": "escHtml() helper added for all API-sourced innerHTML (CR-02)", "rationale": "Stored XSS prevention — Pipedrive data is user-influenced", "phase": "02"}
+    {"decision": "sheet_row_id (1-based row number) as upsert key, not ID_Lead", "rationale": "ID_Lead is empty for all 730 live rows; row position is the only stable unique identifier", "phase": "03"},
+    {"decision": "QUALIFIED_STATUS = '✅ Aprobado - Respuesta enviada' exact emoji literal", "rationale": "Confirmed from live sheet; this string drives calificados count", "phase": "03"},
+    {"decision": "rapidfuzz WRatio threshold 80 for talent name matching", "rationale": "Resolves all 8 talent name variants without an alias dict; confirmed on live data", "phase": "03"},
+    {"decision": "SyncLog.source == 'sheets' guard on concurrency check", "rationale": "Source-isolated guard prevents cross-source collision; pipedrive guard is MISSING source filter (CR-01 — fix pending)", "phase": "03"}
   ],
   "uncommitted_files": [
-    ".planning/phases/02-pipedrive-integration-core-dashboard/02-VERIFICATION.md",
-    ".planning/phases/02-pipedrive-integration-core-dashboard/02-REVIEW-FIX.md"
+    ".planning/phases/03-google-sheets-leads-integration/03-PATTERNS.md",
+    "memory.md"
   ],
-  "next_action": "Resume with: user says 'approved' → gsd-sdk query phase.complete '02' → git add .planning/ROADMAP.md .planning/STATE.md .planning/phases/02-*/02-VERIFICATION.md → commit → present Phase 03 options",
-  "context_notes": "Phase 02 is 99% complete. All 3 plans executed, 7 code review fixes applied, 65/65 tests pass, verification automated checks all pass. Only pending step is user confirming 'approved' on the human_needed verification items (which were all cleared via in-plan human checkpoints during this session)."
+  "next_action": "Optionally fix code review findings first (/gsd:code-review 3 --fix), then run /gsd:discuss-phase 4 to design Trello integration decisions before planning.",
+  "context_notes": "Phase 03 fully complete and human-verified. 111 tests passing. Dev server running on port 8000 (PIDs 8226/8228) with migrated DB — leads table exists but empty (0 rows until sync runs against live Google Sheets). Code review found 3 critical issues that are advisory (not blocking). Phase 04 is Trello integration & collection automation — no CONTEXT.md exists yet."
 }
