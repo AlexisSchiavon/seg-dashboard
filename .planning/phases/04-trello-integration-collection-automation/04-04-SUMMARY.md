@@ -18,7 +18,7 @@ provides:
   - app/routers/dashboard.py (get_talent_detail extended with three new Optional fields)
   - frontend/js/dashboard.js (renderTopCampaigns and renderCampaignTable wired to data.deals)
 affects:
-  - Human verification: Por talento tab (Task 4 — CHECKPOINT PENDING)
+  - Human verification: Por talento tab (Task 4 — APPROVED)
 
 # Tech tracking
 tech-stack:
