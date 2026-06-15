@@ -225,6 +225,55 @@ def test_talent_detail_endpoint(auth_client, seed_deals):
             )
 
 
+# ---------------------------------------------------------------------------
+# Leads KPI fields on /dashboard/summary (Plan 03-03, DASH-04)
+# ---------------------------------------------------------------------------
+
+def test_dashboard_summary_leads_kpis_no_leads(auth_client, seed_test_user):
+    """GET /dashboard/summary includes leads_totales=0 and calificados=0 when no leads exist.
+
+    has_data may be False (no deals) but leads fields must be present with default 0.
+    """
+    response = auth_client.get("/dashboard/summary")
+    assert response.status_code == 200
+    data = response.json()
+    assert "leads_totales" in data, "DashboardSummary must include leads_totales"
+    assert "calificados" in data, "DashboardSummary must include calificados"
+    assert data["leads_totales"] == 0
+    assert data["calificados"] == 0
+
+
+def test_dashboard_summary_leads_kpis_with_leads(auth_client, seed_leads):
+    """GET /dashboard/summary returns real lead counts even when no deals are seeded.
+
+    seed_leads creates 3 leads: 1 QUALIFIED (aprobado), 2 non-qualified.
+    has_data is False (no deals) but leads_totales must be 3 and calificados must be 1.
+    """
+    response = auth_client.get("/dashboard/summary")
+    assert response.status_code == 200
+    data = response.json()
+    # Leads are independent of deals — counts must be present regardless of has_data
+    assert "leads_totales" in data
+    assert "calificados" in data
+    assert data["leads_totales"] == 3, f"Expected 3 leads_totales, got {data['leads_totales']}"
+    assert data["calificados"] == 1, f"Expected 1 calificado, got {data['calificados']}"
+
+
+def test_dashboard_summary_leads_kpis_with_deals_and_leads(auth_client, seed_deals, seed_leads):
+    """GET /dashboard/summary includes leads_totales and calificados when both deals and leads exist.
+
+    has_data=True path must also populate leads fields from the leads table.
+    """
+    response = auth_client.get("/dashboard/summary")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["has_data"] is True
+    assert "leads_totales" in data
+    assert "calificados" in data
+    assert data["leads_totales"] == 3
+    assert data["calificados"] == 1
+
+
 def test_funnel_bottleneck_detected_with_large_dataset(auth_client, db_session, seed_test_user):
     """Funnel returns bottleneck info when >=10 deals exist."""
     from app.models import Deal

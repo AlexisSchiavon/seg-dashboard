@@ -48,6 +48,8 @@ class DashboardSummary(BaseModel):
     ranking: list[RankingRow]
     activity: list[ActivityItem]
     has_data: bool
+    leads_totales: int = 0
+    calificados: int = 0
 
 
 class FunnelOverview(BaseModel):
