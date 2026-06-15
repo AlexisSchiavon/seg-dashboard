@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-15T01:17:59Z",
+  "phase": "03",
+  "phase_name": "google-sheets-leads-integration",
+  "phase_dir": ".planning/phases/03-google-sheets-leads-integration",
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "phase_complete_ready_for_next",
+  "completed_tasks": [
+    {"id": "03-01", "name": "Google Sheets → SQLite Leads Sync", "status": "done", "commit": "0f87b6d"},
+    {"id": "03-02", "name": "Leads Tab UI Vertical Slice", "status": "done", "commit": "ac7b616"},
+    {"id": "03-03", "name": "Resumen Tab Leads KPI Tiles", "status": "done", "commit": "f517707"},
+    {"id": "code-review", "name": "Code review: 3 critical + 5 warnings + 3 info (not yet fixed)", "status": "done", "commit": "9fd3c19"},
+    {"id": "verification", "name": "Phase verification: 9/9 automated PASSED, human approved", "status": "done", "commit": "665c92a"}
+  ],
+  "remaining_tasks": [],
+  "blockers": [],
+  "human_actions_pending": [
+    {
+      "action": "Apply code review fixes: /gsd:code-review 3 --fix (3 critical findings in 03-REVIEW.md)",
+      "context": "CR-01: sync_pipedrive missing source filter on concurrency guard. CR-02: dashboard.js stage names rendered raw in innerHTML (XSS). CR-03: Google Drive OAuth scope too broad (needs spreadsheets.readonly).",
+      "blocking": false
+    },
+    {
+      "action": "Run `alembic upgrade head` in any new environment before starting the server",
+      "context": "The leads table migration (d48d69b17ea6) must be applied. Already done in dev env (seg.db is migrated).",
+      "blocking": false
+    }
+  ],
+  "decisions": [
+    {"decision": "sheet_row_id (1-based row number) as upsert key, not ID_Lead", "rationale": "ID_Lead is empty for all 730 live rows; row position is the only stable unique identifier", "phase": "03"},
+    {"decision": "QUALIFIED_STATUS = '✅ Aprobado - Respuesta enviada' exact emoji literal", "rationale": "Confirmed from live sheet; this string drives calificados count", "phase": "03"},
+    {"decision": "rapidfuzz WRatio threshold 80 for talent name matching", "rationale": "Resolves all 8 talent name variants without an alias dict; confirmed on live data", "phase": "03"},
+    {"decision": "SyncLog.source == 'sheets' guard on concurrency check", "rationale": "Source-isolated guard prevents cross-source collision; pipedrive guard is MISSING source filter (CR-01 — fix pending)", "phase": "03"}
+  ],
+  "uncommitted_files": [
+    ".planning/phases/03-google-sheets-leads-integration/03-PATTERNS.md",
+    "memory.md"
+  ],
+  "next_action": "Optionally fix code review findings first (/gsd:code-review 3 --fix), then run /gsd:discuss-phase 4 to design Trello integration decisions before planning.",
+  "context_notes": "Phase 03 fully complete and human-verified. 111 tests passing. Dev server running on port 8000 (PIDs 8226/8228) with migrated DB — leads table exists but empty (0 rows until sync runs against live Google Sheets). Code review found 3 critical issues that are advisory (not blocking). Phase 04 is Trello integration & collection automation — no CONTEXT.md exists yet."
+}
