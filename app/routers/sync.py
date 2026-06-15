@@ -5,20 +5,22 @@ from app.auth.dependencies import get_current_user
 from app.database import SessionLocal, get_db
 from app.models import SyncLog
 from app.schemas.sync import SyncStatus, SyncTriggerResponse
-from app.sync.jobs import sync_pipedrive, sync_sheets
+from app.sync.jobs import sync_pipedrive, sync_sheets, sync_trello
 
 router = APIRouter(prefix="/sync", tags=["sync"], dependencies=[Depends(get_current_user)])
 
 
 def _run_sync_in_background():
-    """Run Pipedrive then Sheets syncs sequentially (manual 'Sincronizar ahora' trigger).
+    """Run Pipedrive, Sheets, then Trello syncs sequentially (manual 'Sincronizar ahora' trigger).
 
-    Each sync has its own SyncLog(source=...) row and concurrency guard.
+    Each sync has its own SyncLog(source=...) row and per-source concurrency guard.
+    A failure in one sync does not prevent the others from completing.
     """
     db = SessionLocal()
     try:
         sync_pipedrive(db)
         sync_sheets(db)
+        sync_trello(db)
     finally:
         db.close()
 

@@ -21,8 +21,9 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from app.integrations import pipedrive, sheets
-from app.models import Deal, DealStageEvent, Lead, SyncLog, Talent, TalentProduct
+from app.integrations import pipedrive, sheets, trello
+from app.models import Deal, DealStageEvent, Lead, SyncLog, Talent, TalentProduct, TrelloCard
+from app.services import trello_service
 
 # If a SyncLog has been "running" for longer than this, treat it as stale
 # (e.g. the process crashed mid-sync) and allow a new sync to start.
@@ -309,3 +310,120 @@ def sync_sheets(db: Session) -> SyncLog:
         db.refresh(sync_log)
 
     return sync_log
+
+
+def sync_trello(db: Session) -> SyncLog:
+    """Sync Trello cards from the 6 mapped lists into the local TrelloCard table.
+
+    Upserts by trello_card_id (natural key). Idempotent: second run with
+    identical cards inserts zero new rows.
+
+    Concurrency guard filters by source='trello' only (CR-03 / T-04-06).
+    A running pipedrive or sheets SyncLog does NOT block this function.
+
+    Security (T-04-05): on error, persist only str(exc) to SyncLog.error_message
+    — never log the trello client or response objects (query params carry secrets).
+    """
+    # 1. Concurrency guard — filter by source='trello' only (CR-03).
+    running = (
+        db.query(SyncLog)
+        .filter(SyncLog.source == "trello", SyncLog.status == "running")
+        .order_by(SyncLog.started_at.desc())
+        .first()
+    )
+    if running is not None and not _is_stale(running):
+        return running
+
+    # 2. Write SyncLog row immediately so concurrent callers see "running".
+    sync_log = SyncLog(
+        source="trello",
+        started_at=datetime.now(timezone.utc),
+        status="running",
+    )
+    db.add(sync_log)
+    db.commit()
+    db.refresh(sync_log)
+
+    try:
+        client = trello._client()
+
+        # Preload all deals once for deal linkage (avoid N+1 queries).
+        all_deals = db.query(Deal).all()
+
+        records_synced = 0
+        for list_id, state in trello.LIST_STATE_MAP.items():
+            cards = trello.get_list_cards(client, list_id)
+            for card in cards:
+                card_id = card["id"]
+                card_name = card.get("name", "")
+                card_due = card.get("due")
+                card_desc = card.get("desc", "")
+
+                # Resolve local deal_id (desc header first, then fuzzy match).
+                deal_id = trello_service.resolve_deal_id(db, card_desc, card_name)
+
+                # Resolve the linked Deal object for the collection-date fallback chain.
+                linked_deal = None
+                if deal_id is not None:
+                    linked_deal = db.query(Deal).filter(Deal.id == deal_id).first()
+
+                collection_date = trello_service.resolve_collection_date(card_due, linked_deal)
+
+                # Parse pipedrive_deal_id_desc for storage (raw from desc header).
+                pipedrive_deal_id_desc = trello_service._extract_deal_id_from_desc(card_desc)
+
+                # Upsert TrelloCard by trello_card_id.
+                existing = (
+                    db.query(TrelloCard)
+                    .filter(TrelloCard.trello_card_id == card_id)
+                    .first()
+                )
+                if existing is None:
+                    existing = TrelloCard(trello_card_id=card_id)
+                    db.add(existing)
+
+                existing.name = card_name
+                existing.list_id = list_id
+                existing.list_name = _list_name_for(list_id)
+                existing.list_state = state
+                existing.deal_id = deal_id
+                existing.pipedrive_deal_id_desc = pipedrive_deal_id_desc
+                existing.collection_date = collection_date
+
+                records_synced += 1
+
+        db.commit()
+        sync_log.status = "success"
+        sync_log.finished_at = datetime.now(timezone.utc)
+        sync_log.records_synced = records_synced
+        db.commit()
+        db.refresh(sync_log)
+
+    except Exception as exc:  # noqa: BLE001 - persist only str(exc); never store trello objects
+        db.rollback()
+        sync_log.status = "error"
+        sync_log.finished_at = datetime.now(timezone.utc)
+        sync_log.error_message = str(exc)  # str() only — never repr(client/response)
+        db.commit()
+        db.refresh(sync_log)
+
+    return sync_log
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+_LIST_NAMES: dict[str, str] = {
+    "69312ac640ae158381706ff8": "Contrato",
+    "69312acb534b0e80508bf4e5": "Firmar contrato todos",
+    "69312ad08fe346b82da12e1d": "Enviar factura",
+    "69312ad63829ef3ac9967d1a": "Cobrar",
+    "69312adeac51905b84f53c35": "Enviar encuesta",
+    "69d8336e46709e935f4307fe": "Finalizados",
+}
+
+
+def _list_name_for(list_id: str) -> str:
+    """Return the human-readable Trello list name for a given list_id."""
+    return _LIST_NAMES.get(list_id, list_id)
