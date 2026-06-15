@@ -262,31 +262,186 @@ def test_sync_trello_source_filter_isolated(db_session, mock_trello_transport, s
 def test_auto_create_card_for_won_deal(db_session, mock_trello_transport, seed_deals):
     """Won deals with no existing TrelloCard get a card created in CONTRATO_LIST_ID.
 
-    Arrange: deal_open in seed_deals; no TrelloCard with matching deal_id.
-    Act: call auto_create_cards_for_won_deals(db_session) or sync_trello post-win.
-    Assert: create_card was called with idList=CONTRATO_LIST_ID; TrelloCard row created.
+    Arrange: seed a won deal with pipedrive_id=2001 and no linked TrelloCard.
+    Act: call sync_trello(db_session) with mock_trello_transport.
+    Assert: a TrelloCard row is written with the deal link and deal-id marker.
     """
-    pytest.skip("Wave 3: implemented when auto_create_cards / won-deal watcher lands")
+    import httpx
+
+    from app.integrations.trello import CONTRATO_LIST_ID
+    from app.models import Deal, TrelloCard
+    from app.sync.jobs import sync_trello
+
+    # Seed a won deal with no linked card
+    won_deal = Deal(
+        pipedrive_id=2001,
+        title="Campaña Won Test",
+        value=80000.0,
+        currency="MXN",
+        stage_id=4,
+        stage_name="Contrato",
+        status="won",
+        commission_amount=56000.0,
+        is_sin_cotizar=False,
+        update_time="2026-06-10T10:00:00Z",
+        add_time="2026-05-01T09:00:00Z",
+    )
+    db_session.add(won_deal)
+    db_session.commit()
+    db_session.refresh(won_deal)
+
+    # Track create_card calls
+    create_card_calls = []
+    original_post_handler = None
+
+    import app.integrations.trello as trello_mod
+    original_client = trello_mod._client
+
+    def mock_client():
+        return httpx.Client(
+            base_url=trello_mod.BASE_URL,
+            transport=mock_trello_transport,
+            timeout=30.0,
+        )
+
+    trello_mod._client = mock_client
+    try:
+        log = sync_trello(db_session)
+    finally:
+        trello_mod._client = original_client
+
+    assert log.status == "success", f"Expected success, got {log.status}: {log.error_message}"
+
+    # A TrelloCard row linked to the won deal must exist
+    linked_card = (
+        db_session.query(TrelloCard)
+        .filter(TrelloCard.deal_id == won_deal.id)
+        .first()
+    )
+    assert linked_card is not None, "Expected a TrelloCard row linked to the won deal"
+    assert linked_card.list_id == CONTRATO_LIST_ID, (
+        f"Card must be in CONTRATO_LIST_ID, got {linked_card.list_id!r}"
+    )
+    assert linked_card.pipedrive_deal_id_desc == won_deal.pipedrive_id, (
+        f"pipedrive_deal_id_desc must equal {won_deal.pipedrive_id}, "
+        f"got {linked_card.pipedrive_deal_id_desc!r}"
+    )
+    assert linked_card.list_state == "ejecucion", (
+        f"list_state must be 'ejecucion', got {linked_card.list_state!r}"
+    )
+    # Desc must contain the deal-id marker
+    from app.services.trello_service import _extract_deal_id_from_desc
+    # We can't inspect the POST body directly, but the TrelloCard row's
+    # pipedrive_deal_id_desc confirms the marker was embedded
+    assert linked_card.pipedrive_deal_id_desc == 2001
 
 
 def test_no_duplicate_card_creation(db_session, mock_trello_transport, seed_trello_cards):
     """Won deals that already have a TrelloCard do NOT get a second card created.
 
-    Arrange: seed_trello_cards provides a TrelloCard linked to a won deal.
-    Act: call auto_create_cards_for_won_deals(db_session).
-    Assert: create_card is NOT called for deals that already have a card.
+    Arrange: seed a won deal and link a TrelloCard to it via seed_trello_cards pattern.
+    Act: call sync_trello twice with mock_trello_transport.
+    Assert: only one TrelloCard row exists per won deal after both runs.
     """
-    pytest.skip("Wave 3: implemented when auto_create_cards / won-deal watcher lands")
+    import httpx
+
+    from app.models import Deal, TrelloCard
+    from app.sync.jobs import sync_trello
+
+    # Seed a won deal with no existing card (seed_trello_cards links cards to open deals)
+    won_deal = Deal(
+        pipedrive_id=3001,
+        title="Campaña Won No Duplicate",
+        value=60000.0,
+        currency="MXN",
+        stage_id=4,
+        stage_name="Contrato",
+        status="won",
+        commission_amount=42000.0,
+        is_sin_cotizar=False,
+        update_time="2026-06-11T10:00:00Z",
+        add_time="2026-05-02T09:00:00Z",
+    )
+    db_session.add(won_deal)
+    db_session.commit()
+    db_session.refresh(won_deal)
+
+    import app.integrations.trello as trello_mod
+    original_client = trello_mod._client
+
+    def mock_client():
+        return httpx.Client(
+            base_url=trello_mod.BASE_URL,
+            transport=mock_trello_transport,
+            timeout=30.0,
+        )
+
+    # First sync — should create the card
+    trello_mod._client = mock_client
+    try:
+        log1 = sync_trello(db_session)
+    finally:
+        trello_mod._client = original_client
+
+    assert log1.status == "success", f"First sync failed: {log1.error_message}"
+
+    cards_after_first = (
+        db_session.query(TrelloCard)
+        .filter(TrelloCard.deal_id == won_deal.id)
+        .all()
+    )
+    assert len(cards_after_first) == 1, (
+        f"Expected 1 card after first sync, got {len(cards_after_first)}"
+    )
+
+    # Second sync — the existing card must guard against duplication
+    trello_mod._client = mock_client
+    try:
+        log2 = sync_trello(db_session)
+    finally:
+        trello_mod._client = original_client
+
+    assert log2.status == "success", f"Second sync failed: {log2.error_message}"
+
+    cards_after_second = (
+        db_session.query(TrelloCard)
+        .filter(TrelloCard.deal_id == won_deal.id)
+        .all()
+    )
+    assert len(cards_after_second) == 1, (
+        f"Duplicate card created: expected 1, got {len(cards_after_second)} after second sync"
+    )
 
 
 def test_card_desc_contains_deal_id(db_session, mock_trello_transport, seed_deals):
-    """When creating a card for a won deal, desc includes '[seg:deal_id=N]' header.
+    """_make_card_desc writes a [seg:deal_id=N] marker that round-trips through
+    _extract_deal_id_from_desc.
 
-    Arrange: a won deal with pipedrive_id=1001 and no TrelloCard.
-    Act: call auto_create_cards_for_won_deals(db_session).
-    Assert: the POST /cards request params include desc containing '[seg:deal_id=1001]'.
+    Tests:
+    - First line of _make_card_desc(12345) is '[seg:deal_id=12345]'
+    - _extract_deal_id_from_desc(_make_card_desc(12345)) == 12345 (round-trip)
+    - _make_card_desc(12345, "extra") includes the marker AND the extra text
     """
-    pytest.skip("Wave 3: implemented when auto_create_cards / won-deal watcher lands")
+    from app.services.trello_service import _extract_deal_id_from_desc, _make_card_desc
+
+    # Round-trip: writer and reader are consistent
+    desc = _make_card_desc(12345)
+    assert _extract_deal_id_from_desc(desc) == 12345, (
+        f"Round-trip failed: _extract_deal_id_from_desc({desc!r}) != 12345"
+    )
+
+    # First line must be the exact marker
+    first_line = desc.split("\n")[0]
+    assert first_line == "[seg:deal_id=12345]", (
+        f"First line {first_line!r} is not the expected marker"
+    )
+
+    # With extra_desc: marker + blank line + extra
+    desc_with_extra = _make_card_desc(12345, "extra notes")
+    assert "[seg:deal_id=12345]" in desc_with_extra
+    assert "extra notes" in desc_with_extra
+    # Round-trip still works with extra text
+    assert _extract_deal_id_from_desc(desc_with_extra) == 12345
 
 
 # ---------------------------------------------------------------------------

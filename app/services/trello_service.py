@@ -122,6 +122,27 @@ def resolve_collection_date(card_due: str | None, deal: Deal | None) -> date:
     return date(today.year, today.month, 1)
 
 
+def _make_card_desc(pipedrive_deal_id: int, extra_desc: str = "") -> str:
+    """Build a Trello card description with a [seg:deal_id=N] header.
+
+    The marker format matches _DEAL_ID_RE so that _extract_deal_id_from_desc
+    can round-trip the deal id (T-04-08 — only numeric deal_id in the marker,
+    no untrusted content injected into the header line).
+
+    Args:
+        pipedrive_deal_id: The Pipedrive deal ID (integer) to embed.
+        extra_desc: Optional additional text appended after a blank line.
+
+    Returns:
+        "[seg:deal_id=N]" if extra_desc is empty, or
+        "[seg:deal_id=N]\n\nextra_desc" when extra_desc is non-empty.
+    """
+    header = f"[seg:deal_id={pipedrive_deal_id}]"
+    if extra_desc:
+        return f"{header}\n\n{extra_desc}"
+    return header
+
+
 def resolve_deal_id(db: Session, card_desc: str | None, card_name: str) -> int | None:
     """Resolve the local deals.id for a card using a two-step strategy.
 
