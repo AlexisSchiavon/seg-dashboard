@@ -393,6 +393,63 @@ def sync_trello(db: Session) -> SyncLog:
                 records_synced += 1
 
         db.commit()
+
+        # Reconciliation: auto-create Contrato-list cards for won deals with no card.
+        # Idempotency guard (T-04-07 / Pitfall 1): build the set of already-linked
+        # pipedrive_ids from TrelloCard rows before querying won deals.
+        linked_pipedrive_ids: set[int] = {
+            row[0]
+            for row in db.query(TrelloCard.pipedrive_deal_id_desc)
+            .filter(TrelloCard.pipedrive_deal_id_desc.isnot(None))
+            .all()
+        }
+        linked_deal_ids: set[int] = {
+            row[0]
+            for row in db.query(TrelloCard.deal_id)
+            .filter(TrelloCard.deal_id.isnot(None))
+            .all()
+        }
+
+        won_deals = db.query(Deal).filter(Deal.status == "won").all()
+        for won_deal in won_deals:
+            # Skip if already linked by pipedrive_deal_id_desc or by deal_id.
+            if (
+                won_deal.pipedrive_id in linked_pipedrive_ids
+                or won_deal.id in linked_deal_ids
+            ):
+                continue
+
+            desc = trello_service._make_card_desc(won_deal.pipedrive_id)
+            response = trello.create_card(
+                client,
+                trello.CONTRATO_LIST_ID,
+                won_deal.title,
+                desc=desc,
+            )
+
+            collection_date = trello_service.resolve_collection_date(
+                response.get("due"), won_deal
+            )
+
+            new_card = TrelloCard(
+                trello_card_id=response["id"],
+                name=won_deal.title,
+                list_id=trello.CONTRATO_LIST_ID,
+                list_name="Contrato",
+                list_state="ejecucion",
+                deal_id=won_deal.id,
+                pipedrive_deal_id_desc=won_deal.pipedrive_id,
+                collection_date=collection_date,
+            )
+            db.add(new_card)
+
+            # Add to guard sets so subsequent won_deals in the same run are checked.
+            linked_pipedrive_ids.add(won_deal.pipedrive_id)
+            linked_deal_ids.add(won_deal.id)
+
+            records_synced += 1
+
+        db.commit()
         sync_log.status = "success"
         sync_log.finished_at = datetime.now(timezone.utc)
         sync_log.records_synced = records_synced
