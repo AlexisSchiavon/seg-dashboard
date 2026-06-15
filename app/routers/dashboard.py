@@ -29,6 +29,7 @@ from app.schemas.dashboard import (
 )
 from app.services import kpis as kpi_service
 from app.services import funnel as funnel_service
+from app.services import leads as leads_service
 
 router = APIRouter(
     prefix="/dashboard",
@@ -50,12 +51,16 @@ def get_summary(db: Session = Depends(get_db)):
     has_data=False is returned when no deals exist yet (empty state trigger
     for the frontend "Aún no hay datos de Pipedrive" banner).
     """
+    leads_data = leads_service.leads_summary(db)
+
     if not _has_data(db):
         return DashboardSummary(
             kpis=[],
             ranking=[],
             activity=[],
             has_data=False,
+            leads_totales=leads_data["leads_totales"],
+            calificados=leads_data["calificados"],
         )
 
     kpis_data = kpi_service.global_kpis(db)
@@ -76,6 +81,8 @@ def get_summary(db: Session = Depends(get_db)):
         ranking=ranking_rows,
         activity=activity_items,
         has_data=True,
+        leads_totales=leads_data["leads_totales"],
+        calificados=leads_data["calificados"],
     )
 
 
