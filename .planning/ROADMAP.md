@@ -125,7 +125,24 @@ Plans:
   3. When a Pipedrive deal is marked "ganado", a Trello card is automatically created with the expected collection date (verified via reconciliation, not just a one-shot webhook)
   4. The Por talento tab now shows the monthly revenue projection as stacked bars (cobrado/proyección/pendiente), a collection calendar, top 3 campaigns of the month, and the full campaign table (campaign/status/amount) — completing DASH-02
 
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — TrelloCard model + migration, trello.py httpx wrapper (LIST_STATE_MAP), Wave 0 test stubs (TRELLO-01)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 04-02-PLAN.md — sync_trello read+upsert: deal linkage (desc id + fuzzy match), collection-date fallback, scheduler + manual-trigger wiring (TRELLO-01, TRELLO-02)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 04-03-PLAN.md — Auto-creation reconciliation: won deals → Contrato-list card with [seg:deal_id=N] marker, idempotency guard (TRELLO-03)
+
+**Wave 4** *(blocked on Wave 2)*
+
+- [ ] 04-04-PLAN.md — Por talento DASH-02 slice: income_projection/payment_calendar/deals service, extended TalentDetail endpoint, frontend render wiring (DASH-02)
+
 **UI hint**: yes
 
 ### Phase 5: AI-Generated PDF Reports
@@ -182,7 +199,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation — Auth, Talent Catalog & Health Check | 3/3 | Complete   | 2026-06-11 |
 | 2. Pipedrive Integration & Core Dashboard | 3/3 | Complete   | 2026-06-14 |
 | 3. Google Sheets Leads Integration | 3/3 | Complete   | 2026-06-15 |
-| 4. Trello Integration & Collection Automation | 0/TBD | Not started | - |
+| 4. Trello Integration & Collection Automation | 0/4 | Not started | - |
 | 5. AI-Generated PDF Reports | 0/TBD | Not started | - |
 | 6. Embedded Natural-Language Agent | 0/TBD | Not started | - |
 | 7. Docker & EasyPanel Deployment | 0/TBD | Not started | - |
