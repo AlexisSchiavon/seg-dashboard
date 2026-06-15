@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation — Auth, Talent Catalog & Health Check** - FastAPI base structure with JWT auth, SQLite (WAL), talent catalog DB table, and `/health` endpoint (completed 2026-06-11)
 - [x] **Phase 2: Pipedrive Integration & Core Dashboard** - Live Pipedrive sync powers Resumen, Por talento, and Funnel tabs with real deal/revenue data (completed 2026-06-14)
 - [x] **Phase 3: Google Sheets Leads Integration** - Gmail-fed leads sync populates the Leads dashboard tab (completed 2026-06-15)
-- [ ] **Phase 4: Trello Integration & Collection Automation** - Campaign execution/collection tracking and Pipedrive→Trello automation complete the Por talento revenue projection
+- [x] **Phase 4: Trello Integration & Collection Automation** - Campaign execution/collection tracking and Pipedrive→Trello automation complete the Por talento revenue projection (completed 2026-06-15)
 - [ ] **Phase 5: AI-Generated PDF Reports** - Claude-narrated monthly reports with downloadable history in the Reportes tab
 - [ ] **Phase 6: Embedded Natural-Language Agent** - Read-only conversational querying of dashboard data
 - [ ] **Phase 7: Docker & EasyPanel Deployment** - Containerized deployment with persistent SQLite storage verified across redeploys
@@ -129,19 +129,19 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — TrelloCard model + migration, trello.py httpx wrapper (LIST_STATE_MAP), Wave 0 test stubs (TRELLO-01)
+- [x] 04-01-PLAN.md — TrelloCard model + migration, trello.py httpx wrapper (LIST_STATE_MAP), Wave 0 test stubs (TRELLO-01)
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 04-02-PLAN.md — sync_trello read+upsert: deal linkage (desc id + fuzzy match), collection-date fallback, scheduler + manual-trigger wiring (TRELLO-01, TRELLO-02)
+- [x] 04-02-PLAN.md — sync_trello read+upsert: deal linkage (desc id + fuzzy match), collection-date fallback, scheduler + manual-trigger wiring (TRELLO-01, TRELLO-02)
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 04-03-PLAN.md — Auto-creation reconciliation: won deals → Contrato-list card with [seg:deal_id=N] marker, idempotency guard (TRELLO-03)
+- [x] 04-03-PLAN.md — Auto-creation reconciliation: won deals → Contrato-list card with [seg:deal_id=N] marker, idempotency guard (TRELLO-03)
 
 **Wave 4** *(blocked on Wave 2)*
 
-- [ ] 04-04-PLAN.md — Por talento DASH-02 slice: income_projection/payment_calendar/deals service, extended TalentDetail endpoint, frontend render wiring (DASH-02)
+- [x] 04-04-PLAN.md — Por talento DASH-02 slice: income_projection/payment_calendar/deals service, extended TalentDetail endpoint, frontend render wiring (DASH-02)
 
 **UI hint**: yes
 
@@ -199,7 +199,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation — Auth, Talent Catalog & Health Check | 3/3 | Complete   | 2026-06-11 |
 | 2. Pipedrive Integration & Core Dashboard | 3/3 | Complete   | 2026-06-14 |
 | 3. Google Sheets Leads Integration | 3/3 | Complete   | 2026-06-15 |
-| 4. Trello Integration & Collection Automation | 0/4 | Not started | - |
+| 4. Trello Integration & Collection Automation | 4/4 | Complete   | 2026-06-15 |
 | 5. AI-Generated PDF Reports | 0/TBD | Not started | - |
 | 6. Embedded Natural-Language Agent | 0/TBD | Not started | - |
 | 7. Docker & EasyPanel Deployment | 0/TBD | Not started | - |
