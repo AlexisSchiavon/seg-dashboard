@@ -811,52 +811,106 @@ function renderPaymentCalendar(data) {
 }
 
 // ============================================================
-// Top 3 campañas — medal cards from funnel stages by amount
+// Top 3 campañas — medal cards from individual deal rows (Phase 4)
 // ============================================================
 
-function renderTopCampaigns(stages) {
+/**
+ * Map a deal list_state to a badge CSS class and display label.
+ * Used for individual deal rows (not funnel stage aggregates).
+ * @param {string} listState - ejecucion | cobranza | cerrado | perdido
+ * @returns {{cls: string, label: string}}
+ */
+function getDealBadge(listState) {
+  switch (listState) {
+    case "ejecucion": return { cls: "ejecucion", label: "En ejecución" };
+    case "cobranza":  return { cls: "cobranza",  label: "En cobranza" };
+    case "cerrado":   return { cls: "cobrado",   label: "Cobrado" };
+    case "perdido":   return { cls: "perdido",   label: "Perdido" };
+    default:          return { cls: "ejecucion", label: "En ejecución" };
+  }
+}
+
+/**
+ * Map a deal list_state to an icon color for the ctable-icon dot.
+ * @param {string} listState
+ * @returns {string} CSS color value
+ */
+function dealStateColor(listState) {
+  switch (listState) {
+    case "ejecucion": return "var(--blue)";
+    case "cobranza":  return "var(--green)";
+    case "cerrado":   return "var(--green)";
+    case "perdido":   return "var(--red)";
+    default:          return "var(--blue)";
+  }
+}
+
+/**
+ * Render the Top 3 campaigns medal cards from individual deal objects.
+ *
+ * Phase 4 change: accepts Array<{title, amount, list_state, trello_card_id?}>
+ * (individual deal rows) instead of funnel stage aggregates.
+ * Sorts by amount descending and takes the top 3.
+ * All API-sourced strings are wrapped in escHtml (CR-02 / T-04-11).
+ *
+ * @param {Array<{title: string, amount: number, list_state: string}>} deals
+ */
+function renderTopCampaigns(deals) {
   const el = document.getElementById("top-campaigns");
   if (!el) return;
-  const top3 = (stages || [])
-    .filter((s) => (s.amount || 0) > 0)
+
+  const top3 = (deals || [])
+    .slice()
     .sort((a, b) => (b.amount || 0) - (a.amount || 0))
     .slice(0, 3);
+
   if (top3.length === 0) {
     el.innerHTML = `<div class="card" style="text-align:center;color:var(--text3);font-size:13px;padding:14px 16px;">Sin campañas con monto registrado</div>`;
     return;
   }
+
   const rankCls = ["rank-1", "rank-2", "rank-3"];
   const rankNums = ["1", "2", "3"];
-  el.innerHTML = `<div class="medal-cards">${top3.map((s, i) => {
-    const sb = getStatusBadge(s.stage);
+  el.innerHTML = `<div class="medal-cards">${top3.map((deal, i) => {
+    const sb = getDealBadge(deal.list_state);
     return `
       <div class="medal-card ${rankCls[i]}">
         <div class="medal-num ${rankCls[i]}">${rankNums[i]}</div>
         <div class="medal-amount-label">Venta total</div>
-        <div class="medal-amount">${formatMXN(s.amount)}</div>
-        <div class="medal-name">${escHtml(s.stage)}</div>
+        <div class="medal-amount">${formatMXN(deal.amount || 0)}</div>
+        <div class="medal-name">${escHtml(deal.title || "Sin título")}</div>
         <span class="sbadge ${sb.cls}">${sb.label}</span>
       </div>`;
   }).join("")}</div>`;
 }
 
 // ============================================================
-// Campaign table — funnel stages + lost deals combined
+// Campaign table — individual deal rows (Phase 4)
 // ============================================================
 
-function renderCampaignTable(stages, lostOpps) {
+/**
+ * Render the campaign table from individual deal objects.
+ *
+ * Phase 4 change: first arg now receives Array<{title, amount, list_state,
+ * trello_card_id?}> (individual deal rows) instead of funnel stage aggregates.
+ * Lost deals (list_state='perdido') from lostOpps are appended as final rows.
+ * All API-sourced strings are wrapped in escHtml (CR-02 / T-04-11).
+ *
+ * @param {Array<{title: string, amount: number, list_state: string}>} deals
+ * @param {Array<{title: string, amount: number, loss_reason: string|null}>} lostOpps
+ */
+function renderCampaignTable(deals, lostOpps) {
   const el = document.getElementById("talent-deals");
   if (!el) return;
 
-  const activeRows = (stages || []).map((s) => {
-    const sb = getStatusBadge(s.stage);
-    const color = statusBadgeColor(sb.cls);
-    const countLabel = s.count > 1 ? ` · ${s.count} deals` : "";
+  const activeRows = (deals || []).map((deal) => {
+    const sb = getDealBadge(deal.list_state);
+    const color = dealStateColor(deal.list_state);
     return `
       <div class="ctable-row">
         <div class="ctable-icon" style="background:${color}"></div>
-        <div class="ctable-name">${escHtml(s.stage)}${countLabel}</div>
-        <div class="ctable-amount">${formatMXN(s.amount || 0)}</div>
+        <div class="ctable-name">${escHtml(deal.title || "Sin título")}</div>
+        <div class="ctable-amount">${formatMXN(deal.amount || 0)}</div>
         <span class="sbadge ${sb.cls}">${sb.label}</span>
       </div>`;
   });
@@ -973,10 +1027,11 @@ async function loadTalentDetail(talentId) {
   // Lost opportunities (in two-col layout)
   renderLostOpportunities(data.lost_summary, data.lost_opportunities);
 
-  // Top 3 campaigns + full campaign table (use funnel stages with amount > 0)
-  const activeStages = (data.funnel || []).filter((s) => s.count > 0);
-  renderTopCampaigns(activeStages);
-  renderCampaignTable(activeStages, data.lost_opportunities);
+  // Top 3 campaigns + full campaign table — Phase 4: use individual deal rows
+  // from data.deals (list_state per TrelloCard), not funnel stage aggregates.
+  const activeDeals = data.deals || [];
+  renderTopCampaigns(activeDeals);
+  renderCampaignTable(activeDeals, data.lost_opportunities);
 }
 
 // ============================================================
