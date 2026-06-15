@@ -65,7 +65,43 @@ def test_sync_trello_upserts_cards(db_session, mock_trello_transport, seed_deals
     Act: call sync_trello(db_session).
     Assert: TrelloCard rows exist for all non-ignored lists; upsert is idempotent.
     """
-    pytest.skip("Wave 2: implemented when sync_trello / trello_service lands")
+    import httpx
+
+    from app.models import TrelloCard
+    from app.sync.jobs import sync_trello
+
+    # Patch trello._client() to use the mock transport
+    import app.integrations.trello as trello_mod
+    original_client = trello_mod._client
+
+    def mock_client():
+        return httpx.Client(
+            base_url=trello_mod.BASE_URL,
+            transport=mock_trello_transport,
+            timeout=30.0,
+        )
+
+    trello_mod._client = mock_client
+    try:
+        log = sync_trello(db_session)
+    finally:
+        trello_mod._client = original_client
+
+    assert log.status == "success", f"Expected success, got {log.status}: {log.error_message}"
+
+    cards = db_session.query(TrelloCard).all()
+    assert len(cards) == 3, f"Expected 3 cards (ejecucion+cobranza+cerrado), got {len(cards)}"
+
+    # Idempotency: second run must not insert new rows
+    trello_mod._client = mock_client
+    try:
+        log2 = sync_trello(db_session)
+    finally:
+        trello_mod._client = original_client
+
+    assert log2.status == "success"
+    cards_after = db_session.query(TrelloCard).all()
+    assert len(cards_after) == 3, "Second run must not create duplicate rows"
 
 
 def test_sync_trello_ignores_otros_pendientes(db_session, mock_trello_transport, seed_deals):
@@ -75,7 +111,36 @@ def test_sync_trello_ignores_otros_pendientes(db_session, mock_trello_transport,
     Act: call sync_trello(db_session).
     Assert: no TrelloCard row has list_id == '6996256c42ccdae7f69e4814'.
     """
-    pytest.skip("Wave 2: implemented when sync_trello / trello_service lands")
+    import httpx
+
+    from app.models import TrelloCard
+    from app.sync.jobs import sync_trello
+
+    import app.integrations.trello as trello_mod
+    original_client = trello_mod._client
+
+    def mock_client():
+        return httpx.Client(
+            base_url=trello_mod.BASE_URL,
+            transport=mock_trello_transport,
+            timeout=30.0,
+        )
+
+    trello_mod._client = mock_client
+    try:
+        log = sync_trello(db_session)
+    finally:
+        trello_mod._client = original_client
+
+    assert log.status == "success"
+
+    # No card with the Otros pendientes list_id should exist
+    otros_cards = (
+        db_session.query(TrelloCard)
+        .filter(TrelloCard.list_id == "6996256c42ccdae7f69e4814")
+        .all()
+    )
+    assert len(otros_cards) == 0, f"Otros pendientes cards must not be synced: {otros_cards}"
 
 
 def test_collection_date_from_due(db_session, mock_trello_transport, seed_deals):
@@ -122,7 +187,27 @@ def test_sync_trello_concurrency_guard(db_session, mock_trello_transport):
     Act: call sync_trello(db_session).
     Assert: returns the existing running log; no TrelloCard rows created.
     """
-    pytest.skip("Wave 2: implemented when sync_trello / trello_service lands")
+    from datetime import datetime, timezone
+
+    from app.models import SyncLog, TrelloCard
+    from app.sync.jobs import sync_trello
+
+    # Plant a fresh (non-stale) running trello SyncLog
+    running = SyncLog(
+        source="trello",
+        started_at=datetime.now(timezone.utc),
+        status="running",
+    )
+    db_session.add(running)
+    db_session.commit()
+    db_session.refresh(running)
+
+    result = sync_trello(db_session)
+
+    # Must return the existing running log without creating cards
+    assert result.id == running.id, "Expected the existing running SyncLog to be returned"
+    assert result.status == "running"
+    assert db_session.query(TrelloCard).count() == 0, "No cards must be created when guard fires"
 
 
 def test_sync_trello_source_filter_isolated(db_session, mock_trello_transport, seed_deals):
@@ -133,7 +218,40 @@ def test_sync_trello_source_filter_isolated(db_session, mock_trello_transport, s
     Act: call sync_trello(db_session).
     Assert: sync_trello succeeds and creates TrelloCard rows.
     """
-    pytest.skip("Wave 2: implemented when sync_trello / trello_service lands")
+    import httpx
+    from datetime import datetime, timezone
+
+    from app.models import SyncLog, TrelloCard
+    from app.sync.jobs import sync_trello
+
+    # Plant a running pipedrive SyncLog (must NOT block trello sync per CR-03)
+    pipedrive_running = SyncLog(
+        source="pipedrive",
+        started_at=datetime.now(timezone.utc),
+        status="running",
+    )
+    db_session.add(pipedrive_running)
+    db_session.commit()
+
+    import app.integrations.trello as trello_mod
+    original_client = trello_mod._client
+
+    def mock_client():
+        return httpx.Client(
+            base_url=trello_mod.BASE_URL,
+            transport=mock_trello_transport,
+            timeout=30.0,
+        )
+
+    trello_mod._client = mock_client
+    try:
+        log = sync_trello(db_session)
+    finally:
+        trello_mod._client = original_client
+
+    assert log.status == "success", f"Expected success, got {log.status}: {log.error_message}"
+    assert log.source == "trello"
+    assert db_session.query(TrelloCard).count() > 0, "Expected TrelloCard rows to be created"
 
 
 # ---------------------------------------------------------------------------
