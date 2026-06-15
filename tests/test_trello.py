@@ -280,13 +280,34 @@ def test_no_duplicate_card_creation(db_session, mock_trello_transport, seed_trel
 
 
 def test_card_desc_contains_deal_id(db_session, mock_trello_transport, seed_deals):
-    """When creating a card for a won deal, desc includes '[seg:deal_id=N]' header.
+    """_make_card_desc writes a [seg:deal_id=N] marker that round-trips through
+    _extract_deal_id_from_desc.
 
-    Arrange: a won deal with pipedrive_id=1001 and no TrelloCard.
-    Act: call auto_create_cards_for_won_deals(db_session).
-    Assert: the POST /cards request params include desc containing '[seg:deal_id=1001]'.
+    Tests:
+    - First line of _make_card_desc(12345) is '[seg:deal_id=12345]'
+    - _extract_deal_id_from_desc(_make_card_desc(12345)) == 12345 (round-trip)
+    - _make_card_desc(12345, "extra") includes the marker AND the extra text
     """
-    pytest.skip("Wave 3: implemented when auto_create_cards / won-deal watcher lands")
+    from app.services.trello_service import _extract_deal_id_from_desc, _make_card_desc
+
+    # Round-trip: writer and reader are consistent
+    desc = _make_card_desc(12345)
+    assert _extract_deal_id_from_desc(desc) == 12345, (
+        f"Round-trip failed: _extract_deal_id_from_desc({desc!r}) != 12345"
+    )
+
+    # First line must be the exact marker
+    first_line = desc.split("\n")[0]
+    assert first_line == "[seg:deal_id=12345]", (
+        f"First line {first_line!r} is not the expected marker"
+    )
+
+    # With extra_desc: marker + blank line + extra
+    desc_with_extra = _make_card_desc(12345, "extra notes")
+    assert "[seg:deal_id=12345]" in desc_with_extra
+    assert "extra notes" in desc_with_extra
+    # Round-trip still works with extra text
+    assert _extract_deal_id_from_desc(desc_with_extra) == 12345
 
 
 # ---------------------------------------------------------------------------
