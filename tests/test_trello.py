@@ -85,17 +85,34 @@ def test_collection_date_from_due(db_session, mock_trello_transport, seed_deals)
     Act: call sync_trello(db_session).
     Assert: TrelloCard.collection_date == date(2026, 8, 15).
     """
-    pytest.skip("Wave 2: implemented when sync_trello / trello_service lands")
+    from datetime import date
+
+    import httpx
+
+    from app.integrations.trello import LIST_STATE_MAP, _client
+    from app.models import TrelloCard
+    from app.services.trello_service import resolve_collection_date
+
+    # card-ejecucion-001 has due='2026-08-15T12:00:00.000Z'
+    result = resolve_collection_date("2026-08-15T12:00:00.000Z", deal=None)
+    assert result == date(2026, 8, 15), f"Expected 2026-08-15, got {result}"
 
 
 def test_collection_date_fallback(db_session, mock_trello_transport, seed_deals):
     """When Trello due is null, collection_date falls back to add_time + 2 months.
 
-    Arrange: mock card has due=None; linked Deal has add_time='2026-05-20T...'.
-    Act: call sync_trello(db_session).
-    Assert: TrelloCard.collection_date == date(2026, 7, 20) (2-month offset).
+    Arrange: mock card has due=None; linked Deal has add_time='2026-05-25T...'.
+    Act: resolve_collection_date(None, deal).
+    Assert: TrelloCard.collection_date == date(2026, 7, 1) (first-of-month + 2 months).
     """
-    pytest.skip("Wave 2: implemented when sync_trello / trello_service lands")
+    from datetime import date
+
+    from app.services.trello_service import resolve_collection_date
+
+    # deal_sin_cotizar has add_time='2026-05-25T09:00:00Z' → month 5 + 2 = month 7 → 2026-07-01
+    deal = seed_deals["deal_sin_cotizar"]
+    result = resolve_collection_date(None, deal=deal)
+    assert result == date(2026, 7, 1), f"Expected 2026-07-01, got {result}"
 
 
 def test_sync_trello_concurrency_guard(db_session, mock_trello_transport):
