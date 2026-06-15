@@ -682,32 +682,199 @@ function renderLostOpportunities(lostSummary, lostOpportunities) {
     return;
   }
 
-  // Per-reason summary line: "{N} por {razón}" joined by ", "
   const summaryParts = (lostSummary || []).map((s) => `${s.count} por ${escHtml(s.reason)}`);
   summaryEl.innerHTML = summaryParts.length > 0
-    ? `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">${summaryParts.join(", ")}</div>`
+    ? `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">${summaryParts.join(" · ")}</div>`
     : "";
 
-  // Itemized list: each lost deal with a .pill showing the loss_reason label
-  listEl.innerHTML = lostOpportunities.map((opp) => {
-    const pillHtml = opp.loss_reason
-      ? `<span class="pill" style="background:var(--blueD);color:var(--blueT);">${escHtml(opp.loss_reason)}</span>`
-      : "";
-    return `
-      <div class="deal-row">
-        <div class="deal-l">
-          <div class="deal-dot" style="background:var(--red);"></div>
-          <div>
-            <div class="deal-brand">${escHtml(opp.title || "Sin título")}</div>
-          </div>
-        </div>
-        <div class="deal-r">
-          <div class="deal-amt">${formatMXN(opp.amount || 0)}</div>
-          ${pillHtml}
+  const MAX_VISIBLE = 8;
+  const visible = lostOpportunities.slice(0, MAX_VISIBLE);
+  const remaining = lostOpportunities.length - MAX_VISIBLE;
+
+  listEl.innerHTML = visible.map((opp) => `
+    <div class="deal-row">
+      <div class="deal-l">
+        <div class="deal-dot" style="background:var(--red);"></div>
+        <div>
+          <div class="deal-brand">${escHtml(opp.title || "Sin título")}</div>
         </div>
       </div>
-    `;
+      <div class="deal-r">
+        <div class="deal-amt">${formatMXN(opp.amount || 0)}</div>
+      </div>
+    </div>
+  `).join("") + (remaining > 0
+    ? `<div style="font-size:11px;color:var(--text3);text-align:center;padding-top:8px;">+${remaining} más</div>`
+    : "");
+}
+
+// ============================================================
+// Status badge helper — maps funnel stage name → CSS class + label
+// ============================================================
+
+function getStatusBadge(stageName) {
+  const s = (stageName || "").toLowerCase();
+  if (s.includes("llamada"))   return { cls: "llamada",     label: "Llamada" };
+  if (s.includes("negoci"))    return { cls: "negociacion", label: "Negociación" };
+  if (s.includes("cotiz"))     return { cls: "cotizacion",  label: "Cotización" };
+  if (s.includes("contrato"))  return { cls: "contrato",    label: "Contrato" };
+  if (s.includes("cobrado"))   return { cls: "cobrado",     label: "Cobrado" };
+  if (s.includes("ejecuci"))   return { cls: "ejecucion",   label: "En ejecución" };
+  if (s.includes("cobranza"))  return { cls: "cobranza",    label: "Cobranza" };
+  if (s.includes("perdido") || s.includes("lost")) return { cls: "perdido", label: "Perdido" };
+  return { cls: "llamada", label: escHtml(stageName) };
+}
+
+function statusBadgeColor(cls) {
+  const map = {
+    llamada: "var(--blue)", negociacion: "var(--amber)", cotizacion: "var(--purple)",
+    contrato: "var(--accent)", cobrado: "var(--green)",
+    ejecucion: "#0ea5b0", cobranza: "#0d7a55", perdido: "var(--red)",
+  };
+  return map[cls] || "var(--text3)";
+}
+
+// ============================================================
+// Talent header
+// ============================================================
+
+function renderTalentHeader(name) {
+  const wrap = document.getElementById("talent-header-wrap");
+  const nameEl = document.getElementById("th-name");
+  const dateEl = document.getElementById("th-date");
+  if (!wrap || !nameEl || !dateEl) return;
+  nameEl.textContent = name || "—";
+  const months = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const now = new Date();
+  dateEl.textContent = months[now.getMonth()] + " " + now.getFullYear();
+  wrap.style.display = "";
+}
+
+// ============================================================
+// Income projection chart (Phase 4 data source — shows placeholder until wired)
+// ============================================================
+
+function renderIncomeProjection(data) {
+  const el = document.getElementById("income-projection");
+  if (!el) return;
+  if (!data || data.length === 0) {
+    el.innerHTML = `<div class="proj-placeholder">Proyección disponible tras próxima sincronización</div>`;
+    return;
+  }
+  const maxVal = Math.max(...data.map((m) => (m.cobrado || 0) + (m.proyeccion || 0) + (m.pendiente || 0)), 1);
+  const bars = data.map((m) => {
+    const total = (m.cobrado || 0) + (m.proyeccion || 0) + (m.pendiente || 0);
+    const pctH = ((total / maxVal) * 100).toFixed(1);
+    const pctC = ((m.cobrado  || 0) / maxVal * 100).toFixed(1);
+    const pctP = ((m.proyeccion || 0) / maxVal * 100).toFixed(1);
+    const pctPe = ((m.pendiente || 0) / maxVal * 100).toFixed(1);
+    return `
+      <div class="proj-col" style="height:100%;">
+        <div class="proj-bar-stack" style="height:${pctH}%;">
+          <div style="height:${pctC}%;background:var(--green);"></div>
+          <div style="height:${pctP}%;background:var(--blue);"></div>
+          <div style="height:${pctPe}%;background:var(--amber);"></div>
+        </div>
+        <div class="proj-lbl">${escHtml(m.month)}</div>
+      </div>`;
   }).join("");
+  el.innerHTML = `
+    <div class="proj-legend">
+      <div class="proj-legend-item"><div class="proj-legend-dot" style="background:var(--green)"></div>Cobrado</div>
+      <div class="proj-legend-item"><div class="proj-legend-dot" style="background:var(--blue)"></div>Firmado (Proyección)</div>
+      <div class="proj-legend-item"><div class="proj-legend-dot" style="background:var(--amber)"></div>Pendiente</div>
+    </div>
+    <div class="proj-chart">${bars}</div>`;
+}
+
+// ============================================================
+// Payment calendar timeline (Phase 4 data source — shows placeholder until wired)
+// ============================================================
+
+function renderPaymentCalendar(data) {
+  const el = document.getElementById("payment-calendar");
+  if (!el) return;
+  if (!data || data.length === 0) {
+    el.innerHTML = `<div class="tl-placeholder">Calendario disponible tras próxima sincronización</div>`;
+    return;
+  }
+  const nodes = data.map((item, i) => {
+    const connector = i < data.length - 1 ? `<div class="tl-connector"></div>` : "";
+    return `
+      <div class="tl-node">
+        <div class="tl-dot">📅</div>
+        <div class="tl-month">${escHtml(item.month)}</div>
+        <div class="tl-amount">${formatMXN(item.amount)}</div>
+      </div>${connector}`;
+  }).join("");
+  el.innerHTML = `<div class="timeline">${nodes}</div>`;
+}
+
+// ============================================================
+// Top 3 campañas — medal cards from funnel stages by amount
+// ============================================================
+
+function renderTopCampaigns(stages) {
+  const el = document.getElementById("top-campaigns");
+  if (!el) return;
+  const top3 = (stages || [])
+    .filter((s) => (s.amount || 0) > 0)
+    .sort((a, b) => (b.amount || 0) - (a.amount || 0))
+    .slice(0, 3);
+  if (top3.length === 0) {
+    el.innerHTML = `<div class="card" style="text-align:center;color:var(--text3);font-size:13px;padding:14px 16px;">Sin campañas con monto registrado</div>`;
+    return;
+  }
+  const rankCls = ["rank-1", "rank-2", "rank-3"];
+  const rankNums = ["1", "2", "3"];
+  el.innerHTML = `<div class="medal-cards">${top3.map((s, i) => {
+    const sb = getStatusBadge(s.stage);
+    return `
+      <div class="medal-card ${rankCls[i]}">
+        <div class="medal-num ${rankCls[i]}">${rankNums[i]}</div>
+        <div class="medal-amount-label">Venta total</div>
+        <div class="medal-amount">${formatMXN(s.amount)}</div>
+        <div class="medal-name">${escHtml(s.stage)}</div>
+        <span class="sbadge ${sb.cls}">${sb.label}</span>
+      </div>`;
+  }).join("")}</div>`;
+}
+
+// ============================================================
+// Campaign table — funnel stages + lost deals combined
+// ============================================================
+
+function renderCampaignTable(stages, lostOpps) {
+  const el = document.getElementById("talent-deals");
+  if (!el) return;
+
+  const activeRows = (stages || []).map((s) => {
+    const sb = getStatusBadge(s.stage);
+    const color = statusBadgeColor(sb.cls);
+    const countLabel = s.count > 1 ? ` · ${s.count} deals` : "";
+    return `
+      <div class="ctable-row">
+        <div class="ctable-icon" style="background:${color}"></div>
+        <div class="ctable-name">${escHtml(s.stage)}${countLabel}</div>
+        <div class="ctable-amount">${formatMXN(s.amount || 0)}</div>
+        <span class="sbadge ${sb.cls}">${sb.label}</span>
+      </div>`;
+  });
+
+  const lostRows = (lostOpps || []).map((opp) => `
+    <div class="ctable-row">
+      <div class="ctable-icon" style="background:var(--red)"></div>
+      <div class="ctable-name">${escHtml(opp.title || "Sin título")}</div>
+      <div class="ctable-amount">${formatMXN(opp.amount || 0)}</div>
+      <span class="sbadge perdido">Perdido</span>
+    </div>`);
+
+  const allRows = [...activeRows, ...lostRows];
+  if (allRows.length === 0) {
+    el.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:12px 0;">Sin campañas registradas</div>`;
+    return;
+  }
+  el.innerHTML = allRows.join("");
 }
 
 /**
@@ -741,7 +908,8 @@ async function loadTalentSelector() {
     return `
       <div class="talent-card${idx === 0 ? " active" : ""}"
            onclick="selectTalentCard(this, ${talent.talent_id})"
-           data-talent-id="${talent.talent_id}">
+           data-talent-id="${talent.talent_id}"
+           data-talent-name="${escHtml(talent.name)}">
         <div class="tc-avatar" style="background:${colorPair.bg};color:${colorPair.text};">${escHtml(initials)}</div>
         <div class="tc-name">${escHtml(talent.name)}</div>
         <div class="tc-deals">${talent.deal_count} deals</div>
@@ -771,14 +939,12 @@ function selectTalentCard(cardEl, talentId) {
 
 /**
  * Load and render full per-talent detail from GET /dashboard/talents/{id}.
- * Renders into: talent-kpis, talent-funnel, talent-deals, brand-donut/brand-legend, lost-summary/lost-list.
  */
 async function loadTalentDetail(talentId) {
   const res = await apiFetch("/dashboard/talents/" + talentId);
   if (!res) return; // 401 redirected
 
   if (!res.ok) {
-    // 404 or other error — show a brief message
     const lostList = document.getElementById("lost-list");
     if (lostList) lostList.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">No se pudo cargar el detalle del talento</div>`;
     return;
@@ -786,47 +952,31 @@ async function loadTalentDetail(talentId) {
 
   const data = await res.json();
 
-  // (2) KPIs
+  // Talent header — get name from active selector card
+  const activeCard = document.querySelector("#talent-selector .talent-card.active");
+  const talentName = activeCard ? activeCard.dataset.talentName : null;
+  renderTalentHeader(talentName);
+
+  // KPIs (3-col row)
   renderKpisInto(data.kpis, "talent-kpis");
 
-  // (3) Funnel
+  // Funnel
   renderTalentFunnel(data.funnel);
 
-  // (4) Active deals — derive from funnel stages (open deals are tracked in funnel)
-  // The endpoint returns funnel stages; for "Deals activos" we show a simplified
-  // placeholder based on funnel counts since TalentDetail doesn't include raw deal rows.
-  // We render the funnel stage rows as a deal activity summary.
-  const activeFunnelStages = (data.funnel || []).filter((s) => s.count > 0);
-  const talentDealsEl = document.getElementById("talent-deals");
-  if (talentDealsEl) {
-    if (activeFunnelStages.length === 0) {
-      talentDealsEl.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">Sin deals activos</div>`;
-    } else {
-      talentDealsEl.innerHTML = activeFunnelStages.map((stage, idx) => {
-        const dotColor = FUNNEL_COLORS[idx % FUNNEL_COLORS.length];
-        return `
-          <div class="deal-row">
-            <div class="deal-l">
-              <div class="deal-dot" style="background:${dotColor};"></div>
-              <div>
-                <div class="deal-brand">${escHtml(stage.stage)}</div>
-                <div class="deal-tipo">${stage.count} deal${stage.count !== 1 ? "s" : ""} activo${stage.count !== 1 ? "s" : ""}</div>
-              </div>
-            </div>
-            <div class="deal-r">
-              <div class="deal-amt">${formatMXN(stage.amount)}</div>
-            </div>
-          </div>
-        `;
-      }).join("");
-    }
-  }
+  // Projection chart + calendar — placeholder until Phase 4 wires data
+  renderIncomeProjection(data.income_projection || null);
+  renderPaymentCalendar(data.payment_calendar || null);
 
-  // (5) Brand donut
+  // Brand donut
   renderBrandDonut(data.brand_categories);
 
-  // (6) Lost opportunities
+  // Lost opportunities (in two-col layout)
   renderLostOpportunities(data.lost_summary, data.lost_opportunities);
+
+  // Top 3 campaigns + full campaign table (use funnel stages with amount > 0)
+  const activeStages = (data.funnel || []).filter((s) => s.count > 0);
+  renderTopCampaigns(activeStages);
+  renderCampaignTable(activeStages, data.lost_opportunities);
 }
 
 // ============================================================

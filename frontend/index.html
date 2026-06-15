@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>SEG · Talent Intelligence</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=DM+Sans:wght@400;500&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
@@ -78,69 +78,90 @@
   </div>
 
   <!-- ========== POR TALENTO TAB ========== -->
-  <!-- D-28 section order: Selector → KPIs → Funnel → Deals activos → Categorías de marca → Oportunidades perdidas -->
   <div class="page" id="page-talent">
     <div class="spacer"></div>
 
-    <!-- (1) Talent selector — horizontal scrollable row of talent cards -->
+    <!-- (1) Talent selector -->
     <div class="section">
-      <div id="talent-selector" class="talent-selector">
-        <!-- Populated by loadTalentSelector() -->
-      </div>
+      <div id="talent-selector" class="talent-selector"></div>
     </div>
 
-    <!-- (2) Per-talent KPI grid -->
-    <div class="section">
-      <div class="kpi-grid" id="talent-kpis">
-        <!-- Populated by loadTalentDetail() → renderKpis() into talent-kpis -->
-      </div>
-    </div>
-
-    <!-- (3) Per-talent funnel -->
-    <div class="section">
-      <div class="section-title">Funnel</div>
-      <div class="card">
-        <div id="talent-funnel">
-          <!-- Populated by loadTalentDetail() → renderTalentFunnel() -->
+    <!-- (2) Talent header — shown after talent selected -->
+    <div id="talent-header-wrap" class="section" style="display:none">
+      <div class="talent-header">
+        <div class="th-badge">TA</div>
+        <div class="th-info">
+          <div class="th-label">Talento</div>
+          <div class="th-name" id="th-name">—</div>
+        </div>
+        <div class="th-report">
+          <div class="th-report-label">Reporte comercial</div>
+          <div class="th-report-date" id="th-date">—</div>
         </div>
       </div>
     </div>
 
-    <!-- (4) Deals activos -->
+    <!-- (3) KPI row: 3 horizontal tiles -->
     <div class="section">
-      <div class="section-title">Deals activos</div>
-      <div class="card" id="talent-deals">
-        <!-- Populated by loadTalentDetail() → renderTalentDeals() -->
+      <div class="kpi-row-3" id="talent-kpis"></div>
+    </div>
+
+    <!-- (4) Income projection chart -->
+    <div class="section">
+      <div class="section-title">Proyección de ingresos por mes</div>
+      <div class="card">
+        <div id="income-projection"></div>
       </div>
     </div>
 
-    <!-- (5) Categorías de marca — donut chart + legend (D-26/D-27) -->
+    <!-- (5) Payment calendar -->
+    <div class="section">
+      <div class="section-title">Calendario de cobranza</div>
+      <div class="card">
+        <div id="payment-calendar"></div>
+      </div>
+    </div>
+
+    <!-- (6) Funnel + Lost opps — two columns -->
+    <div class="section">
+      <div class="two-col-grid">
+        <div>
+          <div class="section-title">Embudo de venta</div>
+          <div class="card">
+            <div id="talent-funnel"></div>
+          </div>
+        </div>
+        <div>
+          <div class="section-title">Oportunidades perdidas</div>
+          <div class="card">
+            <div id="lost-summary"></div>
+            <div id="lost-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- (7) Categorías de marca -->
     <div class="section">
       <div class="section-title">Categorías de marca</div>
       <div class="card" id="brand-donut-card">
         <div class="donut-wrap">
-          <div id="brand-donut">
-            <!-- SVG conic-gradient donut populated by renderBrandDonut() -->
-          </div>
-          <div id="brand-legend" class="donut-legend">
-            <!-- Legend rows populated by renderBrandDonut() -->
-          </div>
+          <div id="brand-donut"></div>
+          <div id="brand-legend" class="donut-legend"></div>
         </div>
       </div>
     </div>
 
-    <!-- (6) Oportunidades perdidas — per-reason summary + deal list (D-25) -->
-    <!-- NOTE: Lead-source section intentionally absent per D-28 (no data source until Phase 3) -->
+    <!-- (8) Top 3 campañas más caras -->
     <div class="section">
-      <div class="section-title">Oportunidades perdidas</div>
-      <div class="card">
-        <div id="lost-summary">
-          <!-- Per-reason summary line populated by renderLostOpportunities() -->
-        </div>
-        <div id="lost-list">
-          <!-- Itemized lost deals populated by renderLostOpportunities() -->
-        </div>
-      </div>
+      <div class="section-title">Top 3 campañas más caras</div>
+      <div id="top-campaigns"></div>
+    </div>
+
+    <!-- (9) Todas las campañas en gestión -->
+    <div class="section">
+      <div class="section-title">Todas las campañas en gestión</div>
+      <div class="card" id="talent-deals"></div>
     </div>
 
     <div class="spacer"></div>

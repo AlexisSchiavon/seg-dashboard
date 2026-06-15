@@ -256,10 +256,11 @@ body {
 }
 
 .section-title {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: 'Sora', sans-serif;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 1.2px;
   color: var(--text3);
   margin-bottom: 12px;
   padding-top: 4px;
@@ -850,4 +851,393 @@ select.sel:focus {
 .toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* ===== Nav logo upgrade ===== */
+.nav-logo {
+  font-family: 'Sora', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+/* ===== Talent header ===== */
+.talent-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: var(--bg3);
+  border: 1px solid var(--borderM);
+  border-radius: var(--rL);
+}
+
+.th-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-family: 'Sora', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+
+.th-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.th-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text3);
+  font-family: 'Sora', sans-serif;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.th-name {
+  font-family: 'Sora', sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.th-report {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.th-report-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text3);
+  font-family: 'Sora', sans-serif;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.th-report-date {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--text2);
+}
+
+/* ===== 3-column KPI row ===== */
+.kpi-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.kpi-row-3 .kpi {
+  padding: 12px 10px;
+}
+
+.kpi-row-3 .kpi-label {
+  font-size: 10px;
+}
+
+.kpi-row-3 .kpi-val {
+  font-size: 18px;
+  margin: 4px 0 2px;
+}
+
+.kpi-row-3 .kpi-sub {
+  font-size: 10px;
+}
+
+/* ===== Two-col grid ===== */
+.two-col-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.two-col-grid .section-title {
+  padding-top: 0;
+}
+
+.two-col-grid .card {
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .two-col-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== Status badges ===== */
+.sbadge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: 'Sora', sans-serif;
+  letter-spacing: 0.3px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sbadge.llamada     { background: var(--blueD);              color: var(--blueT); }
+.sbadge.negociacion { background: var(--amberD);             color: var(--amberT); }
+.sbadge.cotizacion  { background: var(--purpleD);            color: var(--purpleT); }
+.sbadge.cobrado     { background: var(--greenD);             color: var(--greenT); }
+.sbadge.contrato    { background: var(--accentB);            color: var(--accent); }
+.sbadge.ejecucion   { background: rgba(14,165,176,0.12);    color: #40d4de; }
+.sbadge.cobranza    { background: rgba(13,122,85,0.15);     color: #34d399; }
+.sbadge.perdido     { background: var(--redD);               color: var(--redT); }
+
+/* ===== Medal cards ===== */
+.medal-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.medal-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--rL);
+  padding: 12px;
+}
+
+.medal-card.rank-1 { border-color: rgba(240,169,58,0.28); }
+.medal-card.rank-2 { border-color: rgba(156,155,146,0.25); }
+.medal-card.rank-3 { border-color: rgba(201,124,20,0.22); }
+
+.medal-num {
+  font-family: 'Sora', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.medal-num.rank-1 { color: #f0a93a; }
+.medal-num.rank-2 { color: #9c9b92; }
+.medal-num.rank-3 { color: #c97c14; }
+
+.medal-amount-label {
+  font-size: 9px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-family: 'Sora', sans-serif;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+.medal-amount {
+  font-family: 'DM Mono', monospace;
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 6px;
+  letter-spacing: -0.3px;
+}
+
+.medal-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text2);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===== Campaign table rows ===== */
+.ctable-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.ctable-row:first-child { padding-top: 0; }
+.ctable-row:last-child  { border-bottom: none; padding-bottom: 0; }
+
+.ctable-icon {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.ctable-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ctable-amount {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--text2);
+  flex-shrink: 0;
+}
+
+/* ===== Projection chart ===== */
+.proj-placeholder,
+.tl-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  color: var(--text3);
+  font-size: 12px;
+  font-family: 'DM Mono', monospace;
+}
+
+.proj-legend {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.proj-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.proj-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.proj-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 110px;
+  padding-bottom: 28px;
+  position: relative;
+}
+
+.proj-col {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  position: relative;
+}
+
+.proj-bar-stack {
+  display: flex;
+  flex-direction: column-reverse;
+  border-radius: 4px 4px 0 0;
+  overflow: hidden;
+  min-height: 2px;
+}
+
+.proj-lbl {
+  position: absolute;
+  bottom: -22px;
+  left: 0;
+  right: 0;
+  font-size: 10px;
+  color: var(--text3);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ===== Payment calendar timeline ===== */
+.timeline {
+  display: flex;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  scrollbar-width: none;
+  gap: 0;
+}
+
+.timeline::-webkit-scrollbar { display: none; }
+
+.tl-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.tl-connector {
+  flex: 1;
+  min-width: 16px;
+  height: 2px;
+  background: var(--bg5);
+  margin-top: 19px;
+  flex-shrink: 0;
+}
+
+.tl-dot {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--bg4);
+  border: 2px solid var(--borderM);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.tl-month {
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  text-align: center;
+}
+
+.tl-amount {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--greenT);
+  margin-top: 3px;
+  text-align: center;
+}
+
+/* ===== Talent selector upgrade ===== */
+.talent-selector {
+  padding: 0 0 4px;
+}
+
+/* ===== KPI val: Sora for count display ===== */
+.kpi-count-big {
+  font-family: 'Sora', sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -1px;
+  line-height: 1;
 }
