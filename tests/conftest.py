@@ -504,3 +504,151 @@ def mock_pipedrive_transport():
         return httpx.Response(404, json={"success": False, "error": f"unmocked path: {path}"})
 
     return httpx.MockTransport(handler)
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 — Trello fixtures
+# ---------------------------------------------------------------------------
+
+# Minimal card payloads matching the fields requested by get_list_cards:
+# fields=id,name,due,desc
+TRELLO_CARD_EJECUCION = {
+    "id": "card-ejecucion-001",
+    "name": "Campaña Talento Uno — Contrato",
+    "due": "2026-08-15T12:00:00.000Z",
+    "desc": "[seg:deal_id=1001]",
+}
+
+TRELLO_CARD_COBRANZA = {
+    "id": "card-cobranza-001",
+    "name": "Campaña Talento Dos — Cobrar",
+    "due": None,
+    "desc": "[seg:deal_id=1002]",
+}
+
+TRELLO_CARD_CERRADO = {
+    "id": "card-cerrado-001",
+    "name": "Campaña Sin Talento — Finalizado",
+    "due": "2026-07-01T12:00:00.000Z",
+    "desc": "[seg:deal_id=1003]",
+}
+
+# Card in Otros pendientes (list_id 6996256c42ccdae7f69e4814) — must be ignored
+TRELLO_CARD_OTROS = {
+    "id": "card-otros-001",
+    "name": "Pendiente ignorado",
+    "due": None,
+    "desc": "",
+}
+
+# Created-card response shape (Trello POST /cards response)
+TRELLO_CREATED_CARD = {
+    "id": "card-new-001",
+    "name": "New Card",
+    "idList": "69312ac640ae158381706ff8",
+    "due": None,
+    "desc": "",
+}
+
+
+@pytest.fixture()
+def mock_trello_transport():
+    """httpx.MockTransport serving recorded Trello API JSON for list cards and card creation.
+
+    Mirrors mock_pipedrive_transport pattern. Handler matches:
+    - GET /lists/{id}/cards → card list for that list (key/token query params ignored)
+    - POST /cards → created-card dict
+
+    Six active lists return their respective sample cards; Otros pendientes
+    returns its card (the sync job must filter it via LIST_STATE_MAP).
+    """
+    list_cards: dict[str, list[dict]] = {
+        "69312ac640ae158381706ff8": [TRELLO_CARD_EJECUCION],   # Contrato
+        "69312acb534b0e80508bf4e5": [],                        # Firmar contrato todos (empty)
+        "69312ad08fe346b82da12e1d": [],                        # Enviar factura (empty)
+        "69312ad63829ef3ac9967d1a": [TRELLO_CARD_COBRANZA],   # Cobrar
+        "69312adeac51905b84f53c35": [],                        # Enviar encuesta (empty)
+        "69d8336e46709e935f4307fe": [TRELLO_CARD_CERRADO],    # Finalizados
+        "6996256c42ccdae7f69e4814": [TRELLO_CARD_OTROS],      # Otros pendientes (ignored)
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        # key and token query params are intentionally ignored (test credentials)
+
+        # GET /lists/{list_id}/cards
+        if "/lists/" in path and path.endswith("/cards"):
+            list_id = path.split("/lists/")[1].split("/")[0]
+            cards = list_cards.get(list_id, [])
+            return httpx.Response(200, json=cards)
+
+        # POST /cards
+        if path == "/cards" or path.endswith("/cards"):
+            if request.method == "POST":
+                return httpx.Response(200, json=TRELLO_CREATED_CARD)
+
+        return httpx.Response(404, json={"error": f"unmocked Trello path: {path}"})
+
+    return httpx.MockTransport(handler)
+
+
+@pytest.fixture()
+def seed_trello_cards(db_session, seed_deals):
+    """Create TrelloCard rows linked to seed_deals for service-layer tests.
+
+    Mirrors seed_leads pattern. Three cards:
+    - card_ejecucion: linked to deal_open (ejecucion state)
+    - card_cobranza: linked to deal_sin_cotizar (cobranza state)
+    - card_cerrado: linked to deal_sin_talento (cerrado state)
+
+    deal_lost is intentionally NOT linked to any card (for no-duplicate tests).
+    """
+    from datetime import date
+
+    from app.models import TrelloCard
+
+    deal_open = seed_deals["deal_open"]
+    deal_sin_cotizar = seed_deals["deal_sin_cotizar"]
+    deal_sin_talento = seed_deals["deal_sin_talento"]
+
+    card_ejecucion = TrelloCard(
+        trello_card_id="card-ejecucion-001",
+        name="Campaña Talento Uno — Contrato",
+        list_id="69312ac640ae158381706ff8",
+        list_name="Contrato",
+        list_state="ejecucion",
+        deal_id=deal_open.id,
+        pipedrive_deal_id_desc=deal_open.pipedrive_id,
+        collection_date=date(2026, 8, 15),
+    )
+    card_cobranza = TrelloCard(
+        trello_card_id="card-cobranza-001",
+        name="Campaña Talento Dos — Cobrar",
+        list_id="69312ad63829ef3ac9967d1a",
+        list_name="Cobrar",
+        list_state="cobranza",
+        deal_id=deal_sin_cotizar.id,
+        pipedrive_deal_id_desc=deal_sin_cotizar.pipedrive_id,
+        collection_date=None,
+    )
+    card_cerrado = TrelloCard(
+        trello_card_id="card-cerrado-001",
+        name="Campaña Sin Talento — Finalizado",
+        list_id="69d8336e46709e935f4307fe",
+        list_name="Finalizados",
+        list_state="cerrado",
+        deal_id=deal_sin_talento.id,
+        pipedrive_deal_id_desc=deal_sin_talento.pipedrive_id,
+        collection_date=date(2026, 7, 1),
+    )
+
+    db_session.add_all([card_ejecucion, card_cobranza, card_cerrado])
+    db_session.commit()
+    for card in (card_ejecucion, card_cobranza, card_cerrado):
+        db_session.refresh(card)
+
+    return {
+        "card_ejecucion": card_ejecucion,
+        "card_cobranza": card_cobranza,
+        "card_cerrado": card_cerrado,
+    }
