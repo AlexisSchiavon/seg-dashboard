@@ -45,10 +45,10 @@ def sync_pipedrive(db: Session) -> SyncLog:
     Returns the SyncLog row for this sync run (or the existing in-flight
     SyncLog if a concurrent sync is already running and not stale).
     """
-    # 1. Concurrency guard (Pitfall 5).
+    # 1. Concurrency guard — filter by source so Trello/Sheets syncs don't block Pipedrive.
     running = (
         db.query(SyncLog)
-        .filter(SyncLog.status == "running")
+        .filter(SyncLog.source == "pipedrive", SyncLog.status == "running")
         .order_by(SyncLog.started_at.desc())
         .first()
     )
@@ -344,6 +344,7 @@ def sync_trello(db: Session) -> SyncLog:
     db.commit()
     db.refresh(sync_log)
 
+    client = None  # CR-02: initialize before try so finally can safely close
     try:
         client = trello._client()
 
@@ -431,8 +432,12 @@ def sync_trello(db: Session) -> SyncLog:
                 response.get("due"), won_deal
             )
 
+            card_id_new = response.get("id")
+            if card_id_new is None:  # WR-02: malformed Trello response, skip this card
+                continue
+
             new_card = TrelloCard(
-                trello_card_id=response["id"],
+                trello_card_id=card_id_new,
                 name=won_deal.title,
                 list_id=trello.CONTRATO_LIST_ID,
                 list_name="Contrato",
@@ -463,6 +468,9 @@ def sync_trello(db: Session) -> SyncLog:
         sync_log.error_message = str(exc)  # str() only — never repr(client/response)
         db.commit()
         db.refresh(sync_log)
+    finally:
+        if client is not None:
+            client.close()  # CR-02: always release httpx connection pool
 
     return sync_log
 
