@@ -318,3 +318,84 @@ def test_funnel_bottleneck_detected_with_large_dataset(auth_client, db_session, 
     assert "stage_b" in bn
     assert "conversion_pct" in bn
     assert 0.0 <= bn["conversion_pct"] <= 100.0
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 — DASH-02: TalentDetail extended with income_projection / payment_calendar / deals
+# ---------------------------------------------------------------------------
+
+
+def test_talent_detail_includes_income_projection(auth_client, db_session, seed_trello_cards, seed_deals):
+    """GET /dashboard/talents/{id} response includes income_projection (4 entries),
+    payment_calendar (4 entries), and deals fields after Phase 4 extension.
+
+    Arrange: seed_trello_cards links 3 TrelloCards to deals for talent_a and talent_b.
+    Act: GET /dashboard/talents/{talent_a.id}.
+    Assert:
+      - Response is 200.
+      - income_projection is a list of exactly 4 dicts with month/cobrado/proyeccion/pendiente.
+      - payment_calendar is a list of exactly 4 dicts with month/amount.
+      - deals is a list of dicts each with title/amount/list_state/trello_card_id.
+    """
+    import re
+
+    talent_a = seed_deals["deal_open"]  # talent_id via deal_open.talent_id
+    talent_a_id = talent_a.talent_id
+
+    response = auth_client.get(f"/dashboard/talents/{talent_a_id}")
+    assert response.status_code == 200
+    data = response.json()
+
+    # ── income_projection ─────────────────────────────────────────────────────
+    assert "income_projection" in data, "Response must include income_projection field"
+    proj = data["income_projection"]
+    assert proj is not None, "income_projection must not be null for a talent with Trello data"
+    assert isinstance(proj, list)
+    assert len(proj) == 4, f"income_projection must have 4 entries, got {len(proj)}"
+
+    month_re = re.compile(r"^[A-Z][a-z]{2} \d{4}$")
+    for entry in proj:
+        assert "month" in entry and "cobrado" in entry and "proyeccion" in entry and "pendiente" in entry
+        assert month_re.match(entry["month"]), f"Bad month label: {entry['month']!r}"
+
+    # ── payment_calendar ──────────────────────────────────────────────────────
+    assert "payment_calendar" in data, "Response must include payment_calendar field"
+    cal = data["payment_calendar"]
+    assert cal is not None
+    assert isinstance(cal, list)
+    assert len(cal) == 4, f"payment_calendar must have 4 entries, got {len(cal)}"
+    for entry in cal:
+        assert "month" in entry and "amount" in entry
+
+    # ── deals ─────────────────────────────────────────────────────────────────
+    assert "deals" in data, "Response must include deals field"
+    deals = data["deals"]
+    assert deals is not None
+    assert isinstance(deals, list)
+    assert len(deals) >= 1, "talent_a should have at least one deal"
+    for row in deals:
+        assert "title" in row
+        assert "amount" in row
+        assert "list_state" in row
+        assert "trello_card_id" in row
+
+
+def test_talent_detail_no_trello_data_returns_null_fields(auth_client, db_session, seed_deals):
+    """GET /dashboard/talents/{id} for a talent with no TrelloCards returns 200 with
+    income_projection=None, payment_calendar=None, deals=[] or None (backward compatible).
+
+    Arrange: seed_deals provides deals but NO seed_trello_cards fixture.
+    Act: GET /dashboard/talents/{talent_b.id}.
+    Assert: 200 response; income_projection and payment_calendar are present (may be None or
+    a list of zeroed entries); no crash.
+    """
+    talent_b_id = seed_deals["deal_sin_cotizar"].talent_id
+
+    response = auth_client.get(f"/dashboard/talents/{talent_b_id}")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Fields must be present in the response (may be null or empty)
+    assert "income_projection" in data
+    assert "payment_calendar" in data
+    assert "deals" in data
