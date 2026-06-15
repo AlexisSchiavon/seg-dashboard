@@ -16,9 +16,12 @@ from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.models import Deal, SyncLog, Talent
 from app.schemas.dashboard import (
+    CalendarEntry,
     DashboardSummary,
+    DealRow,
     FunnelOverview,
     KpiTile,
+    MonthProjection,
     RankingRow,
     ActivityItem,
     TalentDetail,
@@ -30,6 +33,7 @@ from app.schemas.dashboard import (
 from app.services import kpis as kpi_service
 from app.services import funnel as funnel_service
 from app.services import leads as leads_service
+from app.services import trello_service
 
 router = APIRouter(
     prefix="/dashboard",
@@ -154,6 +158,15 @@ def get_talent_detail(talent_id: int, db: Session = Depends(get_db)):
     lost_opps = [LostOpportunity(**o) for o in detail["lost_opportunities"]]
     brand_cats = [BrandCategorySlice(**b) for b in detail["brand_categories"]]
 
+    # Phase 4 — DASH-02: income projection, payment calendar, individual deals
+    proj_dicts = trello_service.income_projection(db, talent_id)
+    cal_dicts = trello_service.payment_calendar(db, talent_id)
+    deal_dicts = trello_service.deals_for_talent(db, talent_id)
+
+    income_proj = [MonthProjection(**p) for p in proj_dicts] if proj_dicts else None
+    payment_cal = [CalendarEntry(**c) for c in cal_dicts] if cal_dicts else None
+    deals = [DealRow(**d) for d in deal_dicts] if deal_dicts else None
+
     return TalentDetail(
         talent_id=detail["talent_id"],
         name=detail["name"],
@@ -163,4 +176,7 @@ def get_talent_detail(talent_id: int, db: Session = Depends(get_db)):
         lost_summary=lost_summary,
         lost_opportunities=lost_opps,
         brand_categories=brand_cats,
+        income_projection=income_proj,
+        payment_calendar=payment_cal,
+        deals=deals,
     )
