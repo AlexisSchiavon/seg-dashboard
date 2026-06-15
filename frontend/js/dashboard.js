@@ -244,6 +244,22 @@ async function triggerSync() {
 }
 
 // ============================================================
+// Leads overview KPI tiles (D-37 / DASH-04)
+// ============================================================
+
+/**
+ * Render the "Leads totales" and "Calificados" tiles on the Resumen tab.
+ * Uses textContent (not innerHTML) — values are integers, no raw Sheet strings.
+ * T-03C-03 mitigated: textContent prevents XSS on these tiles.
+ */
+function renderLeadsOverviewKpis(leadsTotales, calificados) {
+  const totalesEl = document.getElementById("leads-totales-val");
+  const calificadosEl = document.getElementById("calificados-val");
+  if (totalesEl) totalesEl.textContent = leadsTotales;
+  if (calificadosEl) calificadosEl.textContent = calificados;
+}
+
+// ============================================================
 // KPI rendering
 // ============================================================
 
@@ -413,6 +429,9 @@ async function loadSummary() {
   }
 
   const data = await res.json();
+
+  // Leads tiles populate on both branches — leads sync independently of Pipedrive deals.
+  renderLeadsOverviewKpis(data.leads_totales ?? 0, data.calificados ?? 0);
 
   if (!data.has_data) {
     // Show empty state in KPI grid area
