@@ -11,10 +11,12 @@ Provides:
 Security (T-04-04): _extract_deal_id_from_desc accepts ONLY digits via the
 bracket pattern. Non-numeric text yields None and never reaches integer lookup.
 """
+import calendar
 import re
 import unicodedata
 from datetime import date
 from difflib import SequenceMatcher
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -141,6 +143,164 @@ def _make_card_desc(pipedrive_deal_id: int, extra_desc: str = "") -> str:
     if extra_desc:
         return f"{header}\n\n{extra_desc}"
     return header
+
+
+def _month_label(d: date) -> str:
+    """Return a 'Mon YYYY' label for a date, e.g. 'Jun 2026'.
+
+    Uses calendar.month_abbr (English 3-letter abbreviation) to match
+    the frontend format contract (Pitfall 3 — English abbr, not locale-dependent).
+    """
+    return f"{calendar.month_abbr[d.month]} {d.year}"
+
+
+def _sliding_window_months(anchor: date) -> list[date]:
+    """Return the four first-of-month dates for the 4-month sliding window.
+
+    Window: [anchor - 1 month, anchor, anchor + 1 month, anchor + 2 months].
+    Uses divmod month arithmetic to handle year overflow correctly.
+
+    Args:
+        anchor: The reference date (today or a test date).
+
+    Returns:
+        List of 4 date objects, each set to the 1st of the respective month.
+    """
+    result: list[date] = []
+    for delta in (-1, 0, 1, 2):
+        total_months = anchor.month + delta
+        year_offset, month_0based = divmod(total_months - 1, 12)
+        month = month_0based + 1
+        year = anchor.year + year_offset
+        result.append(date(year, month, 1))
+    return result
+
+
+def income_projection(db: Session, talent_id: int) -> list[dict[str, Any]]:
+    """Return 4-month sliding revenue projection for a talent.
+
+    Each entry: {month: str, cobrado: float, proyeccion: float, pendiente: float}
+    where:
+      - cobrado     = sum of deal.value for cards with list_state='cerrado'
+      - proyeccion  = sum of deal.value for cards with list_state='ejecucion'
+      - pendiente   = sum of deal.value for cards with list_state='cobranza'
+
+    Cards are grouped by their resolved collection_date month. Cards whose
+    resolved month falls outside the 4-month window are excluded.
+
+    Month labels use English 3-letter abbreviation + year (e.g. 'Jun 2026').
+    Amount is deal.value (venta_total per D-47, NOT 70% commission).
+
+    Security: talent_id is an int coerced by FastAPI at the router boundary.
+    """
+    anchor = date.today()
+    window = _sliding_window_months(anchor)
+    window_labels = [_month_label(d) for d in window]
+
+    # Build result dict keyed by label (preserves insertion order in Python 3.7+)
+    result: dict[str, dict[str, Any]] = {
+        label: {"month": label, "cobrado": 0.0, "proyeccion": 0.0, "pendiente": 0.0}
+        for label in window_labels
+    }
+
+    # Query TrelloCard JOIN Deal, filtered by talent
+    rows = (
+        db.query(TrelloCard, Deal)
+        .join(Deal, TrelloCard.deal_id == Deal.id)
+        .filter(Deal.talent_id == talent_id)
+        .all()
+    )
+
+    for card, deal in rows:
+        # Resolve collection month for this card
+        resolved_date = card.collection_date or resolve_collection_date(None, deal)
+        first_of_month = date(resolved_date.year, resolved_date.month, 1)
+        label = _month_label(first_of_month)
+
+        if label not in result:
+            continue  # Outside the 4-month window — excluded
+
+        value = deal.value or 0.0
+        state = card.list_state
+        if state == "cerrado":
+            result[label]["cobrado"] += value
+        elif state == "ejecucion":
+            result[label]["proyeccion"] += value
+        elif state == "cobranza":
+            result[label]["pendiente"] += value
+
+    return list(result.values())
+
+
+def payment_calendar(db: Session, talent_id: int) -> list[dict[str, Any]]:
+    """Return 4-month payment calendar for a talent.
+
+    Each entry: {month: str, amount: float} where amount is the total expected
+    collection for that month (cobrado + proyeccion + pendiente per UI-SPEC).
+
+    Returns the same 4-month window as income_projection.
+    """
+    proj = income_projection(db, talent_id)
+    return [
+        {
+            "month": entry["month"],
+            "amount": entry["cobrado"] + entry["proyeccion"] + entry["pendiente"],
+        }
+        for entry in proj
+    ]
+
+
+def deals_for_talent(db: Session, talent_id: int) -> list[dict[str, Any]]:
+    """Return individual deal rows for a talent, sorted by amount descending.
+
+    Each entry: {title: str, amount: float, list_state: str, trello_card_id: str|None}
+
+    - Active deals linked via TrelloCard use the card's list_state
+      (ejecucion/cobranza/cerrado).
+    - Lost deals (status='lost', no TrelloCard) are included as list_state='perdido'.
+    - Deals with no Trello card and not lost are included as list_state='ejecucion'
+      (default — they are known deals in the pipeline).
+
+    Sorted by amount descending so the frontend top-3 slice works correctly.
+
+    Security (T-04-12): returns only scalar values; no raw ORM objects exposed.
+    """
+    rows: list[dict[str, Any]] = []
+
+    # 1. Deals linked to TrelloCards (ejecucion/cobranza/cerrado)
+    linked = (
+        db.query(TrelloCard, Deal)
+        .join(Deal, TrelloCard.deal_id == Deal.id)
+        .filter(Deal.talent_id == talent_id)
+        .all()
+    )
+    linked_deal_ids: set[int] = set()
+    for card, deal in linked:
+        linked_deal_ids.add(deal.id)
+        rows.append({
+            "title": deal.title,
+            "amount": deal.value or 0.0,
+            "list_state": card.list_state,
+            "trello_card_id": card.trello_card_id,
+        })
+
+    # 2. All deals for the talent — add unlinked ones
+    all_deals = db.query(Deal).filter(Deal.talent_id == talent_id).all()
+    for deal in all_deals:
+        if deal.id in linked_deal_ids:
+            continue
+        # Lost deals show as perdido; others default to their pipeline state
+        list_state = "perdido" if deal.status == "lost" else "ejecucion"
+        rows.append({
+            "title": deal.title,
+            "amount": deal.value or 0.0,
+            "list_state": list_state,
+            "trello_card_id": None,
+        })
+
+    # Sort by amount descending
+    rows.sort(key=lambda r: r["amount"], reverse=True)
+    return rows
 
 
 def resolve_deal_id(db: Session, card_desc: str | None, card_name: str) -> int | None:
