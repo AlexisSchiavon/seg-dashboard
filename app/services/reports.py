@@ -180,6 +180,9 @@ def _call_claude(payload: dict) -> dict:
         ],
     )
 
+    # Guard: ensure Claude returned at least one text block (WR-01 defense)
+    if not response.content or response.content[0].type != "text":
+        raise ValueError("Claude returned non-JSON")
     raw_text = response.content[0].text.strip()
 
     # Strip markdown fences if Claude wraps the JSON (Pitfall 2)
