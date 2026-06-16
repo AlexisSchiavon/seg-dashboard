@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import String, Boolean, Float, Integer, ForeignKey, DateTime, Date, func
+from sqlalchemy import String, Boolean, Float, Integer, ForeignKey, DateTime, Date, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -116,6 +116,22 @@ class Lead(Base):
     convertido_a_prospecto: Mapped[bool] = mapped_column(Boolean, default=False)
 
     talent: Mapped["Talent | None"] = relationship("Talent", lazy="select")
+
+
+class Report(Base):
+    __tablename__ = "reports"
+    __table_args__ = (
+        UniqueConstraint("talent_id", "month", name="uq_report_talent_month"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    talent_id: Mapped[int] = mapped_column(ForeignKey("talents.id"), index=True)
+    month: Mapped[str] = mapped_column(String, index=True)  # "YYYY-MM"
+    generated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    file_path: Mapped[str] = mapped_column(String)  # reports/{talent_id}/{YYYY-MM}.pdf
+    file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+
+    talent: Mapped["Talent"] = relationship("Talent", lazy="select")
 
 
 class TrelloCard(Base):
