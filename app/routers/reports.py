@@ -14,6 +14,7 @@ Security notes:
     500 stack trace when DB row points at a missing file (T-stale-path defense).
 """
 import os
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
@@ -139,10 +140,22 @@ def download_report(report_id: int, db: Session = Depends(get_db)):
     talent_name = talent.name if talent is not None else "Sin-talento"
     # Replace spaces with hyphens for a clean filename
     safe_name = talent_name.replace(" ", "-")
-    filename = f"reporte-{safe_name}-{report.month}.pdf"
+
+    # CR-02: RFC 5987 / RFC 6266 compliant Content-Disposition.
+    # filename= is an ASCII fallback (month only) for old clients.
+    # filename*= uses UTF-8 percent-encoding for non-ASCII talent names
+    # (e.g. "María-López-2026-05.pdf") so Safari/Firefox preserve the full name.
+    filename_ascii = f"reporte-{report.month}.pdf"
+    filename_utf8 = f"reporte-{safe_name}-{report.month}.pdf"
+    encoded = quote(filename_utf8, safe="-.")
 
     return FileResponse(
         path=report.file_path,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{filename_ascii}"; '
+                f"filename*=UTF-8''{encoded}"
+            )
+        },
     )
