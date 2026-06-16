@@ -165,7 +165,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 05-02-PLAN.md — Core generation slice: services/reports.py (payload→Claude→WeasyPrint→upsert), light-theme Jinja2 PDF template, talents/months/generate endpoints, main.py wiring (REPORT-01)
+- [x] 05-02-PLAN.md — Core generation slice: services/reports.py (payload→Claude→WeasyPrint→upsert), light-theme Jinja2 PDF template, talents/months/generate endpoints, main.py wiring (REPORT-01)
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -217,6 +217,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Pipedrive Integration & Core Dashboard | 3/3 | Complete   | 2026-06-14 |
 | 3. Google Sheets Leads Integration | 3/3 | Complete   | 2026-06-15 |
 | 4. Trello Integration & Collection Automation | 4/4 | Complete   | 2026-06-15 |
-| 5. AI-Generated PDF Reports | 1/4 | In Progress|  |
+| 5. AI-Generated PDF Reports | 2/4 | In Progress|  |
 | 6. Embedded Natural-Language Agent | 0/TBD | Not started | - |
 | 7. Docker & EasyPanel Deployment | 0/TBD | Not started | - |
