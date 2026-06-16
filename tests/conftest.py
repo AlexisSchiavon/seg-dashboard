@@ -26,7 +26,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, engine, get_db
 from app.main import app
-from app.models import Deal, DealStageEvent, Lead, Talent, TalentProduct, User
+from app.models import Deal, DealStageEvent, Lead, Report, Talent, TalentProduct, User
 from app.auth.security import get_password_hash
 from app.config import settings
 
@@ -652,3 +652,53 @@ def seed_trello_cards(db_session, seed_deals):
         "card_cobranza": card_cobranza,
         "card_cerrado": card_cerrado,
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — Report mock fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def mock_anthropic(monkeypatch):
+    """Return a mock Anthropic client that returns a fixed narrative JSON response.
+
+    Monkeypatches app.services.reports.anthropic.Anthropic so no real API
+    calls are made. The fake response matches the 3-section JSON contract
+    expected by _call_claude() in app/services/reports.py.
+    """
+    from unittest.mock import MagicMock
+
+    fake_response = MagicMock()
+    fake_response.content = [MagicMock(text=(
+        '{"resumen_ejecutivo":"Resumen de prueba.",'
+        '"deals_destacados":"Deals de prueba.",'
+        '"recomendacion":"Recomendacion de prueba."}'
+    ))]
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = fake_response
+    monkeypatch.setattr("app.services.reports.anthropic.Anthropic", lambda **kwargs: mock_client)
+    return mock_client
+
+
+@pytest.fixture()
+def mock_weasyprint(monkeypatch, tmp_path):
+    """Replace weasyprint.HTML with a stub that writes a minimal PDF marker.
+
+    Monkeypatches app.services.reports.HTML so no Pango/Cairo system libs
+    are required locally. The fake PDF write creates a minimal %PDF-1.4 marker
+    at the given path, satisfying file_size_bytes > 0 assertions.
+    """
+    from unittest.mock import MagicMock
+
+    def fake_write_pdf(path_or_none=None):
+        if path_or_none:
+            os.makedirs(os.path.dirname(path_or_none), exist_ok=True)
+            with open(path_or_none, "wb") as f:
+                f.write(b"%PDF-1.4")
+        return b"%PDF-1.4"
+
+    mock_html_cls = MagicMock()
+    mock_html_cls.return_value.write_pdf = fake_write_pdf
+    monkeypatch.setattr("app.services.reports.HTML", mock_html_cls)
+    return mock_html_cls
