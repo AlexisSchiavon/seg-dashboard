@@ -22,7 +22,7 @@ from datetime import datetime
 
 import anthropic
 from jinja2 import Environment, FileSystemLoader
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -83,37 +83,76 @@ def available_months(db: Session, talent_id: int) -> list[str]:
 def _build_payload(db: Session, talent: Talent, month: str) -> dict:
     """Assemble the Python-computed figures dict to pass to Claude.
 
-    ALL numeric values in this dict come from the kpis/funnel/leads service layer.
+    ALL numeric values in this dict come from direct DB queries filtered by (talent_id, month).
+    The `month` parameter (YYYY-MM) is used as a LIKE prefix filter on Deal.add_time so that
+    all KPI, funnel, and top-deal figures represent the chosen month only (CR-01 fix).
+
+    Leads (from Google Sheets) do not have a deal add_time — they are reported all-time
+    and the payload keys are named accordingly to avoid confusion.
+
     No ORM instances are placed in the returned dict — it must be JSON-serializable.
     """
-    # KPIs from kpi_service.talent_detail
-    try:
-        detail = kpi_service.talent_detail(db, talent.id)
-    except ValueError:
-        detail = {
-            "kpis": [],
-            "funnel": [],
-            "lost_summary": [],
-            "lost_opportunities": [],
-            "brand_categories": [],
+    month_prefix = f"{month}%"  # e.g. "2026-05%" for LIKE filtering on add_time
+
+    # KPIs — filtered by talent_id AND month via add_time LIKE prefix (CR-01)
+    pipeline_val = (
+        db.query(func.coalesce(func.sum(Deal.value), 0.0))
+        .filter(
+            Deal.talent_id == talent.id,
+            Deal.status == "open",
+            Deal.add_time.like(month_prefix),
+        )
+        .scalar()
+    ) or 0.0
+
+    won_row = db.query(
+        func.count(Deal.id),
+        func.coalesce(func.sum(Deal.value), 0.0),
+        func.coalesce(func.sum(Deal.commission_amount), 0.0),
+    ).filter(
+        Deal.talent_id == talent.id,
+        Deal.status == "won",
+        Deal.add_time.like(month_prefix),
+    ).one()
+    cerrados_count = won_row[0]
+    cerrados_valor = won_row[1] or 0.0
+    comision = won_row[2] or 0.0
+
+    # Funnel stages — per-talent, open deals, filtered by month (CR-01)
+    funnel_rows = (
+        db.query(
+            Deal.stage_name,
+            func.count(Deal.id),
+            func.coalesce(func.sum(Deal.value), 0.0),
+        )
+        .filter(
+            Deal.status == "open",
+            Deal.talent_id == talent.id,
+            Deal.add_time.like(month_prefix),
+        )
+        .group_by(Deal.stage_name)
+        .all()
+    )
+    stage_map: dict[str, tuple[int, float]] = {
+        row[0]: (row[1], float(row[2])) for row in funnel_rows
+    }
+    funnel_stages = [
+        {
+            "stage": stage,
+            "count": int(stage_map.get(stage, (0, 0.0))[0]),
+            "amount": float(stage_map.get(stage, (0, 0.0))[1]),
         }
+        for stage in funnel_service.STAGES
+    ]
 
-    # Extract scalar KPIs from the kpis list by label
-    kpis_list = detail.get("kpis", [])
-    kpi_by_label: dict[str, dict] = {k["label"]: k for k in kpis_list}
-
-    pipeline_val = kpi_by_label.get("Pipeline", {}).get("value", 0.0)
-    cerrados_count = kpi_by_label.get("Cerrados", {}).get("count", 0)
-    cerrados_valor = kpi_by_label.get("Cerrados", {}).get("value", 0.0)
-    comision = kpi_by_label.get("Comisión", {}).get("value", 0.0)
-
-    # Funnel stages (list of {stage, count, amount} dicts — already plain scalars)
-    funnel_stages = funnel_service.talent_funnel(db, talent.id)
-
-    # Top 3 open deals by value for this talent
+    # Top 3 open deals by value for this talent in the requested month (CR-01)
     top_deals_rows = (
         db.query(Deal.title, Deal.value, Deal.stage_name)
-        .filter(Deal.talent_id == talent.id, Deal.status == "open")
+        .filter(
+            Deal.talent_id == talent.id,
+            Deal.status == "open",
+            Deal.add_time.like(month_prefix),
+        )
         .order_by(desc(Deal.value))
         .limit(3)
         .all()
@@ -123,12 +162,12 @@ def _build_payload(db: Session, talent: Talent, month: str) -> dict:
         for row in top_deals_rows
     ]
 
-    # Global leads counts
+    # Global leads counts — all-time (leads have no deal add_time equivalent)
     leads_summary = leads_service.leads_summary(db)
     leads_totales = leads_summary["leads_totales"]
     leads_calificados = leads_summary["calificados"]
 
-    # Per-talent leads count
+    # Per-talent leads count — all-time
     leads_by_talent = leads_service.leads_by_talent(db)
     talent_leads = next(
         (row for row in leads_by_talent if row.get("talent_id") == talent.id),
@@ -144,14 +183,7 @@ def _build_payload(db: Session, talent: Talent, month: str) -> dict:
             "cerrados_valor": float(cerrados_valor),
             "comision": float(comision),
         },
-        "funnel": [
-            {
-                "stage": s["stage"],
-                "count": int(s["count"]),
-                "amount": float(s["amount"]),
-            }
-            for s in funnel_stages
-        ],
+        "funnel": funnel_stages,
         "top_deals": top_deals,
         "leads_totales": int(leads_totales),
         "leads_calificados": int(leads_calificados),
