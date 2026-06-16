@@ -1,29 +1,94 @@
-"""Wave 0 — Failing test stubs for Phase 5 AI-Generated PDF Reports.
-
-These stubs define the test contract for REPORT-01, REPORT-02, and DASH-05.
-They all fail intentionally until the service layer (05-02) and router (05-03)
-are implemented. The pattern mirrors tests/test_leads.py.
+"""Wave 1 (05-02) — Tests for Phase 5 AI-Generated PDF Reports service layer and generate endpoint.
 
 Test IDs match the Per-Task Verification Map in 05-VALIDATION.md:
   5-02-01 → test_available_months
   5-02-02 → test_generate_report_payload
   5-02-03 → test_pdf_written_to_disk
   5-02-04 → test_generate_endpoint
-  5-03-01 → test_list_reports
-  5-03-02 → test_download_report
-  5-04-01 → test_reportes_tab_exists (DASH-05 smoke)
+  5-03-01 → test_list_reports       (Wave 2 stubs — 05-03)
+  5-03-02 → test_download_report    (Wave 2 stubs — 05-03)
+  5-04-01 → test_reportes_tab_exists (Wave 3 stubs — 05-04)
 """
+import json
 import pytest
+
+from app.models import Deal, Talent
 
 
 class TestAvailableMonths:
     """5-02-01 — REPORT-01: available_months() returns sorted YYYY-MM list."""
 
     def test_available_months_returns_list(self, db_session, seed_deals):
-        pytest.fail("not implemented — Wave 1 (05-02)")
+        """Returns distinct YYYY-MM strings from Deal.add_time for a talent, descending."""
+        from app.services import reports as reports_service
+
+        talent_a = seed_deals["deal_open"].talent_id
+        months = reports_service.available_months(db_session, talent_a)
+        assert isinstance(months, list)
+        # seed_deals has deal_open (add_time "2026-05-20T09:00:00Z" → "2026-05")
+        # and deal_lost (add_time "2026-05-15T09:00:00Z" → "2026-05") for talent_a
+        assert "2026-05" in months
 
     def test_available_months_empty_for_unknown_talent(self, db_session):
-        pytest.fail("not implemented — Wave 1 (05-02)")
+        """Returns empty list for talent ID with no deals."""
+        from app.services import reports as reports_service
+
+        result = reports_service.available_months(db_session, 999999)
+        assert result == []
+
+    def test_available_months_descending_order(self, db_session, seed_deals):
+        """Returned list is sorted descending."""
+        from app.services import reports as reports_service
+
+        # Add a second deal for talent_a with a different month
+        talent_a = seed_deals["deal_open"].talent_id
+        deal_older = Deal(
+            pipedrive_id=9001,
+            title="Old deal",
+            value=1000.0,
+            currency="MXN",
+            stage_id=1,
+            stage_name="Llamada",
+            status="open",
+            talent_id=talent_a,
+            commission_amount=700.0,
+            is_sin_cotizar=False,
+            update_time="2026-01-01T10:00:00Z",
+            add_time="2026-01-10T09:00:00Z",
+        )
+        db_session.add(deal_older)
+        db_session.commit()
+
+        months = reports_service.available_months(db_session, talent_a)
+        assert months == sorted(set(months), reverse=True)
+
+    def test_available_months_excludes_invalid_add_time(self, db_session, seed_deals):
+        """Excludes entries whose add_time[:7] does not match YYYY-MM."""
+        from app.services import reports as reports_service
+
+        talent_a = seed_deals["deal_open"].talent_id
+        # Add a deal with an invalid add_time
+        bad_deal = Deal(
+            pipedrive_id=9002,
+            title="Bad time deal",
+            value=1000.0,
+            currency="MXN",
+            stage_id=1,
+            stage_name="Llamada",
+            status="open",
+            talent_id=talent_a,
+            commission_amount=700.0,
+            is_sin_cotizar=False,
+            update_time="2026-01-01T10:00:00Z",
+            add_time=None,  # None should be excluded
+        )
+        db_session.add(bad_deal)
+        db_session.commit()
+
+        months = reports_service.available_months(db_session, talent_a)
+        # None add_time should not appear
+        assert None not in months
+        assert "" not in months
 
 
 class TestGenerateReportPayload:
@@ -35,11 +100,37 @@ class TestGenerateReportPayload:
 
     def test_payload_contains_python_figures(self, db_session, seed_deals,
                                               mock_anthropic, mock_weasyprint):
-        pytest.fail("not implemented — Wave 1 (05-02)")
+        """The payload passed to Claude contains only JSON-serializable Python scalars."""
+        from app.services import reports as reports_service
+
+        talent_id = seed_deals["deal_open"].talent_id
+        talent = db_session.get(Talent, talent_id)
+
+        payload = reports_service._build_payload(db_session, talent, "2026-05")
+        # Must be JSON-serializable (no ORM objects)
+        json_str = json.dumps(payload)
+        assert isinstance(json_str, str)
+        # Must contain expected top-level keys
+        assert "talent_name" in payload
+        assert "month" in payload
+        assert "kpis" in payload
+        assert "funnel" in payload
 
     def test_payload_does_not_ask_claude_to_compute_numbers(self, db_session, seed_deals,
                                                               mock_anthropic, mock_weasyprint):
-        pytest.fail("not implemented — Wave 1 (05-02)")
+        """The payload includes pre-computed numbers; Claude should only narrate."""
+        from app.services import reports as reports_service
+
+        talent_id = seed_deals["deal_open"].talent_id
+        talent = db_session.get(Talent, talent_id)
+
+        payload = reports_service._build_payload(db_session, talent, "2026-05")
+        kpis = payload["kpis"]
+        # pipeline, cerrados_count, cerrados_valor, comision should all be Python numbers
+        assert isinstance(kpis.get("pipeline"), (int, float))
+        assert isinstance(kpis.get("cerrados_count"), (int, float))
+        assert isinstance(kpis.get("cerrados_valor"), (int, float))
+        assert isinstance(kpis.get("comision"), (int, float))
 
 
 class TestPdfWrittenToDisk:
@@ -51,29 +142,88 @@ class TestPdfWrittenToDisk:
 
     def test_pdf_written_to_disk(self, db_session, seed_deals,
                                   mock_anthropic, mock_weasyprint):
-        pytest.fail("not implemented — Wave 1 (05-02)")
+        """generate_report writes a PDF and returns dict with file_size_bytes > 0."""
+        from app.services import reports as reports_service
+
+        talent_id = seed_deals["deal_open"].talent_id
+        result = reports_service.generate_report(db_session, talent_id, "2026-05")
+
+        assert isinstance(result, dict)
+        assert result["file_size_bytes"] > 0
+        assert "narrative" in result
+        assert "resumen_ejecutivo" in result["narrative"]
+        assert "deals_destacados" in result["narrative"]
+        assert "recomendacion" in result["narrative"]
 
     def test_pdf_path_uses_talent_id_not_name(self, db_session, seed_deals,
                                                mock_anthropic, mock_weasyprint):
-        pytest.fail("not implemented — Wave 1 (05-02)")
+        """File path uses str(talent.id) as slug — numeric only, no path separators."""
+        from app.services import reports as reports_service
+
+        talent_id = seed_deals["deal_open"].talent_id
+        result = reports_service.generate_report(db_session, talent_id, "2026-05")
+
+        # Path should be reports/{talent_id}/{month}.pdf
+        file_path = result["file_path"]
+        assert f"reports/{talent_id}/" in file_path
+        assert file_path.endswith(".pdf")
+        # Talent name (Talento Uno) should NOT appear in path
+        talent = db_session.get(Talent, talent_id)
+        assert talent.name not in file_path
 
 
 class TestGenerateEndpoint:
     """5-02-04 — REPORT-01: POST /reports/generate returns 200 with full ReportOut payload."""
 
     def test_generate_requires_auth(self, client):
-        pytest.fail("not implemented — Wave 1 (05-02)")
+        """Unauthenticated POST returns 401."""
+        response = client.post("/reports/generate", json={"talent_id": 1, "month": "2026-05"})
+        assert response.status_code == 401
 
     def test_generate_returns_200_with_auth(self, auth_client, seed_deals,
                                              mock_anthropic, mock_weasyprint):
-        pytest.fail("not implemented — Wave 1 (05-02)")
+        """Authenticated POST with valid talent_id + month returns 200."""
+        talent_id = seed_deals["deal_open"].talent_id
+        response = auth_client.post(
+            "/reports/generate",
+            json={"talent_id": talent_id, "month": "2026-05"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "narrative" in data
+        assert "resumen_ejecutivo" in data["narrative"]
 
     def test_generate_response_has_required_fields(self, auth_client, seed_deals,
                                                     mock_anthropic, mock_weasyprint):
-        pytest.fail("not implemented — Wave 1 (05-02)")
+        """Response includes all ReportOut fields."""
+        talent_id = seed_deals["deal_open"].talent_id
+        response = auth_client.post(
+            "/reports/generate",
+            json={"talent_id": talent_id, "month": "2026-05"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        required = {"id", "talent_id", "talent_name", "month",
+                    "generated_at", "file_size_bytes", "narrative"}
+        for field in required:
+            assert field in data, f"Missing field: {field}"
 
     def test_generate_invalid_month_returns_422(self, auth_client, seed_deals):
-        pytest.fail("not implemented — Wave 1 (05-02)")
+        """Invalid month format (not YYYY-MM) returns 422 validation error."""
+        talent_id = seed_deals["deal_open"].talent_id
+        response = auth_client.post(
+            "/reports/generate",
+            json={"talent_id": talent_id, "month": "not-a-month"},
+        )
+        assert response.status_code == 422
+
+    def test_generate_unknown_talent_returns_404(self, auth_client, mock_anthropic, mock_weasyprint):
+        """Unknown talent_id returns 404."""
+        response = auth_client.post(
+            "/reports/generate",
+            json={"talent_id": 999999, "month": "2026-05"},
+        )
+        assert response.status_code == 404
 
 
 class TestListReports:
