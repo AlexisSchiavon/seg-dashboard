@@ -58,6 +58,9 @@ function setPage(name, e) {
   } else if (name === "leads") {
     loadLeadsSummary();
     loadLeads();
+  } else if (name === "reports") {
+    loadReportTalents();
+    loadReportHistory();
   }
 }
 

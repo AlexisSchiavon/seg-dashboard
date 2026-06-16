@@ -1241,3 +1241,103 @@ select.sel:focus {
   letter-spacing: -1px;
   line-height: 1;
 }
+
+/* ===== Phase 5: Reportes tab (DASH-05) ===== */
+
+/* Wrapper del formulario + preview del tab Reportes */
+.pdf-section {
+  padding: 0 16px 24px;
+}
+
+/* Card oscura de preview in-page del reporte generado */
+.pdf-preview {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--rL);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+/* Header de la card de preview */
+.pdf-preview-header {
+  background: var(--bg4);
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Título dentro del header del preview */
+.pdf-preview-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Subtítulo "YYYY-MM · Generado con IA" */
+.pdf-preview-sub {
+  font-size: 11px;
+  color: var(--text3);
+}
+
+/* Contenedor de los 3 bloques narrativos */
+.pdf-body {
+  padding: 16px;
+}
+
+/* Wrapper de cada sección narrativa de Claude */
+.pdf-block {
+  margin-bottom: 16px;
+}
+
+/* Label de sección (RESUMEN EJECUTIVO, etc.) */
+.pdf-block-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text3);
+  margin-bottom: 8px;
+  font-family: 'Sora', sans-serif;
+  font-weight: 600;
+}
+
+/* Texto narrativo de Claude */
+.pdf-text {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.6;
+}
+
+/* Énfasis dentro del texto narrativo */
+.pdf-text strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Badge "✦ Claude AI" en el header del preview */
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--purpleT);
+  background: var(--purpleD);
+  border: 1px solid rgba(107, 84, 214, 0.2);
+  border-radius: 20px;
+  padding: 4px 8px;
+  margin-bottom: 16px;
+}
+
+/* Skeleton / pulse loading para estado de generación (Estado 3) */
+.pdf-skeleton {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--bg5);
+  margin-bottom: 8px;
+  animation: skeletonPulse 1.5s infinite;
+}
+
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

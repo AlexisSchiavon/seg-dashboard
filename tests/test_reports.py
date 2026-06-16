@@ -334,5 +334,21 @@ class TestReportesTabExists:
     """5-04-01 — DASH-05: Reportes tab is present in frontend/index.html."""
 
     def test_reportes_tab_exists(self):
-        """Smoke check: page-reportes div must exist in index.html (Wave 3 implements content)."""
-        pytest.fail("not implemented — Wave 3 (05-04)")
+        """Smoke check: page-reportes div and reports.js exist (DASH-05 gate)."""
+        import os
+
+        # Locate project root relative to this test file
+        tests_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(tests_dir)
+
+        # Check that index.html contains page-reportes markup
+        index_path = os.path.join(project_root, "frontend", "index.html")
+        assert os.path.exists(index_path), "frontend/index.html not found"
+        with open(index_path, encoding="utf-8") as f:
+            html = f.read()
+        assert "page-reportes" in html, "page-reportes div missing from index.html"
+        assert "setPage('reports'" in html, "Reportes tab onclick missing from index.html"
+
+        # Check that reports.js exists
+        reports_js_path = os.path.join(project_root, "frontend", "js", "reports.js")
+        assert os.path.exists(reports_js_path), "frontend/js/reports.js not found"
