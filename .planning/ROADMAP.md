@@ -161,7 +161,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — Foundation: install anthropic/weasyprint/jinja2, Report model + migration, report schemas, Wave 0 test infra (test stubs + mock_anthropic/mock_weasyprint) (REPORT-01)
+- [x] 05-01-PLAN.md — Foundation: install anthropic/weasyprint/jinja2, Report model + migration, report schemas, Wave 0 test infra (test stubs + mock_anthropic/mock_weasyprint) (REPORT-01)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -217,6 +217,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Pipedrive Integration & Core Dashboard | 3/3 | Complete   | 2026-06-14 |
 | 3. Google Sheets Leads Integration | 3/3 | Complete   | 2026-06-15 |
 | 4. Trello Integration & Collection Automation | 4/4 | Complete   | 2026-06-15 |
-| 5. AI-Generated PDF Reports | 0/4 | Not started | - |
+| 5. AI-Generated PDF Reports | 1/4 | In Progress|  |
 | 6. Embedded Natural-Language Agent | 0/TBD | Not started | - |
 | 7. Docker & EasyPanel Deployment | 0/TBD | Not started | - |
