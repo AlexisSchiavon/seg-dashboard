@@ -512,9 +512,19 @@ const DONUT_COLORS = [
   "var(--text2)",
 ];
 
+// SVG icons for talent KPI premium cards
+const KPI_ICONS = {
+  blue:   `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
+  green:  `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+  accent: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+  amber:  `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
+  purple: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
+};
+
 /**
- * Render KPIs into a specific container id (reuses existing KPI tile markup).
- * Allows loadTalentDetail to render into talent-kpis rather than kpi-grid.
+ * Render KPIs into a specific container as premium talent cards (.kpi-t).
+ * Cards with a count show the count as the large number + MXN amount below.
+ * Cards without a count show the formatted MXN amount as the large number.
  */
 function renderKpisInto(kpis, containerId) {
   const grid = document.getElementById(containerId);
@@ -525,13 +535,24 @@ function renderKpisInto(kpis, containerId) {
     return;
   }
 
-  grid.innerHTML = kpis.map((tile) => `
-    <div class="kpi ${tile.variant}">
-      <div class="kpi-label">${tile.label}</div>
-      <div class="kpi-val ${tile.variant}">${formatMXN(tile.value)}</div>
-      <div class="kpi-sub">MXN${tile.count !== null && tile.count !== undefined ? ` · ${tile.count} deals` : ""}</div>
-    </div>
-  `).join("");
+  grid.innerHTML = kpis.map((tile) => {
+    const icon = KPI_ICONS[tile.variant] || KPI_ICONS.blue;
+    const hasCount = tile.count !== null && tile.count !== undefined;
+    const bigVal = hasCount ? tile.count : formatMXN(tile.value);
+    const subLabel = hasCount ? "campañas" : "MXN";
+    const amountHtml = hasCount
+      ? `<div class="kpi-t-amount">${formatMXN(tile.value)}</div>`
+      : "";
+
+    return `
+      <div class="kpi-t ${tile.variant}">
+        <div class="kpi-t-icon">${icon}</div>
+        <div class="kpi-t-label">${escHtml(tile.label)}</div>
+        <div class="kpi-t-val">${bigVal}</div>
+        <div class="kpi-t-sub">${subLabel}</div>
+        ${amountHtml}
+      </div>`;
+  }).join("");
 }
 
 /**
@@ -858,6 +879,12 @@ function dealStateColor(listState) {
  *
  * @param {Array<{title: string, amount: number, list_state: string}>} deals
  */
+const MEDAL_CONFIG = [
+  { cls: "rank-1", num: "1", color: "#f0a93a", bg: "rgba(240,169,58,0.18)" },
+  { cls: "rank-2", num: "2", color: "#b0afa6", bg: "rgba(156,155,146,0.18)" },
+  { cls: "rank-3", num: "3", color: "#c97c14", bg: "rgba(201,124,20,0.18)" },
+];
+
 function renderTopCampaigns(deals) {
   const el = document.getElementById("top-campaigns");
   if (!el) return;
@@ -872,17 +899,27 @@ function renderTopCampaigns(deals) {
     return;
   }
 
-  const rankCls = ["rank-1", "rank-2", "rank-3"];
-  const rankNums = ["1", "2", "3"];
   el.innerHTML = `<div class="medal-cards">${top3.map((deal, i) => {
+    const m = MEDAL_CONFIG[i];
     const sb = getDealBadge(deal.list_state);
+    const talento = Math.round((deal.amount || 0) * 0.70);
     return `
-      <div class="medal-card ${rankCls[i]}">
-        <div class="medal-num ${rankCls[i]}">${rankNums[i]}</div>
-        <div class="medal-amount-label">Venta total</div>
-        <div class="medal-amount">${formatMXN(deal.amount || 0)}</div>
-        <div class="medal-name">${escHtml(deal.title || "Sin título")}</div>
+      <div class="medal-card ${m.cls}">
+        <div class="medal-top">
+          <div class="medal-badge-round" style="background:${m.bg};color:${m.color};">${m.num}</div>
+          <div class="medal-brand-name">${escHtml(deal.title || "Sin título")}</div>
+        </div>
         <span class="sbadge ${sb.cls}">${sb.label}</span>
+        <div class="medal-amounts">
+          <div class="medal-amt-col">
+            <div class="medal-amt-label">Venta total</div>
+            <div class="medal-amt-val">${formatMXN(deal.amount || 0)}</div>
+          </div>
+          <div class="medal-amt-col">
+            <div class="medal-amt-label">Talento (70%)</div>
+            <div class="medal-amt-val">${formatMXN(talento)}</div>
+          </div>
+        </div>
       </div>`;
   }).join("")}</div>`;
 }
@@ -931,7 +968,16 @@ function renderCampaignTable(deals, lostOpps) {
     el.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:12px 0;">Sin campañas registradas</div>`;
     return;
   }
-  el.innerHTML = allRows.join("");
+
+  const header = `
+    <div class="ctable-header">
+      <div class="ctable-hcol hicon"></div>
+      <div class="ctable-hcol hname">Campaña / Marca</div>
+      <div class="ctable-hcol hamount">Venta Total</div>
+      <div class="ctable-hcol hstatus">Estatus</div>
+    </div>`;
+
+  el.innerHTML = header + allRows.join("");
 }
 
 /**

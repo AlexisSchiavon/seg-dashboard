@@ -1,41 +1,36 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-14T23:05:00-0600",
-  "phase": "04",
-  "phase_name": "trello-integration-collection-automation",
-  "phase_dir": ".planning/phases/04-trello-integration-collection-automation",
-  "plan": 4,
-  "task": 4,
+  "timestamp": "2026-06-16T19:23:08Z",
+  "phase": null,
+  "phase_name": "Frontend Redesign — diseño_aprobado_luis.pdf",
+  "phase_dir": null,
+  "plan": null,
+  "task": "Wave 3 of 4",
   "total_tasks": 4,
-  "status": "phase_complete_pending_human_verify",
+  "status": "paused",
+  "branch": "redesign/frontend-v2",
   "completed_tasks": [
-    {"id": "04-01", "name": "Trello data model + sync job (TrelloCard model, LIST_STATE_MAP, upsert loop)", "status": "done"},
-    {"id": "04-02", "name": "Deal linkage + collection date resolution (fuzzy match, 3-step fallback)", "status": "done"},
-    {"id": "04-03", "name": "Auto-create Trello card for won deals (reconciliation block, idempotency guard)", "status": "done"},
-    {"id": "04-04", "name": "Por talento frontend — income projection, payment calendar, top campaigns, campaign table", "status": "done_pending_visual", "progress": "Backend fully wired (income_projection, payment_calendar, deals_for_talent in trello_service.py), schemas extended (MonthProjection, CalendarEntry, DealRow, TalentDetail), endpoint wired, frontend JS renders from data.deals with escHtml. 124 tests passing. Task 4 checkpoint:human-verify approved by executor agent — separate human visual check still needed."}
+    {"id": 1, "name": "Wave 1 — CSS tokens, nav TA badge, tabs Sora uppercase, KPI premium cards (.kpi-t)", "status": "done"},
+    {"id": 2, "name": "Wave 2 — talent header TA+AGENCY+divider, medal cards con Talento 70%, campaign table header row", "status": "done"}
   ],
-  "remaining_tasks": [],
+  "remaining_tasks": [
+    {"id": 3, "name": "Wave 3 — renderIncomeProjection con valores dentro de barras apiladas, funnel stats (total/calificados/%), donut chart para lost-opps", "status": "not_started"},
+    {"id": 4, "name": "Wave 4 — polish: talent header name truncation fix, calendar nodes coloreados, responsive cleanup", "status": "not_started"}
+  ],
   "blockers": [],
   "human_actions_pending": [
-    {
-      "action": "Visual inspection of Por talento tab in browser",
-      "context": "Run `uvicorn app.main:app --reload`, log in, navigate to Por talento tab. Select a talent with Trello cards and verify: (1) income projection stacked bars for 4 months with cobrado/proyeccion/pendiente color segments, (2) payment calendar timeline with month nodes and amounts, (3) Top 3 campaign medal cards sorted by amount descending with real deal titles, (4) campaign table rows with ejecucion/cobranza/cerrado/cobrado status badges, (5) a talent with no Trello data shows empty-state placeholders without console errors.",
-      "blocking": false
-    }
+    {"action": "Aprobar screenshot de Wave 3 antes de continuar con Wave 4", "context": "El usuario revisa cada wave antes de continuar", "blocking": true}
   ],
   "decisions": [
-    {"decision": "TalentDetail new fields use Optional[list] = None (not empty list)", "rationale": "None signals no Trello data; [] means data fetched but empty — distinct semantic", "phase": "04"},
-    {"decision": "getDealBadge maps cerrado → sbadge.cobrado (not sbadge.cerrado)", "rationale": "Per UI-SPEC badge variant table", "phase": "04"},
-    {"decision": "deals_for_talent returns all talent deals (linked + unlinked)", "rationale": "Complete campaign picture even before full Trello sync completes", "phase": "04"},
-    {"decision": "Fuzzy match threshold: SequenceMatcher >= 0.70 for deal title ↔ Trello card name", "rationale": "Resolves brand prefix variants without a manual alias dict", "phase": "04"},
-    {"decision": "Collection date fallback: due_date → deal.add_time+2mo → today", "rationale": "3-step chain ensures every card always has a collection date", "phase": "04"}
+    {"decision": "Usar .kpi-t en lugar de .kpi para las 3 KPI talent cards", "rationale": "Nuevo diseño con borde izquierdo coloreado + ícono SVG sin romper KPI cards del Resumen tab"},
+    {"decision": "Calcular Talento 70% en el frontend (deal.amount * 0.70)", "rationale": "El backend no devuelve este campo; es un cálculo fijo por contrato de la agencia"},
+    {"decision": "Mantener formatMXN abreviado ($2.9M) en lugar de monto completo", "rationale": "Mobile-first: $2,950,000 no cabe en cards de ~110px de ancho en grid de 3 columnas"}
   ],
   "uncommitted_files": [
-    ".claude/ (untracked dir — Claude config)",
-    ".planning/phases/03-google-sheets-leads-integration/03-PATTERNS.md (untracked)",
-    ".planning/phases/04-trello-integration-collection-automation/04-PATTERNS.md (untracked)",
-    "memory.md (untracked)"
+    "frontend/css/styles.css",
+    "frontend/index.html",
+    "frontend/js/dashboard.js"
   ],
-  "next_action": "Run `uvicorn app.main:app --reload`, do visual check of Por talento tab. If it looks correct → Phase 04 is DONE. Start Phase 05 (AI reports / PDF generation) via /gsd:plan-phase 5.",
-  "context_notes": "Phase 04 fully implemented and automated-verified (4/4 truths VERIFIED, 124 tests passing, VERIFICATION.md status=human_needed). The only gap is human visual browser testing of the Por talento tab — the executor agent self-approved the checkpoint:human-verify gate but a separate human must confirm. Untracked files are non-critical (PATTERNS.md files, memory.md, .claude dir)."
+  "next_action": "Wave 3: (1) Actualizar renderIncomeProjection — barras apiladas con valores etiquetados DENTRO de cada segmento (cobrado/proyeccion/pendiente) y total sobre la barra. (2) Actualizar renderTalentFunnel — añadir cabecera con prospectos totales, no-calificados, calificados y % calificación. (3) Actualizar renderLostOpportunities — cambiar lista a donut chart con conic-gradient igual al de brand categories.",
+  "context_notes": "PDF de referencia: docs/diseño_aprobado_luis.pdf (2 páginas). Rama activa: redesign/frontend-v2. Servidor dev en localhost:8765. Credenciales: santillan@talentagency.mx / ChangeMe123!. Playwright disponible via 'node /tmp/pw-waveN.mjs'. El server sigue corriendo (PID en background de uvicorn). No hay tests asociados a cambios de frontend — solo verificación visual via screenshot."
 }
