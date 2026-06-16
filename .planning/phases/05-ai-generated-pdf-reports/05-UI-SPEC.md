@@ -37,16 +37,13 @@ Escala de 4 puntos. Todos los valores extraídos de `styles.css` (`.section`, `.
 |-------|-------|-----------------|
 | xs | 4px | Gap entre icono y label dentro de `.ai-badge`; `padding-top` en `.section-title` |
 | sm | 8px | Gap interno de filas en historial (`.deal-row` gap); gap entre select dropdowns |
-| md | 16px | Padding horizontal de `.pdf-section`; padding de `.card` |
-| lg | 24px | Padding bottom de `.pdf-section`; padding de `.pdf-preview-header` (14px vertical × 18px horizontal — excepción documentada abajo) |
+| md | 16px | Padding horizontal de `.pdf-section`; padding de `.card`; padding de `.pdf-preview-header` (vertical y horizontal); padding de `.pdf-body` |
+| lg | 24px | Padding bottom de `.pdf-section` |
 | xl | 32px | No usado directamente en Phase 5 |
 | 2xl | 48px | No usado directamente en Phase 5 |
 | 3xl | 64px | No usado directamente en Phase 5 |
 
-**Excepción documentada:**
-- `.pdf-preview-header`: padding `14px 18px` (no es múltiplo exacto de 8, es el valor real del mockup — mantener para consistencia visual con `.nav` y `.talent-header` que usan el mismo padding)
-- `.pdf-body`: padding `18px` (mismo caso — valor del mockup, mantener)
-- `.spacer`: `height: 16px` (token md — ya existe en styles.css)
+**Sin excepciones off-grid.** Todos los valores de spacing son múltiplos de 4px estrictos.
 
 **Fuente:** `frontend/css/styles.css` + `.planning/reference/mockup.html` estilos CSS inline de `.pdf-*`.
 
@@ -58,17 +55,16 @@ Todos los roles ya establecidos en `frontend/css/styles.css`. Phase 5 reutiliza 
 
 | Role | Size | Weight | Line Height | Font | Uso en Phase 5 |
 |------|------|--------|-------------|------|----------------|
-| Body | 14px | 400 (regular) | 1.5 | DM Sans | Texto de `.btn`, texto del cuerpo del tab |
+| Body | 14px | 400 (regular) | 1.5 | DM Sans | Texto del cuerpo del tab |
 | Label / caption | 11–13px | 400 (regular) | 1.5 | DM Sans | `.pdf-text` (13px), `.pdf-preview-sub` (11px), `.deal-tipo` (11px), subtítulos de historial |
 | Heading / label uppercase | 10px | 600 (semibold) | 1.2 | Sora | `.section-title` (10px Sora uppercase), `.pdf-block-title` (10px uppercase) |
 | Display / número grande | 11–13px mono | 400 (regular) | 1.5 | DM Mono | `.deal-amt`, `.th-report-date`, timestamp de generación en historial |
 
-**Regla de 2 pesos:**
-- Peso 400 (regular): todo texto de lectura (body, labels, captions, monospace)
-- Peso 500 (medium): `.pdf-preview-title` (13px/500), nombres de deals en historial (`.deal-brand`), texto de botones (`.btn`)
-- Peso 600 (semibold): `.section-title`, `.pdf-block-title`, `.ai-badge` implícito — reservado para etiquetas uppercase que identifican secciones
+**Regla de 2 pesos — definitiva:**
+- Peso 400 (regular): todo texto de lectura — body, labels, captions, monospace, `.pdf-text`, `.pdf-block`, `.btn`, `.deal-brand`, `.pdf-preview-title`
+- Peso 600 (semibold): todo énfasis — `.section-title`, `.pdf-block-title`, `.pdf-preview-title` cuando resaltado, `.ai-badge` implícito, etiquetas uppercase que identifican secciones
 
-> Nota: el CSS existente usa tres valores de `font-weight` (400, 500, 600). El contrato de fase mantiene esta convención establecida. 500 se trata como "énfasis leve" y 600 como "etiqueta de sección". No se introducen pesos nuevos (700 solo en `.nav-logo` / Sora — ya existente, no nuevo en Phase 5).
+> Peso 500 eliminado. El CSS existente lo usa en algunos lugares — el ejecutor debe normalizarlo a 400 (texto) o 600 (énfasis) según el rol semántico del elemento. No se introduce peso 700 nuevo en Phase 5 (solo existe en `.nav-logo` / Sora ya establecido).
 
 **Fuente:** `frontend/css/styles.css` líneas 28–32 (body), líneas 259–267 (`.section-title`), mockup `.pdf-preview-title`, `.pdf-block-title`, `.pdf-text`.
 
@@ -119,23 +115,23 @@ Componentes que Phase 5 **añade** a `frontend/css/styles.css`. Los que ya exist
 
 ### Componentes nuevos a añadir en `frontend/css/styles.css`
 
-Las definiciones exactas se copian del mockup — no inventar valores.
+Las definiciones exactas se basan en el mockup con spacing normalizado a la grilla de 4px.
 
 | Clase | Propiedades | Descripción |
 |-------|-------------|-------------|
 | `.pdf-section` | `padding: 0 16px 24px` | Wrapper del formulario + preview del tab Reportes |
-| `.pdf-preview` | `background: var(--bg3); border: 1px solid var(--border); border-radius: var(--rL); overflow: hidden; margin-bottom: 14px` | Card oscura de preview in-page del reporte generado |
-| `.pdf-preview-header` | `background: var(--bg4); padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between` | Header de la card de preview |
-| `.pdf-preview-title` | `font-size: 13px; font-weight: 500` | Título dentro del header del preview |
+| `.pdf-preview` | `background: var(--bg3); border: 1px solid var(--border); border-radius: var(--rL); overflow: hidden; margin-bottom: 16px` | Card oscura de preview in-page del reporte generado |
+| `.pdf-preview-header` | `background: var(--bg4); padding: 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between` | Header de la card de preview |
+| `.pdf-preview-title` | `font-size: 13px; font-weight: 600` | Título dentro del header del preview |
 | `.pdf-preview-sub` | `font-size: 11px; color: var(--text3)` | Subtítulo "YYYY-MM · Generado con IA" |
-| `.pdf-body` | `padding: 18px` | Contenedor de los 3 bloques narrativos |
-| `.pdf-block` | `margin-bottom: 14px` | Wrapper de cada sección narrativa de Claude |
-| `.pdf-block-title` | `font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text3); margin-bottom: 6px` | Label de sección (RESUMEN EJECUTIVO, etc.) |
+| `.pdf-body` | `padding: 16px` | Contenedor de los 3 bloques narrativos |
+| `.pdf-block` | `margin-bottom: 16px` | Wrapper de cada sección narrativa de Claude |
+| `.pdf-block-title` | `font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text3); margin-bottom: 8px` | Label de sección (RESUMEN EJECUTIVO, etc.) |
 | `.pdf-text` | `font-size: 13px; color: var(--text2); line-height: 1.6` | Texto narrativo de Claude |
-| `.pdf-text strong` | `color: var(--text); font-weight: 500` | Énfasis dentro del texto narrativo |
-| `.ai-badge` | `display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--purpleT); background: var(--purpleD); border: 1px solid rgba(107,84,214,0.2); border-radius: 20px; padding: 3px 10px; margin-bottom: 14px` | Badge "✦ Claude AI" en el header del preview |
+| `.pdf-text strong` | `color: var(--text); font-weight: 600` | Énfasis dentro del texto narrativo |
+| `.ai-badge` | `display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--purpleT); background: var(--purpleD); border: 1px solid rgba(107,84,214,0.2); border-radius: 20px; padding: 4px 8px; margin-bottom: 16px` | Badge "✦ Claude AI" en el header del preview |
 
-**Fuente:** Directamente extraído del CSS inline del mockup — sin modificaciones.
+**Fuente:** Mockup extraído con spacing normalizado a escala 4px — sin valores off-grid.
 
 ---
 
@@ -239,8 +235,8 @@ Estructura exacta del nuevo `<div id="page-reportes">` a añadir en `frontend/in
   <div class="pdf-section">
 
     <!-- Formulario de generación -->
-    <div class="section-title" style="padding:0 0 12px;">Generar reporte con IA</div>
-    <div style="display:flex;gap:10px;margin-bottom:14px;">
+    <div class="section-title" style="padding:0 0 16px;">Generar reporte con IA</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
       <select class="sel" style="flex:1;" id="report-talent">
         <option value="">Selecciona un talento</option>
       </select>
@@ -279,8 +275,8 @@ Estructura exacta del nuevo `<div id="page-reportes">` a añadir en `frontend/in
     <div class="divider"></div>
 
     <!-- Historial -->
-    <div class="section-title" style="padding:0 0 12px;">Reportes anteriores</div>
-    <div class="card" id="report-history" style="padding:14px 16px;">
+    <div class="section-title" style="padding:0 0 16px;">Reportes anteriores</div>
+    <div class="card" id="report-history" style="padding:16px;">
       <!-- Poblado por loadReportHistory() en reports.js -->
     </div>
 
@@ -315,7 +311,7 @@ El archivo `templates/reports/template.html` (Jinja2) usa tema claro — indepen
 | Sección título | `font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #e8520a; font-weight: 600` |
 | Sección texto | `font-size: 14px; line-height: 1.7; color: #333333` |
 | Apéndice tabla: header | `background: #f5f5f5; font-weight: 600` |
-| Apéndice tabla: celda | `border: 1px solid #dddddd; padding: 8px 12px` |
+| Apéndice tabla: celda | `border: 1px solid #dddddd; padding: 8px 16px` |
 
 **Secciones en orden:**
 1. Portada: nombre talento, mes, badge "✦ Generado con Claude AI"
