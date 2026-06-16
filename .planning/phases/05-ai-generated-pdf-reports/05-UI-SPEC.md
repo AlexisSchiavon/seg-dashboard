@@ -1,7 +1,8 @@
 ---
 phase: 5
 slug: ai-generated-pdf-reports
-status: draft
+status: approved
+reviewed_at: 2026-06-15T22:20:00-06:00
 shadcn_initialized: false
 preset: none
 created: 2026-06-15
