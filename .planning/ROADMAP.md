@@ -147,17 +147,34 @@ Plans:
 
 ### Phase 5: AI-Generated PDF Reports
 
-**Goal**: Users can generate AI-narrated monthly PDF reports per talent (or all talents) using Claude, with all financial figures computed in Python and only narrated by the AI, and browse/download report history.
+**Goal**: Users can generate AI-narrated monthly PDF reports per individual talent using Claude, with all financial figures computed in Python and only narrated by the AI, and browse/download report history. ("Todos los talentos" batch reports are out of scope this phase — deferred per D-53.)
 **Mode:** mvp
 **Depends on**: Phase 4
 **Requirements**: REPORT-01, REPORT-02, DASH-05
 **Success Criteria** (what must be TRUE):
 
-  1. User can trigger generation of a monthly PDF report for a single talent or for all talents
+  1. User can trigger generation of a monthly PDF report for a single talent
   2. Generated PDF contains figures computed entirely in Python (KPIs, funnel, revenue) with Claude providing only narrative text — no AI-invented numbers
   3. The Reportes tab lists previously generated reports and allows downloading any of them
 
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — Foundation: install anthropic/weasyprint/jinja2, Report model + migration, report schemas, Wave 0 test infra (test stubs + mock_anthropic/mock_weasyprint) (REPORT-01)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 05-02-PLAN.md — Core generation slice: services/reports.py (payload→Claude→WeasyPrint→upsert), light-theme Jinja2 PDF template, talents/months/generate endpoints, main.py wiring (REPORT-01)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 05-03-PLAN.md — History + download slice: GET /reports/ list + GET /reports/{id}/download FileResponse, auth + missing-file tests (REPORT-02)
+
+**Wave 4** *(blocked on Waves 2-3)*
+
+- [ ] 05-04-PLAN.md — Reportes tab UI: 5th tab + page-reportes markup, reports.js module, pdf-preview CSS, setPage branch, human-verify checkpoint (DASH-05)
+
 **UI hint**: yes
 
 ### Phase 6: Embedded Natural-Language Agent
@@ -200,6 +217,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Pipedrive Integration & Core Dashboard | 3/3 | Complete   | 2026-06-14 |
 | 3. Google Sheets Leads Integration | 3/3 | Complete   | 2026-06-15 |
 | 4. Trello Integration & Collection Automation | 4/4 | Complete   | 2026-06-15 |
-| 5. AI-Generated PDF Reports | 0/TBD | Not started | - |
+| 5. AI-Generated PDF Reports | 0/4 | Not started | - |
 | 6. Embedded Natural-Language Agent | 0/TBD | Not started | - |
 | 7. Docker & EasyPanel Deployment | 0/TBD | Not started | - |
