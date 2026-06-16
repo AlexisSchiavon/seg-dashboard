@@ -1683,4 +1683,150 @@ select.sel:focus {
 
 /* Align existing ctable data cells to match header columns */
 .ctable-amount { text-align: right; min-width: 58px; }
+
+/* ================================================================
+   PRE-WAVE 3 — Visual depth, spacing, micro-animations + filter
+   ================================================================ */
+
+/* Subtle accent glow at top of body */
+body {
+  background: radial-gradient(ellipse 100% 45% at 50% -10%,
+    rgba(232,82,10,0.055) 0%, transparent 60%), var(--bg);
+}
+
+/* Card depth: stronger border + ambient shadow */
+.card {
+  border-color: var(--borderM);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.32), 0 3px 10px rgba(0,0,0,0.12);
+}
+
+/* KPI val: heavier weight for premium feel */
+.kpi-val {
+  font-weight: 700;
+  letter-spacing: -0.8px;
+}
+
+/* More breathing room between section blocks */
+.section + .section {
+  padding-top: 6px;
+}
+.section-title {
+  margin-bottom: 14px;
+}
+
+/* Micro-animations: lift on KPI and medal cards */
+.kpi, .kpi-t, .medal-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s;
+}
+.kpi:hover, .kpi-t:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.38);
+}
+.medal-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.38);
+}
+
+/* Talent card hover lift */
+.talent-card {
+  transition: all 0.22s ease;
+}
+.talent-card:hover:not(.active) {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+}
+
+/* ================================================================
+   Campaign filter pills
+   ================================================================ */
+
+.filter-pills {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  scrollbar-width: none;
+}
+.filter-pills::-webkit-scrollbar { display: none; }
+
+.filter-pill {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'Sora', sans-serif;
+  letter-spacing: 0.4px;
+  padding: 5px 11px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+.filter-pill:hover {
+  border-color: var(--borderM);
+  color: var(--text2);
+  background: var(--bg4);
+}
+.filter-pill.active {
+  border-color: var(--borderH);
+  color: var(--text);
+  background: var(--bg4);
+}
+.filter-pill.active.llamada     { background: var(--blueD);              border-color: var(--blue);   color: var(--blueT); }
+.filter-pill.active.cotizacion  { background: var(--purpleD);            border-color: var(--purple); color: var(--purpleT); }
+.filter-pill.active.negociacion { background: var(--amberD);             border-color: var(--amber);  color: var(--amberT); }
+.filter-pill.active.contrato    { background: var(--accentD);            border-color: var(--accent); color: var(--accent); }
+.filter-pill.active.ejecucion   { background: rgba(14,165,176,0.12);    border-color: #0ea5b0;       color: #40d4de; }
+.filter-pill.active.cobranza    { background: var(--greenD);             border-color: var(--green);  color: var(--greenT); }
+.filter-pill.active.perdido     { background: var(--redD);               border-color: var(--red);    color: var(--redT); }
+.filter-pill.active.cerrado     { background: var(--greenD);             border-color: var(--green);  color: var(--greenT); }
+
+/* ================================================================
+   WAVE 4 — Polish final
+   ================================================================ */
+
+/* Talent header: hide "TALENT AGENCY" label on narrow viewports to give name room */
+@media (max-width: 430px) {
+  .th-agency { display: none; }
+}
+
+/* Funnel header stats row (total / calificados / %) */
+.funnel-header {
+  display: flex;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.fh-stat {
+  flex: 1;
+  text-align: center;
+}
+.fh-stat:not(:last-child) {
+  border-right: 1px solid var(--border);
+}
+.fh-val {
+  font-family: 'Sora', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.fh-label {
+  font-size: 9px;
+  font-family: 'Sora', sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text3);
+}
+
+/* Responsive: very narrow viewports */
+@media (max-width: 360px) {
+  .medal-cards { grid-template-columns: 1fr; }
+  .kpi-row-3   { grid-template-columns: 1fr 1fr; }
+}
 .ctable-row .sbadge { min-width: 74px; justify-content: center; }

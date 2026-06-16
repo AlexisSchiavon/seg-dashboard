@@ -105,6 +105,7 @@ class DealRow(BaseModel):
     amount: float
     list_state: str                     # ejecucion | cobranza | cerrado | perdido
     trello_card_id: str | None = None   # None for unlinked / lost deals
+    stage_name: str | None = None       # Pipedrive stage name for filter resolution
 
 
 class TalentDetail(BaseModel):
