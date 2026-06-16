@@ -169,7 +169,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 05-03-PLAN.md — History + download slice: GET /reports/ list + GET /reports/{id}/download FileResponse, auth + missing-file tests (REPORT-02)
+- [x] 05-03-PLAN.md — History + download slice: GET /reports/ list + GET /reports/{id}/download FileResponse, auth + missing-file tests (REPORT-02)
 
 **Wave 4** *(blocked on Waves 2-3)*
 
@@ -217,6 +217,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Pipedrive Integration & Core Dashboard | 3/3 | Complete   | 2026-06-14 |
 | 3. Google Sheets Leads Integration | 3/3 | Complete   | 2026-06-15 |
 | 4. Trello Integration & Collection Automation | 4/4 | Complete   | 2026-06-15 |
-| 5. AI-Generated PDF Reports | 2/4 | In Progress|  |
+| 5. AI-Generated PDF Reports | 3/4 | In Progress|  |
 | 6. Embedded Natural-Language Agent | 0/TBD | Not started | - |
 | 7. Docker & EasyPanel Deployment | 0/TBD | Not started | - |
