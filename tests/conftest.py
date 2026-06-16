@@ -670,11 +670,14 @@ def mock_anthropic(monkeypatch):
     from unittest.mock import MagicMock
 
     fake_response = MagicMock()
-    fake_response.content = [MagicMock(text=(
-        '{"resumen_ejecutivo":"Resumen de prueba.",'
-        '"deals_destacados":"Deals de prueba.",'
-        '"recomendacion":"Recomendacion de prueba."}'
-    ))]
+    fake_response.content = [MagicMock(
+        type="text",
+        text=(
+            '{"resumen_ejecutivo":"Resumen de prueba.",'
+            '"deals_destacados":"Deals de prueba.",'
+            '"recomendacion":"Recomendacion de prueba."}'
+        ),
+    )]
     mock_client = MagicMock()
     mock_client.messages.create.return_value = fake_response
     monkeypatch.setattr("app.services.reports.anthropic.Anthropic", lambda **kwargs: mock_client)
