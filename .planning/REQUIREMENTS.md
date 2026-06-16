@@ -43,12 +43,12 @@ Requirements for initial release (M1-M7, built incrementally). Each maps to road
 - [ ] **DASH-02**: Por talento — KPIs, monthly revenue projection (cobrado/proyección/pendiente as stacked bars), collection calendar, individual funnel, lost opportunities, brand category breakdown, top 3 campaigns of the month, full campaign table (campaign/status/amount)
 - [x] **DASH-03**: Funnel completo — 6 stages with deal count and amount, bottleneck detection
 - [ ] **DASH-04**: Leads Gmail — leads classified by talent, source, and status
-- [ ] **DASH-05**: Reportes — UI to generate AI PDF reports and browse/download report history
+- [x] **DASH-05**: Reportes — UI to generate AI PDF reports and browse/download report history
 
 ### AI Reports & Agent (M5-M6)
 
-- [ ] **REPORT-01**: System generates a monthly PDF report per talent (or all talents) using Claude AI — all financial figures computed in Python, Claude only narrates
-- [ ] **REPORT-02**: User can download historical generated reports
+- [x] **REPORT-01**: System generates a monthly PDF report per talent (or all talents) using Claude AI — all financial figures computed in Python, Claude only narrates
+- [x] **REPORT-02**: User can download historical generated reports
 - [ ] **AGENT-01**: User can query dashboard data via an embedded natural-language agent (read-only, no write actions)
 
 ### Deploy (M7)
