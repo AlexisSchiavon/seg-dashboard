@@ -20,6 +20,7 @@
     <div class="tab" onclick="setPage('talent', event)">Por talento</div>
     <div class="tab" onclick="setPage('funnel', event)">Funnel</div>
     <div class="tab" onclick="setPage('leads', event)">Leads</div>
+    <div class="tab" onclick="setPage('reports', event)">Reportes</div>
   </div>
 
   <div id="toast" class="toast"></div>
@@ -235,8 +236,71 @@
     <div class="spacer"></div>
   </div>
 
+  <!-- ========== REPORTES TAB ========== -->
+  <div class="page" id="page-reportes">
+    <div class="spacer"></div>
+    <div class="pdf-section">
+
+      <!-- Formulario de generación -->
+      <div class="section-title" style="padding:0 0 16px;">Generar reporte con IA</div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <select class="sel" style="flex:1;" id="report-talent">
+          <option value="">Selecciona un talento</option>
+        </select>
+        <select class="sel" style="flex:1;" id="report-month" disabled>
+          <option value="">Selecciona un mes</option>
+        </select>
+      </div>
+
+      <!-- Empty state (sin meses disponibles) — hidden por defecto -->
+      <div id="report-no-months" style="display:none;">
+        <div class="alert info">
+          <div class="alert-icon">ℹ️</div>
+          <div class="alert-text">
+            <strong>Sin datos disponibles</strong><br>
+            Este talento no tiene deals con fecha registrada. Sincroniza Pipedrive primero.
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview card (inicialmente vacía) -->
+      <div class="pdf-preview" id="pdf-preview-card" style="display:none;">
+        <div class="pdf-preview-header">
+          <div>
+            <div class="pdf-preview-title" id="pdf-preview-title"></div>
+            <div class="pdf-preview-sub" id="pdf-preview-sub"></div>
+          </div>
+          <span class="ai-badge">✦ Claude AI</span>
+        </div>
+        <div class="pdf-body" id="pdf-body">
+          <!-- Poblado por generateReport() en reports.js -->
+        </div>
+      </div>
+
+      <!-- Botones de acción -->
+      <button class="btn primary" id="btn-generate" onclick="generateReport()" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        Generar reporte con IA
+      </button>
+      <button class="btn" id="btn-download" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Descargar PDF
+      </button>
+
+      <div class="divider"></div>
+
+      <!-- Historial -->
+      <div class="section-title" style="padding:0 0 16px;">Reportes anteriores</div>
+      <div class="card" id="report-history" style="padding:16px;">
+        <!-- Poblado por loadReportHistory() en reports.js -->
+      </div>
+
+    </div>
+  </div>
+
   <script src="/js/auth.js"></script>
   <script src="/js/dashboard.js"></script>
   <script src="/js/leads.js"></script>
+  <script src="/js/reports.js"></script>
 </body>
 </html>
