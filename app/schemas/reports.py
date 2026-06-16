@@ -13,7 +13,7 @@ class ReportGenerate(BaseModel):
     """POST /reports/generate request body."""
 
     talent_id: int
-    month: str = Field(pattern=r"^\d{4}-\d{2}$")  # T-05-VAL: rejects malformed month strings
+    month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")  # T-05-VAL: rejects malformed month strings and invalid month values (e.g. 2026-00, 2026-13)
 
 
 class NarrativeSections(BaseModel):
