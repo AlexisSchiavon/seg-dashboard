@@ -346,7 +346,7 @@ class TestReportesTabExists:
         assert os.path.exists(index_path), "frontend/index.html not found"
         with open(index_path, encoding="utf-8") as f:
             html = f.read()
-        assert "page-reportes" in html, "page-reportes div missing from index.html"
+        assert "page-reports" in html, "page-reports div missing from index.html"
         assert "setPage('reports'" in html, "Reportes tab onclick missing from index.html"
 
         # Check that reports.js exists
