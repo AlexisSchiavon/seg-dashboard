@@ -21,6 +21,8 @@ from fastapi import status as http_status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from pydantic import ValidationError
+
 from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.models import Report, Talent
@@ -91,16 +93,23 @@ def generate_report(  # MUST be `def`, NOT `async def` — WeasyPrint is blockin
             detail="Talent not found",
         ) from exc
 
-    return ReportOut(
-        id=result["id"],
-        talent_id=result["talent_id"],
-        talent_name=result["talent_name"],
-        month=result["month"],
-        generated_at=result["generated_at"],
-        file_path=result["file_path"],
-        file_size_bytes=result["file_size_bytes"],
-        narrative=result["narrative"],
-    )
+    try:
+        return ReportOut(
+            id=result["id"],
+            talent_id=result["talent_id"],
+            talent_name=result["talent_name"],
+            month=result["month"],
+            generated_at=result["generated_at"],
+            file_path=result["file_path"],
+            file_size_bytes=result["file_size_bytes"],
+            narrative=result["narrative"],
+        )
+    except ValidationError as exc:
+        # WR-02: Claude returned valid JSON but with missing/wrong keys — surface as 502
+        raise HTTPException(
+            status_code=http_status.HTTP_502_BAD_GATEWAY,
+            detail="Error al generar narrativa",
+        ) from exc
 
 
 @router.get("/", response_model=list[ReportHistoryItem])
