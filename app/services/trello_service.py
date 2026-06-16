@@ -282,6 +282,7 @@ def deals_for_talent(db: Session, talent_id: int) -> list[dict[str, Any]]:
             "amount": deal.value or 0.0,
             "list_state": card.list_state,
             "trello_card_id": card.trello_card_id,
+            "stage_name": deal.stage_name,
         })
 
     # 2. All deals for the talent — add unlinked ones
@@ -296,6 +297,7 @@ def deals_for_talent(db: Session, talent_id: int) -> list[dict[str, Any]]:
             "amount": deal.value or 0.0,
             "list_state": list_state,
             "trello_card_id": None,
+            "stage_name": deal.stage_name,
         })
 
     # Sort by amount descending

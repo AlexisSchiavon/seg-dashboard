@@ -14,6 +14,31 @@ const FUNNEL_COLORS = [
   "var(--text3)",
 ];
 
+// Campaign filter state (module-level so setCampaignFilter can re-render without re-fetching)
+let _campaignDeals = null;
+let _campaignLostOpps = null;
+let _campaignFilter = 'all';
+
+const CAMPAIGN_FILTERS = [
+  { key: 'all',         label: 'Todos',       cls: '' },
+  { key: 'llamada',     label: 'Llamada',      cls: 'llamada' },
+  { key: 'cotizacion',  label: 'Cotización',   cls: 'cotizacion' },
+  { key: 'negociacion', label: 'Negociación',  cls: 'negociacion' },
+  { key: 'contrato',    label: 'Contrato',     cls: 'contrato' },
+  { key: 'ejecucion',   label: 'En ejecución', cls: 'ejecucion' },
+  { key: 'cobranza',    label: 'Cobranza',     cls: 'cobranza' },
+  { key: 'perdido',     label: 'Perdido',      cls: 'perdido' },
+  { key: 'cerrado',     label: 'Cobrado',      cls: 'cerrado' },
+];
+
+// Calendar node color cycle: azul / morado / verde / naranja (as in client PDF)
+const CALENDAR_NODE_COLORS = [
+  { bg: 'var(--blueD)',   border: 'var(--blue)',   text: 'var(--blueT)' },
+  { bg: 'var(--purpleD)', border: 'var(--purple)', text: 'var(--purpleT)' },
+  { bg: 'var(--greenD)',  border: 'var(--green)',  text: 'var(--greenT)' },
+  { bg: 'var(--amberD)',  border: 'var(--amber)',  text: 'var(--amberT)' },
+];
+
 // Avatar background/text color pairs for ranking rows
 const AVATAR_COLORS = [
   { bg: "rgba(232,82,10,0.15)", text: "var(--accent)" },
@@ -512,9 +537,19 @@ const DONUT_COLORS = [
   "var(--text2)",
 ];
 
+// SVG icons for talent KPI premium cards
+const KPI_ICONS = {
+  blue:   `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
+  green:  `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+  accent: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+  amber:  `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
+  purple: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
+};
+
 /**
- * Render KPIs into a specific container id (reuses existing KPI tile markup).
- * Allows loadTalentDetail to render into talent-kpis rather than kpi-grid.
+ * Render KPIs into a specific container as premium talent cards (.kpi-t).
+ * Cards with a count show the count as the large number + MXN amount below.
+ * Cards without a count show the formatted MXN amount as the large number.
  */
 function renderKpisInto(kpis, containerId) {
   const grid = document.getElementById(containerId);
@@ -525,13 +560,24 @@ function renderKpisInto(kpis, containerId) {
     return;
   }
 
-  grid.innerHTML = kpis.map((tile) => `
-    <div class="kpi ${tile.variant}">
-      <div class="kpi-label">${tile.label}</div>
-      <div class="kpi-val ${tile.variant}">${formatMXN(tile.value)}</div>
-      <div class="kpi-sub">MXN${tile.count !== null && tile.count !== undefined ? ` · ${tile.count} deals` : ""}</div>
-    </div>
-  `).join("");
+  grid.innerHTML = kpis.map((tile) => {
+    const icon = KPI_ICONS[tile.variant] || KPI_ICONS.blue;
+    const hasCount = tile.count !== null && tile.count !== undefined;
+    const bigVal = hasCount ? tile.count : formatMXN(tile.value);
+    const subLabel = hasCount ? "campañas" : "MXN";
+    const amountHtml = hasCount
+      ? `<div class="kpi-t-amount">${formatMXN(tile.value)}</div>`
+      : "";
+
+    return `
+      <div class="kpi-t ${tile.variant}">
+        <div class="kpi-t-icon">${icon}</div>
+        <div class="kpi-t-label">${escHtml(tile.label)}</div>
+        <div class="kpi-t-val">${bigVal}</div>
+        <div class="kpi-t-sub">${subLabel}</div>
+        ${amountHtml}
+      </div>`;
+  }).join("");
 }
 
 /**
@@ -547,9 +593,29 @@ function renderTalentFunnel(stages) {
     return;
   }
 
-  const maxCount = Math.max(...stages.map((s) => s.count), 1);
+  const total = stages.reduce((s, st) => s + st.count, 0);
+  // "Calificados" = Negociación onward (index 2+)
+  const calificados = stages.slice(2).reduce((s, st) => s + st.count, 0);
+  const pctCal = total > 0 ? Math.round(calificados / total * 100) : 0;
 
-  container.innerHTML = stages.map((stage, idx) => {
+  const header = `
+    <div class="funnel-header">
+      <div class="fh-stat">
+        <div class="fh-val">${total}</div>
+        <div class="fh-label">Prospectos</div>
+      </div>
+      <div class="fh-stat">
+        <div class="fh-val" style="color:var(--greenT);">${calificados}</div>
+        <div class="fh-label">Calificados</div>
+      </div>
+      <div class="fh-stat">
+        <div class="fh-val" style="color:var(--accent);">${pctCal}%</div>
+        <div class="fh-label">% Calificación</div>
+      </div>
+    </div>`;
+
+  const maxCount = Math.max(...stages.map((s) => s.count), 1);
+  const rows = stages.map((stage, idx) => {
     const pct = Math.max((stage.count / maxCount) * 100, stage.count > 0 ? 4 : 0);
     const color = FUNNEL_COLORS[idx % FUNNEL_COLORS.length];
     const countDisplay = stage.count > 0
@@ -562,9 +628,10 @@ function renderTalentFunnel(stages) {
           <div class="f-fill" style="width:${pct}%;background:${color};">${countDisplay}</div>
         </div>
         <span class="f-n">${stage.count}</span>
-      </div>
-    `;
+      </div>`;
   }).join("");
+
+  container.innerHTML = header + rows;
 }
 
 /**
@@ -679,36 +746,137 @@ function renderLostOpportunities(lostSummary, lostOpportunities) {
   const listEl = document.getElementById("lost-list");
   if (!summaryEl || !listEl) return;
 
-  if (!lostOpportunities || lostOpportunities.length === 0) {
-    summaryEl.innerHTML = "";
-    listEl.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">Sin oportunidades perdidas este periodo</div>`;
+  listEl.innerHTML = ""; // donut replaces list
+
+  if (!lostSummary || lostSummary.length === 0) {
+    summaryEl.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0;">Sin oportunidades perdidas este periodo</div>`;
     return;
   }
 
-  const summaryParts = (lostSummary || []).map((s) => `${s.count} por ${escHtml(s.reason)}`);
-  summaryEl.innerHTML = summaryParts.length > 0
-    ? `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">${summaryParts.join(" · ")}</div>`
-    : "";
+  const totalLost = lostSummary.reduce((s, r) => s + r.count, 0);
+  let cumPct = 0;
+  const conicStops = [];
+  lostSummary.forEach((r, i) => {
+    const pct = totalLost > 0 ? (r.count / totalLost * 100) : 0;
+    const start = Math.min(cumPct, 100);
+    const end = Math.min(cumPct + pct, 100);
+    conicStops.push(`${DONUT_COLORS[i % DONUT_COLORS.length]} ${start}% ${end}%`);
+    cumPct += pct;
+  });
+  if (cumPct < 99.99) conicStops.push(`var(--bg5) ${Math.min(cumPct,100)}% 100%`);
 
-  const MAX_VISIBLE = 8;
-  const visible = lostOpportunities.slice(0, MAX_VISIBLE);
-  const remaining = lostOpportunities.length - MAX_VISIBLE;
+  const donutCss = `conic-gradient(${conicStops.join(", ")})`;
+  const legend = lostSummary.map((r, i) => {
+    const pct = totalLost > 0 ? (r.count / totalLost * 100).toFixed(0) : 0;
+    return `
+      <div style="display:flex;align-items:center;gap:7px;font-size:11px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:${DONUT_COLORS[i % DONUT_COLORS.length]};flex-shrink:0;"></div>
+        <div style="color:var(--text2);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(r.reason)} — ${pct}%</div>
+        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text3);">${r.count}</div>
+      </div>`;
+  }).join("");
 
-  listEl.innerHTML = visible.map((opp) => `
-    <div class="deal-row">
-      <div class="deal-l">
-        <div class="deal-dot" style="background:var(--red);"></div>
-        <div>
-          <div class="deal-brand">${escHtml(opp.title || "Sin título")}</div>
-        </div>
-      </div>
-      <div class="deal-r">
-        <div class="deal-amt">${formatMXN(opp.amount || 0)}</div>
-      </div>
-    </div>
-  `).join("") + (remaining > 0
-    ? `<div style="font-size:11px;color:var(--text3);text-align:center;padding-top:8px;">+${remaining} más</div>`
-    : "");
+  summaryEl.innerHTML = `
+    <div class="donut-wrap">
+      <div style="width:70px;height:70px;border-radius:50%;background:${donutCss};
+        -webkit-mask:radial-gradient(circle,transparent 25px,black 25px);
+        mask:radial-gradient(circle,transparent 25px,black 25px);flex-shrink:0;"></div>
+      <div class="donut-legend" style="gap:6px;">${legend}</div>
+    </div>`;
+}
+
+// ============================================================
+// Campaign filter helpers
+// ============================================================
+
+function dealFilterKey(deal) {
+  if (deal.list_state === 'perdido') return 'perdido';
+  if (deal.list_state === 'cerrado') return 'cerrado';
+  if (deal.list_state === 'cobranza') return 'cobranza';
+  // For ejecucion deals, try to resolve from Pipedrive stage_name
+  if (deal.stage_name) {
+    const s = deal.stage_name.toLowerCase();
+    if (s.includes('llamada'))  return 'llamada';
+    if (s.includes('cotiz'))    return 'cotizacion';
+    if (s.includes('negoci'))   return 'negociacion';
+    if (s.includes('contrato')) return 'contrato';
+    if (s.includes('ejecuci'))  return 'ejecucion';
+    if (s.includes('cobranza')) return 'cobranza';
+  }
+  return deal.list_state || 'ejecucion';
+}
+
+function setCampaignFilter(key) {
+  _campaignFilter = key;
+  const pillsEl = document.getElementById('campaign-filter-pills');
+  if (pillsEl) {
+    pillsEl.querySelectorAll('.filter-pill').forEach((p) => {
+      const isActive = p.dataset.filter === key;
+      const f = CAMPAIGN_FILTERS.find((cf) => cf.key === p.dataset.filter);
+      p.className = isActive
+        ? `filter-pill active ${f ? f.cls : ''}`.trimEnd()
+        : 'filter-pill';
+    });
+  }
+  renderCampaignRows();
+}
+
+function renderCampaignRows() {
+  const el = document.getElementById('talent-deals');
+  if (!el) return;
+
+  const deals = _campaignDeals || [];
+  const lostOpps = _campaignLostOpps || [];
+  const activeRows = deals.map((d) => ({ ...d, _src: 'deal' }));
+  const lostRows = lostOpps.map((o) => ({
+    title: o.title, amount: o.amount, list_state: 'perdido', _src: 'lost',
+  }));
+  const allRows = [...activeRows, ...lostRows];
+
+  if (allRows.length === 0) {
+    el.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:12px 0;">Sin campañas registradas</div>`;
+    return;
+  }
+
+  const filtered = _campaignFilter === 'all'
+    ? allRows
+    : allRows.filter((r) => dealFilterKey(r) === _campaignFilter);
+
+  if (filtered.length === 0) {
+    el.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:16px 0;">Sin campañas en este estatus</div>`;
+    return;
+  }
+
+  const header = `
+    <div class="ctable-header">
+      <div class="ctable-hcol hicon"></div>
+      <div class="ctable-hcol hname">Campaña / Marca</div>
+      <div class="ctable-hcol hamount">Venta Total</div>
+      <div class="ctable-hcol hstatus">Estatus</div>
+    </div>`;
+
+  const rows = filtered.map((row) => {
+    if (row._src === 'lost') {
+      return `
+        <div class="ctable-row">
+          <div class="ctable-icon" style="background:var(--red)"></div>
+          <div class="ctable-name">${escHtml(row.title || 'Sin título')}</div>
+          <div class="ctable-amount">${formatMXN(row.amount || 0)}</div>
+          <span class="sbadge perdido">Perdido</span>
+        </div>`;
+    }
+    const sb = getDealBadge(row.list_state);
+    const color = dealStateColor(row.list_state);
+    return `
+      <div class="ctable-row">
+        <div class="ctable-icon" style="background:${color}"></div>
+        <div class="ctable-name">${escHtml(row.title || 'Sin título')}</div>
+        <div class="ctable-amount">${formatMXN(row.amount || 0)}</div>
+        <span class="sbadge ${sb.cls}">${sb.label}</span>
+      </div>`;
+  });
+
+  el.innerHTML = header + rows.join('');
 }
 
 // ============================================================
@@ -765,18 +933,32 @@ function renderIncomeProjection(data) {
     return;
   }
   const maxVal = Math.max(...data.map((m) => (m.cobrado || 0) + (m.proyeccion || 0) + (m.pendiente || 0)), 1);
+
+  // Helper: segment div with optional label when tall enough
+  const seg = (pctRaw, color, val) => {
+    const h = parseFloat(pctRaw);
+    const lbl = h > 13 && val > 0
+      ? `<span style="font-size:8px;font-family:'DM Mono',monospace;font-weight:700;color:rgba(255,255,255,0.85);">${formatMXN(val)}</span>`
+      : "";
+    return `<div style="height:${h}%;background:${color};display:flex;align-items:center;justify-content:center;overflow:hidden;">${lbl}</div>`;
+  };
+
   const bars = data.map((m) => {
     const total = (m.cobrado || 0) + (m.proyeccion || 0) + (m.pendiente || 0);
-    const pctH = ((total / maxVal) * 100).toFixed(1);
-    const pctC = ((m.cobrado  || 0) / maxVal * 100).toFixed(1);
-    const pctP = ((m.proyeccion || 0) / maxVal * 100).toFixed(1);
-    const pctPe = ((m.pendiente || 0) / maxVal * 100).toFixed(1);
+    const pctH  = ((total / maxVal) * 100).toFixed(1);
+    const pctC  = ((m.cobrado    || 0) / maxVal * 100).toFixed(1);
+    const pctP  = ((m.proyeccion || 0) / maxVal * 100).toFixed(1);
+    const pctPe = ((m.pendiente  || 0) / maxVal * 100).toFixed(1);
+    const totalLbl = total > 0
+      ? `<div style="position:absolute;bottom:calc(${pctH}% + 3px);left:0;right:0;text-align:center;font-size:8px;font-family:'DM Mono',monospace;color:var(--text2);white-space:nowrap;">${formatMXN(total)}</div>`
+      : "";
     return `
       <div class="proj-col" style="height:100%;">
+        ${totalLbl}
         <div class="proj-bar-stack" style="height:${pctH}%;">
-          <div style="height:${pctC}%;background:var(--green);"></div>
-          <div style="height:${pctP}%;background:var(--blue);"></div>
-          <div style="height:${pctPe}%;background:var(--amber);"></div>
+          ${seg(pctC,  "var(--green)", m.cobrado    || 0)}
+          ${seg(pctP,  "var(--blue)",  m.proyeccion || 0)}
+          ${seg(pctPe, "var(--amber)", m.pendiente  || 0)}
         </div>
         <div class="proj-lbl">${escHtml(m.month)}</div>
       </div>`;
@@ -802,11 +984,17 @@ function renderPaymentCalendar(data) {
     return;
   }
   const nodes = data.map((item, i) => {
-    const connector = i < data.length - 1 ? `<div class="tl-connector"></div>` : "";
+    const c = CALENDAR_NODE_COLORS[i % CALENDAR_NODE_COLORS.length];
+    const connector = i < data.length - 1
+      ? `<div class="tl-connector" style="background:${c.border};opacity:0.25;"></div>`
+      : "";
+    const abbr = escHtml((item.month || '').substring(0, 3));
     return `
       <div class="tl-node">
-        <div class="tl-dot">📅</div>
-        <div class="tl-month">${escHtml(item.month)}</div>
+        <div class="tl-dot" style="background:${c.bg};border-color:${c.border};">
+          <span style="font-size:10px;font-weight:700;font-family:'Sora',sans-serif;color:${c.text};letter-spacing:0;">${abbr}</span>
+        </div>
+        <div class="tl-month" style="color:${c.text};">${escHtml(item.month)}</div>
         <div class="tl-amount">${formatMXN(item.amount)}</div>
       </div>${connector}`;
   }).join("");
@@ -858,6 +1046,12 @@ function dealStateColor(listState) {
  *
  * @param {Array<{title: string, amount: number, list_state: string}>} deals
  */
+const MEDAL_CONFIG = [
+  { cls: "rank-1", num: "1", color: "#f0a93a", bg: "rgba(240,169,58,0.18)" },
+  { cls: "rank-2", num: "2", color: "#b0afa6", bg: "rgba(156,155,146,0.18)" },
+  { cls: "rank-3", num: "3", color: "#c97c14", bg: "rgba(201,124,20,0.18)" },
+];
+
 function renderTopCampaigns(deals) {
   const el = document.getElementById("top-campaigns");
   if (!el) return;
@@ -872,17 +1066,27 @@ function renderTopCampaigns(deals) {
     return;
   }
 
-  const rankCls = ["rank-1", "rank-2", "rank-3"];
-  const rankNums = ["1", "2", "3"];
   el.innerHTML = `<div class="medal-cards">${top3.map((deal, i) => {
+    const m = MEDAL_CONFIG[i];
     const sb = getDealBadge(deal.list_state);
+    const talento = Math.round((deal.amount || 0) * 0.70);
     return `
-      <div class="medal-card ${rankCls[i]}">
-        <div class="medal-num ${rankCls[i]}">${rankNums[i]}</div>
-        <div class="medal-amount-label">Venta total</div>
-        <div class="medal-amount">${formatMXN(deal.amount || 0)}</div>
-        <div class="medal-name">${escHtml(deal.title || "Sin título")}</div>
+      <div class="medal-card ${m.cls}">
+        <div class="medal-top">
+          <div class="medal-badge-round" style="background:${m.bg};color:${m.color};">${m.num}</div>
+          <div class="medal-brand-name">${escHtml(deal.title || "Sin título")}</div>
+        </div>
         <span class="sbadge ${sb.cls}">${sb.label}</span>
+        <div class="medal-amounts">
+          <div class="medal-amt-col">
+            <div class="medal-amt-label">Venta total</div>
+            <div class="medal-amt-val">${formatMXN(deal.amount || 0)}</div>
+          </div>
+          <div class="medal-amt-col">
+            <div class="medal-amt-label">Talento (70%)</div>
+            <div class="medal-amt-val">${formatMXN(talento)}</div>
+          </div>
+        </div>
       </div>`;
   }).join("")}</div>`;
 }
@@ -903,35 +1107,20 @@ function renderTopCampaigns(deals) {
  * @param {Array<{title: string, amount: number, loss_reason: string|null}>} lostOpps
  */
 function renderCampaignTable(deals, lostOpps) {
-  const el = document.getElementById("talent-deals");
-  if (!el) return;
+  _campaignDeals = deals || [];
+  _campaignLostOpps = lostOpps || [];
+  _campaignFilter = 'all'; // reset to Todos on every new talent
 
-  const activeRows = (deals || []).map((deal) => {
-    const sb = getDealBadge(deal.list_state);
-    const color = dealStateColor(deal.list_state);
-    return `
-      <div class="ctable-row">
-        <div class="ctable-icon" style="background:${color}"></div>
-        <div class="ctable-name">${escHtml(deal.title || "Sin título")}</div>
-        <div class="ctable-amount">${formatMXN(deal.amount || 0)}</div>
-        <span class="sbadge ${sb.cls}">${sb.label}</span>
-      </div>`;
-  });
-
-  const lostRows = (lostOpps || []).map((opp) => `
-    <div class="ctable-row">
-      <div class="ctable-icon" style="background:var(--red)"></div>
-      <div class="ctable-name">${escHtml(opp.title || "Sin título")}</div>
-      <div class="ctable-amount">${formatMXN(opp.amount || 0)}</div>
-      <span class="sbadge perdido">Perdido</span>
-    </div>`);
-
-  const allRows = [...activeRows, ...lostRows];
-  if (allRows.length === 0) {
-    el.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:13px;padding:12px 0;">Sin campañas registradas</div>`;
-    return;
+  const pillsEl = document.getElementById('campaign-filter-pills');
+  if (pillsEl) {
+    pillsEl.innerHTML = CAMPAIGN_FILTERS.map((f) =>
+      `<button class="filter-pill${f.key === 'all' ? ' active' : ''}"
+               data-filter="${f.key}"
+               onclick="setCampaignFilter('${f.key}')">${f.label}</button>`
+    ).join('');
   }
-  el.innerHTML = allRows.join("");
+
+  renderCampaignRows();
 }
 
 /**
