@@ -228,8 +228,14 @@ def _render_pdf(html_str: str, output_path: str) -> int:
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     tmp_path = output_path + ".tmp"
-    HTML(string=html_str, base_url=".").write_pdf(tmp_path)
-    os.replace(tmp_path, output_path)
+    try:
+        HTML(string=html_str, base_url=".").write_pdf(tmp_path)
+        os.replace(tmp_path, output_path)
+    except Exception:
+        # WR-03: clean up the .tmp file so it does not linger on disk when WeasyPrint fails
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
     return os.path.getsize(output_path)
 
 
