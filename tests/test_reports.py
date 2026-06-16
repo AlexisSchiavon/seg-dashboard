@@ -1,18 +1,23 @@
-"""Wave 1 (05-02) — Tests for Phase 5 AI-Generated PDF Reports service layer and generate endpoint.
+"""Tests for Phase 5 AI-Generated PDF Reports.
+
+Wave 1 (05-02): Service layer and generate endpoint.
+Wave 2 (05-03): History list and download endpoints.
 
 Test IDs match the Per-Task Verification Map in 05-VALIDATION.md:
   5-02-01 → test_available_months
   5-02-02 → test_generate_report_payload
   5-02-03 → test_pdf_written_to_disk
   5-02-04 → test_generate_endpoint
-  5-03-01 → test_list_reports       (Wave 2 stubs — 05-03)
-  5-03-02 → test_download_report    (Wave 2 stubs — 05-03)
+  5-03-01 → test_list_reports       (Wave 2 — 05-03)
+  5-03-02 → test_download_report    (Wave 2 — 05-03)
   5-04-01 → test_reportes_tab_exists (Wave 3 stubs — 05-04)
 """
 import json
+from datetime import datetime
+
 import pytest
 
-from app.models import Deal, Talent
+from app.models import Deal, Report, Talent
 
 
 class TestAvailableMonths:
@@ -230,28 +235,99 @@ class TestListReports:
     """5-03-01 — REPORT-02: GET /reports/ returns history list; requires auth."""
 
     def test_list_reports_requires_auth(self, client):
-        pytest.fail("not implemented — Wave 2 (05-03)")
+        """Unauthenticated GET /reports/ returns 401 (T-unauth-dl)."""
+        response = client.get("/reports/")
+        assert response.status_code == 401
 
     def test_list_reports_returns_empty_list(self, auth_client):
-        pytest.fail("not implemented — Wave 2 (05-03)")
+        """Authenticated GET /reports/ returns empty list when no reports exist."""
+        response = auth_client.get("/reports/")
+        assert response.status_code == 200
+        assert response.json() == []
 
     def test_list_reports_returns_generated_reports(self, auth_client, seed_deals,
                                                      mock_anthropic, mock_weasyprint):
-        pytest.fail("not implemented — Wave 2 (05-03)")
+        """After generating a report, GET /reports/ returns it with all required fields."""
+        talent_id = seed_deals["deal_open"].talent_id
+
+        # Generate a report so a row exists
+        gen_response = auth_client.post(
+            "/reports/generate",
+            json={"talent_id": talent_id, "month": "2026-05"},
+        )
+        assert gen_response.status_code == 200
+
+        # List reports — should contain the generated one
+        response = auth_client.get("/reports/")
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) >= 1
+
+        # Verify all required ReportHistoryItem fields are present
+        item = data[0]
+        required_fields = {"id", "talent_id", "talent_name", "month", "generated_at", "file_size_bytes"}
+        for field in required_fields:
+            assert field in item, f"Missing field: {field}"
+
+        assert item["talent_id"] == talent_id
+        assert item["month"] == "2026-05"
+        assert item["talent_name"] != ""
+        assert item["file_size_bytes"] > 0
 
 
 class TestDownloadReport:
     """5-03-02 — REPORT-02: GET /reports/{id}/download returns PDF; unauthenticated returns 401."""
 
     def test_download_requires_auth(self, client):
-        pytest.fail("not implemented — Wave 2 (05-03)")
+        """Unauthenticated GET /reports/1/download returns 401 (T-unauth-dl)."""
+        response = client.get("/reports/1/download")
+        assert response.status_code == 401
 
     def test_download_returns_pdf(self, auth_client, seed_deals,
                                    mock_anthropic, mock_weasyprint):
-        pytest.fail("not implemented — Wave 2 (05-03)")
+        """Generated report can be downloaded as application/pdf with Content-Disposition: attachment."""
+        talent_id = seed_deals["deal_open"].talent_id
+
+        # Generate a report first so the file exists on disk (via mock_weasyprint)
+        gen_response = auth_client.post(
+            "/reports/generate",
+            json={"talent_id": talent_id, "month": "2026-05"},
+        )
+        assert gen_response.status_code == 200
+        report_id = gen_response.json()["id"]
+
+        # Download the PDF
+        response = auth_client.get(f"/reports/{report_id}/download")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        content_disp = response.headers.get("content-disposition", "")
+        assert "attachment" in content_disp
+        assert ".pdf" in content_disp
 
     def test_download_404_for_missing_report(self, auth_client):
-        pytest.fail("not implemented — Wave 2 (05-03)")
+        """GET /reports/999999/download returns 404 when no Report row exists."""
+        response = auth_client.get("/reports/999999/download")
+        assert response.status_code == 404
+
+    def test_download_missing_file(self, auth_client, db_session, seed_deals):
+        """Report row pointing at a nonexistent file path returns 404 (T-stale-path defense)."""
+        talent_id = seed_deals["deal_open"].talent_id
+
+        # Insert a Report row with a file_path that does not exist on disk
+        stale_report = Report(
+            talent_id=talent_id,
+            month="2020-01",
+            file_path="/nonexistent/path/that/does/not/exist.pdf",
+            file_size_bytes=1234,
+            generated_at=datetime.utcnow(),
+        )
+        db_session.add(stale_report)
+        db_session.commit()
+        db_session.refresh(stale_report)
+
+        response = auth_client.get(f"/reports/{stale_report.id}/download")
+        assert response.status_code == 404
 
 
 class TestReportesTabExists:
