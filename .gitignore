@@ -12,8 +12,9 @@ __pycache__/
 *.db-wal
 *.db-shm
 
-# Reports output (M5+)
-reports/
+# Reports output (M5+) — root-anchored: only ignores /reports/ at project root,
+# not templates/reports/ or any nested reports/ directory.
+/reports/
 
 # Editor / OS
 .DS_Store
