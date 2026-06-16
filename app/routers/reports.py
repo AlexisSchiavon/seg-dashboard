@@ -6,17 +6,23 @@ HTTP concerns (request parsing, response serialization).
 
 Security notes:
   - Router-level dependencies=[Depends(get_current_user)] protects ALL endpoints
-    including /talents, /months, and /generate (T-unauth-dl defense).
+    including /talents, /months, /generate, / (list), and /{id}/download
+    (T-unauth-dl defense from STRIDE register).
   - generate_report endpoint is declared `def` (NOT `async def`) — WeasyPrint
     is blocking I/O; FastAPI runs it in a threadpool (RESEARCH.md Pitfall 3).
+  - download_report: os.path.exists check returns 404 instead of leaking a
+    500 stack trace when DB row points at a missing file (T-stale-path defense).
 """
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.database import get_db
-from app.models import Talent
+from app.models import Report, Talent
 from app.schemas.reports import ReportGenerate, ReportHistoryItem, ReportOut
 from app.services import reports as reports_service
 
@@ -93,4 +99,50 @@ def generate_report(  # MUST be `def`, NOT `async def` — WeasyPrint is blockin
         file_path=result["file_path"],
         file_size_bytes=result["file_size_bytes"],
         narrative=result["narrative"],
+    )
+
+
+@router.get("/", response_model=list[ReportHistoryItem])
+def list_reports(db: Session = Depends(get_db)):
+    """Return all generated reports newest-first with talent_name resolved.
+
+    Auth-protected at router level (T-unauth-dl).
+    """
+    rows = reports_service.list_reports(db)
+    return [ReportHistoryItem(**row) for row in rows]
+
+
+@router.get("/{report_id}/download")
+def download_report(report_id: int, db: Session = Depends(get_db)):
+    """Stream the PDF file for a given report as an attachment download.
+
+    Auth-protected at router level (T-unauth-dl).
+
+    Errors:
+      - 404 if Report row not found in DB
+      - 404 if Report row exists but PDF file is missing on disk (T-stale-path defense)
+    """
+    report = db.get(Report, report_id)
+    if report is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Report not found",
+        )
+
+    if not os.path.exists(report.file_path):
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="PDF file not found on disk",
+        )
+
+    talent = db.get(Talent, report.talent_id)
+    talent_name = talent.name if talent is not None else "Sin-talento"
+    # Replace spaces with hyphens for a clean filename
+    safe_name = talent_name.replace(" ", "-")
+    filename = f"reporte-{safe_name}-{report.month}.pdf"
+
+    return FileResponse(
+        path=report.file_path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
