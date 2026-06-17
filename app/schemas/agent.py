@@ -5,16 +5,15 @@ Design notes (06-CONTEXT.md / 06-RESEARCH.md):
   - ChatRequest.history: up to 20 prior {role, content} messages (D-73 rolling window).
   - ChatResponse.answer: a single prose string synthesized by the agent loop.
 """
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
 class ChatMessage(BaseModel):
-    """A single message in the conversation history.
+    """A single message in the conversation history."""
 
-    role must be "user" or "assistant" (enforced by Claude's API; Pydantic accepts any str).
-    """
-
-    role: str
+    role: Literal["user", "assistant"]
     content: str
 
 

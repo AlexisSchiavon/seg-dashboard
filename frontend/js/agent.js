@@ -102,7 +102,7 @@ async function sendAgentMessage() {
     if (loadingEl) {
       loadingEl.innerHTML = `
         <div class="agent-qa-question">${escHtml(message)}</div>
-        <div class="agent-qa-answer">${marked.parse(answer)}</div>
+        <div class="agent-qa-answer">${DOMPurify.sanitize(marked.parse(answer))}</div>
       `;
     }
 

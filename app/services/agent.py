@@ -429,6 +429,11 @@ def _run_agent_loop(db: Session, message: str, history: list[dict]) -> str:
                     "is_error": True,
                 })
 
+        # WR-02: guard against malformed API response (tool_use stop with no blocks)
+        if not tool_results:
+            logger.warning("agent: stop_reason=tool_use but no tool_use blocks found — breaking loop")
+            return "No pude completar la consulta."
+
         # Append tool_result user turn — tool_result blocks FIRST (Pitfall 1)
         messages.append({"role": "user", "content": tool_results})
 

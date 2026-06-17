@@ -12,6 +12,7 @@ Security notes:
     endpoints in a threadpool (Pitfall 3 from RESEARCH.md).
   - ValueError from agent_service (unknown tool, unexpected Claude response) → HTTP 502.
 """
+import anthropic
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -48,7 +49,7 @@ def chat(  # MUST be `def` NOT `async def` — Anthropic SDK is blocking (Pitfal
             body.message,
             [m.model_dump() for m in body.history],
         )
-    except ValueError as exc:
+    except (ValueError, anthropic.APIError) as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Error al consultar el agente",
