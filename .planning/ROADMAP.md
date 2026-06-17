@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Google Sheets Leads Integration** - Gmail-fed leads sync populates the Leads dashboard tab (completed 2026-06-15)
 - [x] **Phase 4: Trello Integration & Collection Automation** - Campaign execution/collection tracking and Pipedrive→Trello automation complete the Por talento revenue projection (completed 2026-06-15)
 - [x] **Phase 5: AI-Generated PDF Reports** - Claude-narrated monthly reports with downloadable history in the Reportes tab (completed 2026-06-16)
-- [ ] **Phase 6: Embedded Natural-Language Agent** - Read-only conversational querying of dashboard data
+- [x] **Phase 6: Embedded Natural-Language Agent** - Read-only conversational querying of dashboard data (completed 2026-06-16)
 - [ ] **Phase 7: Docker & EasyPanel Deployment** - Containerized deployment with persistent SQLite storage verified across redeploys
 
 ## Phase Details
@@ -198,7 +198,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-02-PLAN.md — Agente tab UI (prompt + answer cards, starter chips, multi-turn history, Limpiar)
+- [x] 06-02-PLAN.md — Agente tab UI (prompt + answer cards, starter chips, multi-turn history, Limpiar)
 
 **UI hint**: yes
 
