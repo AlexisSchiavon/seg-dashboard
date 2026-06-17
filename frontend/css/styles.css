@@ -1887,9 +1887,110 @@ body {
 .agent-qa-answer {
   color: var(--text);
   font-size: 14px;
-  line-height: 1.6;
-  padding: 14px;
-  white-space: pre-wrap;
+  line-height: 1.7;
+  padding: 14px 16px;
+}
+
+/* Paragraphs */
+.agent-qa-answer p {
+  margin: 0 0 10px;
+}
+.agent-qa-answer p:last-child { margin-bottom: 0; }
+
+/* Headings */
+.agent-qa-answer h1,
+.agent-qa-answer h2,
+.agent-qa-answer h3 {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 14px 0 6px;
+  text-transform: uppercase;
+}
+.agent-qa-answer h1:first-child,
+.agent-qa-answer h2:first-child,
+.agent-qa-answer h3:first-child { margin-top: 0; }
+
+/* Bold / italic */
+.agent-qa-answer strong { color: var(--text); font-weight: 600; }
+.agent-qa-answer em     { color: var(--text2); font-style: italic; }
+
+/* Lists */
+.agent-qa-answer ul,
+.agent-qa-answer ol {
+  margin: 0 0 10px 18px;
+  padding: 0;
+}
+.agent-qa-answer li { margin-bottom: 3px; }
+.agent-qa-answer li:last-child { margin-bottom: 0; }
+
+/* Inline code */
+.agent-qa-answer code {
+  background: var(--bg5);
+  border-radius: 4px;
+  color: var(--redT);
+  font-family: 'DM Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+}
+
+/* Code blocks */
+.agent-qa-answer pre {
+  background: var(--bg5);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 10px 0;
+  overflow-x: auto;
+  padding: 12px 14px;
+}
+.agent-qa-answer pre code {
+  background: none;
+  color: var(--text2);
+  font-size: 12px;
+  padding: 0;
+}
+
+/* Tables */
+.agent-qa-answer table {
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 10px 0;
+  width: 100%;
+}
+.agent-qa-answer th {
+  background: var(--bg4);
+  border: 1px solid var(--borderM);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 7px 10px;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.agent-qa-answer td {
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 7px 10px;
+  vertical-align: top;
+}
+.agent-qa-answer tr:hover td { background: var(--bg4); }
+
+/* Horizontal rule */
+.agent-qa-answer hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
+/* Blockquote */
+.agent-qa-answer blockquote {
+  border-left: 3px solid var(--borderM);
+  color: var(--text2);
+  margin: 10px 0;
+  padding: 4px 12px;
 }
 
 .agent-loading {
