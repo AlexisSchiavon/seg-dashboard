@@ -259,7 +259,8 @@ def test_sync_trello_source_filter_isolated(db_session, mock_trello_transport, s
 # ---------------------------------------------------------------------------
 
 
-def test_auto_create_card_for_won_deal(db_session, mock_trello_transport, seed_deals):
+def test_auto_create_card_for_won_deal(db_session, mock_trello_transport, seed_deals, monkeypatch):
+    monkeypatch.setattr("app.sync.jobs.TRELLO_AUTO_CREATE_ENABLED", True)
     """Won deals with no existing TrelloCard get a card created in CONTRATO_LIST_ID.
 
     Arrange: seed a won deal with pipedrive_id=2001 and no linked TrelloCard.
@@ -336,7 +337,8 @@ def test_auto_create_card_for_won_deal(db_session, mock_trello_transport, seed_d
     assert linked_card.pipedrive_deal_id_desc == 2001
 
 
-def test_no_duplicate_card_creation(db_session, mock_trello_transport, seed_trello_cards):
+def test_no_duplicate_card_creation(db_session, mock_trello_transport, seed_trello_cards, monkeypatch):
+    monkeypatch.setattr("app.sync.jobs.TRELLO_AUTO_CREATE_ENABLED", True)
     """Won deals that already have a TrelloCard do NOT get a second card created.
 
     Arrange: seed a won deal and link a TrelloCard to it via seed_trello_cards pattern.

@@ -934,33 +934,38 @@ function renderIncomeProjection(data) {
   }
   const maxVal = Math.max(...data.map((m) => (m.cobrado || 0) + (m.proyeccion || 0) + (m.pendiente || 0)), 1);
 
-  // Helper: segment div with optional label when tall enough
+  // Helper: segment div with label when segment is tall enough to fit text
   const seg = (pctRaw, color, val) => {
     const h = parseFloat(pctRaw);
-    const lbl = h > 13 && val > 0
-      ? `<span style="font-size:8px;font-family:'DM Mono',monospace;font-weight:700;color:rgba(255,255,255,0.85);">${formatMXN(val)}</span>`
+    const lbl = h > 10 && val > 0
+      ? `<span style="font-size:12px;font-family:'DM Mono',monospace;font-weight:700;color:#fff;">${formatMXN(val)}</span>`
       : "";
     return `<div style="height:${h}%;background:${color};display:flex;align-items:center;justify-content:center;overflow:hidden;">${lbl}</div>`;
   };
 
   const bars = data.map((m) => {
-    const total = (m.cobrado || 0) + (m.proyeccion || 0) + (m.pendiente || 0);
-    const pctH  = ((total / maxVal) * 100).toFixed(1);
-    const pctC  = ((m.cobrado    || 0) / maxVal * 100).toFixed(1);
-    const pctP  = ((m.proyeccion || 0) / maxVal * 100).toFixed(1);
-    const pctPe = ((m.pendiente  || 0) / maxVal * 100).toFixed(1);
-    const totalLbl = total > 0
-      ? `<div style="position:absolute;bottom:calc(${pctH}% + 3px);left:0;right:0;text-align:center;font-size:8px;font-family:'DM Mono',monospace;color:var(--text2);white-space:nowrap;">${formatMXN(total)}</div>`
+    const total  = (m.cobrado || 0) + (m.proyeccion || 0) + (m.pendiente || 0);
+    const pctH   = ((total / maxVal) * 100).toFixed(1);
+    const pctC   = ((m.cobrado    || 0) / maxVal * 100).toFixed(1);
+    const pctP   = ((m.proyeccion || 0) / maxVal * 100).toFixed(1);
+    const pctPe  = ((m.pendiente  || 0) / maxVal * 100).toFixed(1);
+    const isCurrent = m.is_current === true;
+    const sublabel  = isCurrent ? "(Real)" : "(Proyección)";
+    const totalLbl  = total > 0
+      ? `<div style="position:absolute;bottom:calc(${pctH}% + 4px);left:0;right:0;text-align:center;font-size:10px;font-family:'DM Mono',monospace;color:var(--text2);white-space:nowrap;">${formatMXN(total)}</div>`
       : "";
+    // Empty bar placeholder — subtle dashed outline so the column is visible
+    const emptyBar = total === 0
+      ? `<div style="height:6px;border-radius:4px 4px 0 0;border:1px dashed var(--text3);opacity:0.4;"></div>`
+      : `<div class="proj-bar-stack" style="height:${pctH}%;">${seg(pctC,"var(--green)",m.cobrado||0)}${seg(pctP,"var(--blue)",m.proyeccion||0)}${seg(pctPe,"var(--amber)",m.pendiente||0)}</div>`;
     return `
       <div class="proj-col" style="height:100%;">
         ${totalLbl}
-        <div class="proj-bar-stack" style="height:${pctH}%;">
-          ${seg(pctC,  "var(--green)", m.cobrado    || 0)}
-          ${seg(pctP,  "var(--blue)",  m.proyeccion || 0)}
-          ${seg(pctPe, "var(--amber)", m.pendiente  || 0)}
+        ${emptyBar}
+        <div class="proj-lbl">
+          <span class="proj-lbl-month">${escHtml(m.month)}</span>
+          <span class="proj-lbl-sub">${sublabel}</span>
         </div>
-        <div class="proj-lbl">${escHtml(m.month)}</div>
       </div>`;
   }).join("");
   el.innerHTML = `

@@ -167,7 +167,7 @@ def _sliding_window_months(anchor: date) -> list[date]:
         List of 4 date objects, each set to the 1st of the respective month.
     """
     result: list[date] = []
-    for delta in (-1, 0, 1, 2):
+    for delta in (0, 1, 2, 3):
         total_months = anchor.month + delta
         year_offset, month_0based = divmod(total_months - 1, 12)
         month = month_0based + 1
@@ -198,8 +198,10 @@ def income_projection(db: Session, talent_id: int) -> list[dict[str, Any]]:
     window_labels = [_month_label(d) for d in window]
 
     # Build result dict keyed by label (preserves insertion order in Python 3.7+)
+    current_label = window_labels[0]
     result: dict[str, dict[str, Any]] = {
-        label: {"month": label, "cobrado": 0.0, "proyeccion": 0.0, "pendiente": 0.0}
+        label: {"month": label, "cobrado": 0.0, "proyeccion": 0.0, "pendiente": 0.0,
+                "is_current": label == current_label}
         for label in window_labels
     }
 

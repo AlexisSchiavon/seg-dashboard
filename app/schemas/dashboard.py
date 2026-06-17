@@ -87,10 +87,11 @@ class BrandCategorySlice(BaseModel):
 
 class MonthProjection(BaseModel):
     """One month's cobrado/proyeccion/pendiente layers for the income projection chart."""
-    month: str          # e.g. "Jun 2026" — English 3-letter abbreviation
-    cobrado: float      # cerrado cards (green bar layer)
-    proyeccion: float   # ejecucion cards (blue bar layer)
-    pendiente: float    # cobranza cards (amber bar layer)
+    month: str              # e.g. "Jun 2026" — English 3-letter abbreviation
+    cobrado: float          # cerrado cards (green bar layer)
+    proyeccion: float       # ejecucion cards (blue bar layer)
+    pendiente: float        # cobranza cards (amber bar layer)
+    is_current: bool = False  # True for the current month (shows "Real" sublabel)
 
 
 class CalendarEntry(BaseModel):
