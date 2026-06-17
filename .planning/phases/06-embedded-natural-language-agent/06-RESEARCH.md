@@ -1288,22 +1288,13 @@ while response.stop_reason == "tool_use":
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Exact starter chip text**
-   - What we know: D-72 requires 3-4 chips covering global, per-talent, and funnel/leads topics.
-   - What's unclear: Whether to use specific talent names (e.g., "Karamella") in chips or keep them generic.
-   - Recommendation: Use a mix — 2 generic chips + 2 with talent names from the top of the ranking. Planner decides exact wording.
+1. **Exact starter chip text** — RESOLVED by 06-02 Plan Task 1: 4 chips specified verbatim ("¿Cuánto ingresaron este mes?", "¿Qué talento tiene más deals abiertos?", "¿Cuántos leads llegaron esta semana?", "¿Cuál es el estado del funnel?"). Generic chips chosen over talent-name chips for MVP.
 
-2. **Loading state duration**
-   - What we know: Agent loop can take 5-15 seconds (5 Anthropic round-trips × 1-3 seconds each + DB queries).
-   - What's unclear: Whether to show a progress indicator beyond "Consultando datos..." text.
-   - Recommendation: Keep it simple — disabled button + "..." text is sufficient for MVP. Planner may add a CSS spinner if desired.
+2. **Loading state duration** — RESOLVED by 06-02 Plan Task 2: disabled button + "Consultando datos..." text adopted (no spinner). Sufficient for MVP per recommendation.
 
-3. **History display: should old Q&A cards be preserved or cleared on `setPage('agent')`?**
-   - What we know: D-74 specifies a manual "Limpiar" button. No auto-clear on tab switch.
-   - What's unclear: Whether switching tabs then returning should preserve the Q&A cards.
-   - Recommendation: Preserve cards (don't clear on setPage). JS module state persists for the page session. This is consistent with how the reports tab preserves generated content.
+3. **History display on tab switch** — RESOLVED by 06-02 Plan Task 2: Q&A cards preserved across tab switches. `initAgentTab()` only focuses input, does not clear cards. Consistent with reports tab behavior.
 
 ---
 

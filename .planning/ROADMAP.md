@@ -192,8 +192,14 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 06-01-PLAN.md — Backend agent service + POST /agent/chat (read-only tool-use loop over 11 services)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 06-02-PLAN.md — Agente tab UI (prompt + answer cards, starter chips, multi-turn history, Limpiar)
+
 **UI hint**: yes
 
 ### Phase 7: Docker & EasyPanel Deployment
