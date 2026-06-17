@@ -194,7 +194,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Backend agent service + POST /agent/chat (read-only tool-use loop over 11 services)
+- [x] 06-01-PLAN.md — Backend agent service + POST /agent/chat (read-only tool-use loop over 11 services)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
