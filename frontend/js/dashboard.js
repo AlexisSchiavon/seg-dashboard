@@ -86,6 +86,8 @@ function setPage(name, e) {
   } else if (name === "reports") {
     loadReportTalents();
     loadReportHistory();
+  } else if (name === "agent") {
+    initAgentTab();
   }
 }
 
