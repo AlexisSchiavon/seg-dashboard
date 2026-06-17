@@ -1843,3 +1843,58 @@ body {
   .kpi-row-3   { grid-template-columns: 1fr 1fr; }
 }
 .ctable-row .sbadge { min-width: 74px; justify-content: center; }
+
+/* ============================================================
+   Agente tab
+   ============================================================ */
+
+.agent-chip {
+  background: var(--bg4);
+  border: 1px solid var(--borderM);
+  border-radius: 20px;
+  color: var(--text2);
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  padding: 6px 12px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.agent-chip:hover {
+  background: var(--bg5);
+  border-color: var(--borderH);
+  color: var(--text);
+}
+
+.agent-qa-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--rL);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.agent-qa-question {
+  background: var(--bg4);
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 14px;
+}
+
+.agent-qa-answer {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 14px;
+  white-space: pre-wrap;
+}
+
+.agent-loading {
+  color: var(--text3);
+  font-size: 13px;
+  padding: 12px 14px;
+  text-align: center;
+}

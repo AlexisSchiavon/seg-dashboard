@@ -24,6 +24,7 @@
     <div class="tab" onclick="setPage('funnel', event)">Funnel</div>
     <div class="tab" onclick="setPage('leads', event)">Leads</div>
     <div class="tab" onclick="setPage('reports', event)">Reportes</div>
+    <div class="tab" onclick="setPage('agent', event)">Agente</div>
   </div>
 
   <div id="toast" class="toast"></div>
@@ -306,9 +307,60 @@
     </div>
   </div>
 
+  <!-- ========== AGENTE TAB ========== -->
+  <div class="page" id="page-agent">
+    <!-- Header with Limpiar button (D-74) -->
+    <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:16px 16px 0;">
+      <div class="section-title">Agente IA</div>
+      <button class="btn" id="btn-agent-clear"
+              style="width:auto;padding:6px 12px;margin:0;font-size:12px;"
+              onclick="clearAgentHistory()">
+        Limpiar
+      </button>
+    </div>
+
+    <!-- Input area (D-71: prompt at top) -->
+    <div style="padding:0 16px;">
+      <div class="card" style="margin-bottom:12px;">
+        <textarea id="agent-input"
+                  placeholder="Pregunta sobre revenue, funnel, leads o talentos..."
+                  rows="2"
+                  style="width:100%;background:transparent;border:none;color:var(--text);
+                         font-family:inherit;font-size:14px;resize:none;outline:none;"></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+          <button class="btn primary" id="btn-agent-send"
+                  style="width:auto;padding:8px 16px;margin:0;"
+                  onclick="sendAgentMessage()">
+            Preguntar
+          </button>
+        </div>
+      </div>
+
+      <!-- Starter chips (D-72: shown when history is empty) -->
+      <div id="agent-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+        <button class="agent-chip" onclick="fillAgentInput(this)">
+          ¿Cuál es el talento con más revenue?
+        </button>
+        <button class="agent-chip" onclick="fillAgentInput(this)">
+          ¿Cuántos leads entraron esta semana?
+        </button>
+        <button class="agent-chip" onclick="fillAgentInput(this)">
+          ¿Qué deals están en Negociación?
+        </button>
+        <button class="agent-chip" onclick="fillAgentInput(this)">
+          ¿Cómo está el pipeline de Karamella?
+        </button>
+      </div>
+
+      <!-- Q&A cards container (D-71: answers stack below input) -->
+      <div id="agent-answers"></div>
+    </div>
+  </div>
+
   <script src="/js/auth.js"></script>
   <script src="/js/dashboard.js"></script>
   <script src="/js/leads.js"></script>
   <script src="/js/reports.js"></script>
+  <script src="/js/agent.js"></script>
 </body>
 </html>
