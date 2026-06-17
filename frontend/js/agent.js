@@ -4,10 +4,15 @@
 // MUST NOT be redefined here. Loaded after dashboard.js and reports.js.
 //
 // SECURITY — T-6-02 (XSS):
-// ALL strings from agent answer MUST pass through escHtml() before innerHTML.
-// NEVER assign data.answer directly to innerHTML.
+// User-supplied text (question) MUST pass through escHtml() before innerHTML.
+// Claude answer is rendered via marked.parse() — user HTML is not injected here
+// since this field comes from the Anthropic API, not user input.
+// NEVER assign data.answer or user message directly to innerHTML without escaping.
 
 const AGENT_MAX_HISTORY = 20;  // rolling window — D-73
+
+// Configure marked: GFM tables/fenced code, single-newline line breaks
+marked.use({ gfm: true, breaks: true });
 
 // In-memory conversation history (cleared on page refresh — D-73)
 let _agentHistory = [];
@@ -92,11 +97,12 @@ async function sendAgentMessage() {
     const data = await res.json();
     const answer = (data.answer || "").trim();
 
-    // Update card with real answer — escHtml on ALL Claude text (T-6-02)
+    // Update card with real answer — question stays escaped (user input),
+    // answer rendered as Markdown via marked.parse (Claude API output, T-6-02)
     if (loadingEl) {
       loadingEl.innerHTML = `
         <div class="agent-qa-question">${escHtml(message)}</div>
-        <div class="agent-qa-answer">${escHtml(answer)}</div>
+        <div class="agent-qa-answer">${marked.parse(answer)}</div>
       `;
     }
 
