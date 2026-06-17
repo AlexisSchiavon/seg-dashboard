@@ -189,7 +189,11 @@ Plans:
   2. Agent responses are based on real computed data via tool-calling against existing services (never invented figures, never raw DB dumps)
   3. Agent cannot perform any write/mutating actions against Pipedrive, Trello, Sheets, or the local database
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Backend agent service + POST /agent/chat (read-only tool-use loop over 11 services)
+- [ ] 06-02-PLAN.md — Agente tab UI (prompt + answer cards, starter chips, multi-turn history, Limpiar)
 **UI hint**: yes
 
 ### Phase 7: Docker & EasyPanel Deployment
