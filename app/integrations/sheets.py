@@ -9,6 +9,7 @@ service-account credentials in error messages. Callers in app/sync/jobs.py must
 catch exceptions and persist only str(exc).
 """
 import json
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FuturesTimeout
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -16,9 +17,10 @@ from pydantic import BaseModel, field_validator
 
 from app.config import settings
 
+_SHEETS_TIMEOUT_SECS = 30
+
 _SCOPES = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
 ]
 
 
@@ -79,11 +81,24 @@ def get_leads_rows() -> list[SheetLeadRow]:
 
     ASSUMPTION (A1): Sheet is append-only; row numbers are stable across syncs.
     If rows are ever reordered or inserted mid-sheet, truncate leads table and re-sync.
+
+    Times out after _SHEETS_TIMEOUT_SECS seconds to prevent indefinitely blocking
+    the background sync thread and locking the concurrency guard.
     """
-    gc = _client()
-    sh = gc.open_by_key(settings.GOOGLE_SHEETS_ID)
-    ws = sh.worksheet("Leads")
-    all_values = ws.get_all_values()
+    def _fetch() -> list:
+        gc = _client()
+        sh = gc.open_by_key(settings.GOOGLE_SHEETS_ID)
+        ws = sh.worksheet("Leads")
+        return ws.get_all_values()
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(_fetch)
+        try:
+            all_values = future.result(timeout=_SHEETS_TIMEOUT_SECS)
+        except _FuturesTimeout:
+            raise TimeoutError(
+                f"Google Sheets API did not respond within {_SHEETS_TIMEOUT_SECS}s"
+            )
 
     if not all_values:
         return []

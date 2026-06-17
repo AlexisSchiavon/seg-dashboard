@@ -1,15 +1,36 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.auth import router as auth_router
+from app.config import settings
 from app.routers import agent, dashboard, health, leads, reports, sync, talents
 from app.sync import scheduler as sync_scheduler
+
+logger = logging.getLogger(__name__)
+
+_REQUIRED_CREDENTIALS = [
+    ("PIPEDRIVE_API_TOKEN", settings.PIPEDRIVE_API_TOKEN),
+    ("PIPEDRIVE_DOMAIN", settings.PIPEDRIVE_DOMAIN),
+    ("GOOGLE_SHEETS_ID", settings.GOOGLE_SHEETS_ID),
+    ("GOOGLE_SERVICE_ACCOUNT_JSON", settings.GOOGLE_SERVICE_ACCOUNT_JSON),
+    ("TRELLO_API_KEY", settings.TRELLO_API_KEY),
+    ("TRELLO_TOKEN", settings.TRELLO_TOKEN),
+    ("TRELLO_BOARD_IDS", settings.TRELLO_BOARD_IDS),
+    ("ANTHROPIC_API_KEY", settings.ANTHROPIC_API_KEY),
+]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    missing = [name for name, val in _REQUIRED_CREDENTIALS if not val]
+    if missing:
+        logger.critical(
+            "STARTUP WARNING: missing env vars %s — all integration calls will fail at runtime",
+            ", ".join(missing),
+        )
     sync_scheduler.start()
     yield
     sync_scheduler.shutdown()

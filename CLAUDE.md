@@ -4,6 +4,9 @@
 
 Este sistema es SOLO LECTURA para todas las integraciones externas. Bajo ninguna circunstancia modificar, crear o eliminar datos en Pipedrive, Trello o Google Sheets. La única escritura permitida es en la base de datos local SQLite (seg.db).
 
+**DECISIÓN ARQUITECTURAL PERMANENTE — `TRELLO_AUTO_CREATE_ENABLED = False`**
+El módulo de auto-creación de tarjetas en Trello (Plan 04-03) debe permanecer desactivado para siempre. La creación de tarjetas cuando un deal llega a "Contrato y factura" ya la maneja el sistema de Fase 2 Talent que corre en producción. El SEG Dashboard es SOLO LECTURA para Trello y Pipedrive — únicamente sincroniza el estado de tarjetas existentes, nunca las crea. No cambiar este flag a `True` bajo ninguna circunstancia.
+
 <!-- GSD:project-start source:PROJECT.md -->
 ## Project
 

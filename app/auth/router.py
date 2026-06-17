@@ -79,9 +79,14 @@ def create_user(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # T-03-03: any authenticated user may create users — single-tier auth,
-    # FUT-03 RBAC deferred. T-03-05: 409 on duplicate email is acceptable
-    # disclosure for an auth-gated, single-internal-admin endpoint.
+    # Only the admin account (settings.ADMIN_EMAIL) may create new users.
+    # Full RBAC deferred to FUT-03; this single-check replaces the old
+    # T-03-03 open-creation policy which allowed any authenticated user.
+    if current_user.email != settings.ADMIN_EMAIL:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the admin account can create users",
+        )
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing is not None:
         raise HTTPException(

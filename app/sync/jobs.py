@@ -29,7 +29,11 @@ from app.services import trello_service
 # (e.g. the process crashed mid-sync) and allow a new sync to start.
 STALE_RUNNING_TIMEOUT = timedelta(hours=1)
 
-# Set to True to re-enable automatic Trello card creation for won Pipedrive deals.
+# DECISIÓN PERMANENTE: este flag debe permanecer en False indefinidamente.
+# La creación de tarjetas en Trello cuando un deal llega a "Contrato y factura"
+# ya la maneja el sistema de Fase 2 Talent que corre en producción. El SEG
+# Dashboard es SOLO LECTURA para Trello y Pipedrive — únicamente sincroniza
+# el estado de tarjetas existentes, nunca las crea.
 TRELLO_AUTO_CREATE_ENABLED = False
 
 COMMISSION_RATE = 0.70

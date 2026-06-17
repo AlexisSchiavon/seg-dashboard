@@ -71,24 +71,14 @@ def create_card(
     desc: str = "",
     due: str | None = None,
 ) -> dict:
-    """Create a card in the specified Trello list.
+    """PERMANENTEMENTE DESACTIVADO — ver CLAUDE.md y TRELLO_AUTO_CREATE_ENABLED.
 
-    POST /cards with key, token, idList, name, and optional desc/due.
-    Raises httpx.HTTPStatusError on non-2xx responses.
-
-    CLAUDE.md: this is the ONLY write allowed by this integration.
-    All other operations are read-only (RESTRICCIONES CRÍTICAS).
+    La creación de tarjetas en Trello la maneja el sistema de Fase 2 Talent en
+    producción. El SEG Dashboard es SOLO LECTURA para Trello. Esta función existe
+    solo como referencia de la API; su invocación es un error de programación.
     """
-    params: dict[str, str] = {
-        **_auth_params(),
-        "idList": list_id,
-        "name": name,
-    }
-    if desc:
-        params["desc"] = desc
-    if due is not None:
-        params["due"] = due
-
-    resp = client.post("/cards", params=params)
-    resp.raise_for_status()
-    return resp.json()
+    raise RuntimeError(
+        "create_card() está permanentemente desactivado. "
+        "El SEG Dashboard es SOLO LECTURA para Trello (ver CLAUDE.md). "
+        "La creación de tarjetas la maneja el sistema de Fase 2 Talent."
+    )
