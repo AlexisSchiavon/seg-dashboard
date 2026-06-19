@@ -38,17 +38,15 @@ COPY --from=builder /app/.venv /app/.venv
 # Application source
 COPY --chown=app:app . .
 
-# /data → persistent SQLite volume mount point
-# /app/reports → persistent PDF reports volume mount point
-RUN mkdir -p /data /app/reports && chown -R app:app /data /app/reports
-
-USER app
-
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 8000
 
-# Run DB migrations then start (single worker — SQLite serializes writes)
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips='*'"]
+# entrypoint.sh runs as root to create /data and fix volume permissions,
+# then starts alembic + uvicorn
+ENTRYPOINT ["/entrypoint.sh"]
