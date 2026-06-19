@@ -37,6 +37,7 @@ Progress: [████████░░] 83%
 | Slug | Description | Date | Commit |
 |------|-------------|------|--------|
 | user-mgmt-modal | Settings modal: crear usuario (admin) + cambiar contraseña (todos) | 2026-06-19 | e09627a |
+| easypanel-deploy | Dockerfile + docker-compose.yml + .dockerignore para deploy en EasyPanel | 2026-06-19 | pending |
 
 ## Performance Metrics
 
