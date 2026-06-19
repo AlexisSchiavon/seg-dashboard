@@ -43,3 +43,107 @@ async function logout() {
   await apiFetch("/auth/logout", { method: "POST" });
   window.location.href = "/login.html";
 }
+
+// ── Settings modal ────────────────────────────────────────────────────────────
+
+const ADMIN_EMAIL = "santillan@talentagency.mx";
+let _currentUserEmail = null;
+
+// Fetch current user on page load (index.html only).
+const _settingsModal = document.getElementById("settings-modal");
+if (_settingsModal) {
+  apiFetch("/auth/me")
+    .then(r => r && r.ok ? r.json() : null)
+    .then(data => { if (data) _currentUserEmail = data.email; })
+    .catch(() => {});
+}
+
+function openSettingsModal() {
+  const modal = document.getElementById("settings-modal");
+  if (!modal) return;
+  const isAdmin = _currentUserEmail === ADMIN_EMAIL;
+  document.getElementById("section-create-user").style.display = isAdmin ? "block" : "none";
+  document.getElementById("modal-divider").style.display = isAdmin ? "block" : "none";
+  modal.classList.add("open");
+}
+
+function closeSettingsModal() {
+  const modal = document.getElementById("settings-modal");
+  if (!modal) return;
+  modal.classList.remove("open");
+  const cu = document.getElementById("form-create-user");
+  const cp = document.getElementById("form-change-password");
+  if (cu) cu.reset();
+  if (cp) cp.reset();
+}
+
+function handleModalBackdropClick(e) {
+  if (e.target === document.getElementById("settings-modal")) closeSettingsModal();
+}
+
+async function handleCreateUser(e) {
+  e.preventDefault();
+  const email = document.getElementById("cu-email").value.trim();
+  const password = document.getElementById("cu-password").value;
+  const confirm = document.getElementById("cu-confirm").value;
+  if (password !== confirm) { showToast("Las contraseñas no coinciden"); return; }
+  if (password.length < 8) { showToast("La contraseña debe tener al menos 8 caracteres"); return; }
+
+  const btn = document.getElementById("cu-submit");
+  btn.disabled = true;
+  btn.textContent = "Creando...";
+  try {
+    const res = await apiFetch("/auth/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res) return;
+    if (res.status === 201) {
+      showToast(`Usuario ${email} creado`);
+      document.getElementById("form-create-user").reset();
+    } else if (res.status === 409) {
+      showToast("Ya existe un usuario con ese email");
+    } else if (res.status === 403) {
+      showToast("Sin permisos para crear usuarios");
+    } else {
+      showToast("Error al crear usuario");
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Crear usuario";
+  }
+}
+
+async function handleChangePassword(e) {
+  e.preventDefault();
+  const current_password = document.getElementById("cp-current").value;
+  const new_password = document.getElementById("cp-new").value;
+  const confirm = document.getElementById("cp-confirm").value;
+  if (new_password !== confirm) { showToast("Las contraseñas nuevas no coinciden"); return; }
+  if (new_password.length < 8) { showToast("La contraseña debe tener al menos 8 caracteres"); return; }
+
+  const btn = document.getElementById("cp-submit");
+  btn.disabled = true;
+  btn.textContent = "Guardando...";
+  try {
+    const res = await apiFetch("/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ current_password, new_password }),
+    });
+    if (!res) return;
+    if (res.ok) {
+      showToast("Contraseña actualizada");
+      document.getElementById("form-change-password").reset();
+      closeSettingsModal();
+    } else if (res.status === 401) {
+      showToast("Contraseña actual incorrecta");
+    } else {
+      showToast("Error al cambiar contraseña");
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Cambiar contraseña";
+  }
+}

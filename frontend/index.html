@@ -15,6 +15,11 @@
     </div>
     <div class="nav-right">
       <div class="live-pill" id="sync-pill"><span class="live-dot" id="sync-dot"></span><span id="sync-text">Última sync: hace -- min</span></div>
+      <button class="nav-settings-btn" id="settings-btn" onclick="openSettingsModal()" title="Configuración">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
     </div>
   </nav>
 
@@ -354,6 +359,58 @@
 
       <!-- Q&A cards container (D-71: answers stack below input) -->
       <div id="agent-answers"></div>
+    </div>
+  </div>
+
+  <!-- ========== SETTINGS MODAL ========== -->
+  <div class="modal-overlay" id="settings-modal" onclick="handleModalBackdropClick(event)">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+      <div class="modal-header">
+        <span class="modal-title" id="settings-modal-title">Configuración</span>
+        <button class="modal-close-btn" onclick="closeSettingsModal()" aria-label="Cerrar">&times;</button>
+      </div>
+
+      <!-- Admin only: Crear usuario -->
+      <div class="modal-section" id="section-create-user" style="display:none">
+        <div class="modal-section-title">Crear usuario</div>
+        <form id="form-create-user" onsubmit="handleCreateUser(event)">
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input class="form-input" id="cu-email" type="email" placeholder="usuario@ejemplo.com" autocomplete="off" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Contraseña</label>
+            <input class="form-input" id="cu-password" type="password" placeholder="Contraseña" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirmar contraseña</label>
+            <input class="form-input" id="cu-confirm" type="password" placeholder="Repetir contraseña" required>
+          </div>
+          <button class="btn primary" type="submit" id="cu-submit">Crear usuario</button>
+        </form>
+      </div>
+
+      <div class="modal-divider" id="modal-divider" style="display:none"></div>
+
+      <!-- All users: Cambiar contraseña -->
+      <div class="modal-section" id="section-change-password">
+        <div class="modal-section-title">Cambiar mi contraseña</div>
+        <form id="form-change-password" onsubmit="handleChangePassword(event)">
+          <div class="form-group">
+            <label class="form-label">Contraseña actual</label>
+            <input class="form-input" id="cp-current" type="password" placeholder="Contraseña actual" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nueva contraseña</label>
+            <input class="form-input" id="cp-new" type="password" placeholder="Nueva contraseña" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirmar nueva contraseña</label>
+            <input class="form-input" id="cp-confirm" type="password" placeholder="Repetir nueva contraseña" required>
+          </div>
+          <button class="btn primary" type="submit" id="cp-submit">Cambiar contraseña</button>
+        </form>
+      </div>
     </div>
   </div>
 
