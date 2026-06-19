@@ -54,7 +54,14 @@ const _settingsModal = document.getElementById("settings-modal");
 if (_settingsModal) {
   apiFetch("/auth/me")
     .then(r => r && r.ok ? r.json() : null)
-    .then(data => { if (data) _currentUserEmail = data.email; })
+    .then(data => {
+      if (data) {
+        _currentUserEmail = data.email;
+        // Reveal the dashboard only after session is confirmed — eliminates
+        // the unauthenticated flash. On 401, apiFetch redirects before this runs.
+        document.body.style.visibility = "visible";
+      }
+    })
     .catch(() => {});
 }
 
