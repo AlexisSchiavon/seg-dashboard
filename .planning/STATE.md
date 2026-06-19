@@ -32,6 +32,12 @@ Last activity: 2026-06-17 -- Phase 6 complete (embedded NL agent — backend + f
 
 Progress: [████████░░] 83%
 
+## Quick Tasks Completed
+
+| Slug | Description | Date | Commit |
+|------|-------------|------|--------|
+| user-mgmt-modal | Settings modal: crear usuario (admin) + cambiar contraseña (todos) | 2026-06-19 | e09627a |
+
 ## Performance Metrics
 
 **Velocity:**
