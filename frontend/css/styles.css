@@ -2132,3 +2132,20 @@ body {
 .modal-section .btn {
   margin-top: 4px;
 }
+.form-group--checkbox {
+  margin-bottom: 4px;
+}
+.form-label--checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text2);
+  cursor: pointer;
+}
+.form-label--checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}

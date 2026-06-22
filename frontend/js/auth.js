@@ -46,8 +46,8 @@ async function logout() {
 
 // ── Settings modal ────────────────────────────────────────────────────────────
 
-const ADMIN_EMAIL = "santillan@talentagency.mx";
 let _currentUserEmail = null;
+let _currentUserIsAdmin = false;
 
 // Fetch current user on page load (index.html only).
 const _settingsModal = document.getElementById("settings-modal");
@@ -57,6 +57,7 @@ if (_settingsModal) {
     .then(data => {
       if (data) {
         _currentUserEmail = data.email;
+        _currentUserIsAdmin = data.is_admin === true;
         // Reveal the dashboard only after session is confirmed — eliminates
         // the unauthenticated flash. On 401, apiFetch redirects before this runs.
         document.body.style.visibility = "visible";
@@ -68,7 +69,7 @@ if (_settingsModal) {
 function openSettingsModal() {
   const modal = document.getElementById("settings-modal");
   if (!modal) return;
-  const isAdmin = _currentUserEmail === ADMIN_EMAIL;
+  const isAdmin = _currentUserIsAdmin;
   document.getElementById("section-create-user").style.display = isAdmin ? "block" : "none";
   document.getElementById("modal-divider").style.display = isAdmin ? "block" : "none";
   modal.classList.add("open");
@@ -103,7 +104,7 @@ async function handleCreateUser(e) {
     const res = await apiFetch("/auth/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, is_admin: document.getElementById("cu-is-admin").checked }),
     });
     if (!res) return;
     if (res.status === 201) {

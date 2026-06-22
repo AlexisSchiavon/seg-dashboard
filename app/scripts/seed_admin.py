@@ -11,8 +11,9 @@ def seed_admin():
         hashed = get_password_hash(settings.ADMIN_PASSWORD)
         if user:
             user.hashed_password = hashed  # D-10: idempotent password rotation
+            user.is_admin = True
         else:
-            user = User(email=settings.ADMIN_EMAIL, hashed_password=hashed)
+            user = User(email=settings.ADMIN_EMAIL, hashed_password=hashed, is_admin=True)
             db.add(user)
         db.commit()
     finally:

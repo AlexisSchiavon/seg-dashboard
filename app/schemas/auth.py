@@ -13,10 +13,12 @@ class ChangePasswordRequest(BaseModel):
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
+    is_admin: bool = False
 
 
 class UserRead(BaseModel):
     id: int
     email: EmailStr
+    is_admin: bool
 
     model_config = {"from_attributes": True}

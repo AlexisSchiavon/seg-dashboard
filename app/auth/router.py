@@ -79,13 +79,11 @@ def create_user(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Only the admin account (settings.ADMIN_EMAIL) may create new users.
-    # Full RBAC deferred to FUT-03; this single-check replaces the old
-    # T-03-03 open-creation policy which allowed any authenticated user.
-    if current_user.email != settings.ADMIN_EMAIL:
+    # Any user with is_admin=True may create new users.
+    if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the admin account can create users",
+            detail="Only admin users can create users",
         )
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing is not None:
@@ -97,6 +95,7 @@ def create_user(
     user = User(
         email=payload.email,
         hashed_password=get_password_hash(payload.password),
+        is_admin=payload.is_admin,
     )
     db.add(user)
     db.commit()
