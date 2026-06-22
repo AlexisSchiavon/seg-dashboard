@@ -1,4 +1,4 @@
-"""Hourly sync job for Pipedrive, Google Sheets, and Trello, scheduled via
+"""Every-30-minute sync job for Pipedrive, Google Sheets, and Trello, scheduled via
 APScheduler and wired into app/main.py's lifespan (start on app startup,
 shutdown on app shutdown).
 """
@@ -30,7 +30,7 @@ def start():
     scheduler.add_job(
         _run_all_syncs,
         "interval",
-        hours=1,
+        minutes=30,
         id="sync_all",
         replace_existing=True,
     )
