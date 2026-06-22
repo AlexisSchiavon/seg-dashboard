@@ -2172,6 +2172,35 @@ body {
 .btn-logout:hover {
   background: color-mix(in srgb, var(--danger, #e05c5c) 12%, transparent);
 }
+.pw-field {
+  position: relative;
+  display: block;
+}
+.pw-field input {
+  padding-right: 40px;
+  box-sizing: border-box;
+  width: 100%;
+}
+.pw-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.15s;
+  line-height: 0;
+}
+.pw-toggle:hover {
+  color: var(--text2);
+}
 .form-group--checkbox {
   margin-bottom: 4px;
 }
