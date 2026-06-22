@@ -2132,6 +2132,46 @@ body {
 .modal-section .btn {
   margin-top: 4px;
 }
+.nav-user-email {
+  font-size: 0.75rem;
+  color: var(--text3);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .nav-user-email { display: none; }
+}
+.modal-session-info {
+  font-size: 0.8rem;
+  color: var(--text3);
+  padding: 8px 0 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.modal-session-info span {
+  color: var(--text2);
+  font-weight: 500;
+}
+.modal-footer {
+  padding-top: 4px;
+}
+.btn-logout {
+  width: 100%;
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--danger, #e05c5c) 40%, transparent);
+  background: transparent;
+  color: var(--danger, #e05c5c);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-logout:hover {
+  background: color-mix(in srgb, var(--danger, #e05c5c) 12%, transparent);
+}
 .form-group--checkbox {
   margin-bottom: 4px;
 }

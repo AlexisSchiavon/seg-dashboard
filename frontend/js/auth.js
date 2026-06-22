@@ -58,6 +58,10 @@ if (_settingsModal) {
       if (data) {
         _currentUserEmail = data.email;
         _currentUserIsAdmin = data.is_admin === true;
+        const navEmail = document.getElementById("nav-user-email");
+        if (navEmail) navEmail.textContent = data.email;
+        const modalEmail = document.getElementById("modal-session-email");
+        if (modalEmail) modalEmail.textContent = data.email;
         // Reveal the dashboard only after session is confirmed — eliminates
         // the unauthenticated flash. On 401, apiFetch redirects before this runs.
         document.body.style.visibility = "visible";
