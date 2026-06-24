@@ -496,22 +496,25 @@ const trelloBadge = trelloStages.includes(stage.stage)
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Full re-sync for FIX-01**
    - What we know: Incremental sync won't backfill old lost deals automatically
    - What's unclear: Whether "Sincronizar ahora" in prod will fetch deals updated long ago, or only recently changed ones
    - Recommendation: Add a Wave 1 task to verify re-sync strategy. If needed, create a one-time script to force `updated_since = None` for the next sync run.
+   - **RESOLVED:** 08-01 Task 3 is a human-verify checkpoint that confirms re-sync via the "Sincronizar ahora" button and checks the SQLite DB for populated `loss_reason` values. The plan instructs the executor to reset `sync_state.last_sync` if needed to force a full re-sync.
 
 2. **D-04: "Show only historical" — scope of chart simplification**
    - What we know: CONTEXT.md says "Show only real historical data — Cobrado by local_won_date, Firmado by won_time"
    - What's unclear: Neither `local_won_date` nor `won_time` exist in the Deal model. The chart currently shows `cobrado/proyeccion/pendiente` from Trello list_state.
    - Recommendation: For the June 25 deadline, rename segments to honest labels (no schema changes). Ask Alexis during review whether a deeper simplification (cobrado-only) is wanted post-junta.
+   - **RESOLVED:** 08-03 Task 2 implements the rename approach: "Proyección de ingresos por mes" → "Histórico de ingresos por mes" with segment relabeling ("En campaña" / "(Estimado)"). The `cobrado/proyeccion/pendiente` bars come from real Trello list_state data (not fabricated future amounts), so renaming to honest labels satisfies "no invented future projections." Post-junta cobrado-only simplification deferred to a follow-up phase.
 
 3. **Schemas file**
    - What we know: `app/schemas/dashboard.py` must be modified for FIX-02 but was not read
    - What's unclear: Exact schema structure for `TalentDetail` and whether `flujo_dinero` field needs a new Pydantic model
    - Recommendation: Planner must include a task to read `app/schemas/dashboard.py` before modifying the router.
+   - **RESOLVED:** Per PATTERNS.md line analysis, `flujo_dinero` is added as `flujo_dinero: list[KpiTile] | None = None` to the existing `TalentDetail` schema — no new Pydantic model needed. 08-02 Task 1 includes `app/schemas/dashboard.py` in `read_first` and adds the field before wiring the router.
 
 ---
 

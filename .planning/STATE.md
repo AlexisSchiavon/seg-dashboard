@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 8 added — pre-junta fixes before June 25 Luis Santillán meeting
-last_updated: "2026-06-24T19:40:00.000Z"
-last_activity: 2026-06-24 -- Phase 8 scoped (lost_reason bug + KPI toggle + honesty fixes) — planning next
+stopped_at: Phase 6 context gathered
+last_updated: "2026-06-24T23:18:22.104Z"
+last_activity: 2026-06-24 -- Phase 8 planning complete
 progress:
   total_phases: 8
-  completed_phases: 7
-  total_plans: 19
+  completed_phases: 6
+  total_plans: 23
   completed_plans: 19
-  percent: 87
+  percent: 75
 ---
 
 # Project State
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-06-09)
 
 Phase: 8 — planning
 Plan: 0/4 (waves defined, plans TBD)
-Status: Phase 8 scoped — ready to plan and execute Wednesday June 25
-Last activity: 2026-06-24 -- Phase 8 added to roadmap (lost_reason bug fix + KPI toggle + funnel honesty fixes)
+Status: Ready to execute
+Last activity: 2026-06-24 -- Phase 8 planning complete
 
 Progress: [████████░░] 83%
 
