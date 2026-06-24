@@ -245,7 +245,7 @@ Plans:
 - "Categorías de marca" section: do NOT invent or approximate — field doesn't exist in Pipedrive. Leave for Luis discussion.
 - Revenue projection: do NOT invent future dates — simplify to real historical data only.
 
-**Plans**: TBD
+**Plans**: 4 plans (08-04 optional)
 Plans:
 **Wave 1** — FIX-01: Oportunidades perdidas bug (CRITICAL)
 
