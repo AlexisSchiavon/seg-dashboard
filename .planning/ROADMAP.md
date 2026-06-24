@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Trello Integration & Collection Automation** - Campaign execution/collection tracking and Pipedrive→Trello automation complete the Por talento revenue projection (completed 2026-06-15)
 - [x] **Phase 5: AI-Generated PDF Reports** - Claude-narrated monthly reports with downloadable history in the Reportes tab (completed 2026-06-16)
 - [x] **Phase 6: Embedded Natural-Language Agent** - Read-only conversational querying of dashboard data (completed 2026-06-16)
-- [ ] **Phase 7: Docker & EasyPanel Deployment** - Containerized deployment with persistent SQLite storage verified across redeploys
+- [x] **Phase 7: Docker & EasyPanel Deployment** - Containerized deployment with persistent SQLite storage verified across redeploys (completed 2026-06-24)
 
 ## Phase Details
 
@@ -214,7 +214,7 @@ Plans:
   2. The application is deployed and reachable on EasyPanel
   3. The SQLite database file persists across a redeploy on EasyPanel (verified by an explicit redeploy test showing data survives)
 
-**Plans**: TBD
+**Plans**: Shipped via quick tasks (Dockerfile + docker-compose.yml + .dockerignore + entrypoint.sh — see STATE.md quick tasks log)
 
 ## Progress
 
@@ -228,5 +228,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Google Sheets Leads Integration | 3/3 | Complete   | 2026-06-15 |
 | 4. Trello Integration & Collection Automation | 4/4 | Complete   | 2026-06-15 |
 | 5. AI-Generated PDF Reports | 4/4 | Complete    | 2026-06-16 |
-| 6. Embedded Natural-Language Agent | 0/TBD | Not started | - |
-| 7. Docker & EasyPanel Deployment | 0/TBD | Not started | - |
+| 6. Embedded Natural-Language Agent | 2/2 | Complete | 2026-06-16 |
+| 7. Docker & EasyPanel Deployment | — | Complete | 2026-06-24 |

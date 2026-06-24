@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 6 complete
-last_updated: "2026-06-17T01:00:00.000Z"
-last_activity: 2026-06-17 -- Phase 6 (Embedded NL Agent) complete — 2/2 plans, 12/12 verified
+status: complete
+stopped_at: Phase 7 complete — deployed to EasyPanel in production
+last_updated: "2026-06-24T19:40:00.000Z"
+last_activity: 2026-06-24 -- Phase 7 (Docker & EasyPanel Deployment) complete — running in production
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 19
   completed_plans: 19
-  percent: 86
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-09)
 
 **Core value:** Dar visibilidad consolidada y en tiempo real del funnel comercial e ingresos por talento — reemplazando el proceso manual disperso entre Pipedrive, Sheets y Trello.
-**Current focus:** Phase 6 — embedded natural language agent
+**Current focus:** v1.0 milestone complete — all 7 phases shipped to production
 
 ## Current Position
 
-Phase: 6 complete → Phase 7 next
-Plan: All complete (2/2)
-Status: Phase 6 verified and complete
-Last activity: 2026-06-17 -- Phase 6 complete (embedded NL agent — backend + frontend)
+Phase: 7 complete — all phases done
+Plan: All complete (19/19)
+Status: v1.0 deployed and running in EasyPanel production
+Last activity: 2026-06-24 -- Phase 7 complete (Docker + EasyPanel deployment — persistent SQLite verified in production)
 
 Progress: [████████░░] 83%
 
@@ -37,7 +37,7 @@ Progress: [████████░░] 83%
 | Slug | Description | Date | Commit |
 |------|-------------|------|--------|
 | user-mgmt-modal | Settings modal: crear usuario (admin) + cambiar contraseña (todos) | 2026-06-19 | e09627a |
-| easypanel-deploy | Dockerfile + docker-compose.yml + .dockerignore para deploy en EasyPanel | 2026-06-19 | pending |
+| easypanel-deploy | Dockerfile + docker-compose.yml + .dockerignore para deploy en EasyPanel | 2026-06-19 | ff8e9cc |
 
 ## Performance Metrics
 
