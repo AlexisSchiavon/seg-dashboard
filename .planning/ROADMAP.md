@@ -2,7 +2,7 @@
 
 ## Overview
 
-This roadmap delivers the SEG Talent Intelligence Dashboard through seven strictly sequential phases (M1-M7), each building an end-to-end vertical slice (backend + DB + relevant UI) on top of the prior phase. Phase 1 establishes the FastAPI/JWT/SQLite foundation including the data-driven talent catalog. Phases 2-4 incrementally connect the three external data sources (Pipedrive, Google Sheets, Trello), each phase populating and extending the dashboard (Resumen, Por talento, Funnel, Leads) with real data as it becomes available. Phases 5-6 layer AI capabilities (PDF reports, NL query agent) on top of the now-stable services layer. Phase 7 packages and deploys the system to EasyPanel with verified persistent storage. By the end, the dashboard fully replaces the manual Pipedrive/Sheets/Trello review process with a single consolidated, AI-assisted view.
+This roadmap delivers the SEG Talent Intelligence Dashboard through eight phases. Phases 1–7 (M1-M7) build the full vertical stack sequentially: foundation, three integrations (Pipedrive, Sheets, Trello), AI reports, NL agent, and Docker/EasyPanel deployment. Phase 8 corrects pre-launch gaps discovered by comparing the deployed dashboard against the PDF design approved by Luis Santillán — a critical lost_reason bug, a KPI toggle for the Por Talento view, and honesty fixes for the funnel and revenue projection. By the end, the dashboard fully replaces the manual Pipedrive/Sheets/Trello review process with a single consolidated, AI-assisted view.
 
 ## Phases
 
@@ -20,6 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: AI-Generated PDF Reports** - Claude-narrated monthly reports with downloadable history in the Reportes tab (completed 2026-06-16)
 - [x] **Phase 6: Embedded Natural-Language Agent** - Read-only conversational querying of dashboard data (completed 2026-06-16)
 - [x] **Phase 7: Docker & EasyPanel Deployment** - Containerized deployment with persistent SQLite storage verified across redeploys (completed 2026-06-24)
+- [ ] **Phase 8: Pre-Junta Fixes** - Fix lost_reason bug, add KPI toggle en Por Talento, and apply honesty fixes to funnel/projection before June 25 meeting with Luis Santillán
 
 ## Phase Details
 
@@ -216,10 +217,70 @@ Plans:
 
 **Plans**: Shipped via quick tasks (Dockerfile + docker-compose.yml + .dockerignore + entrypoint.sh — see STATE.md quick tasks log)
 
+### Phase 8: Pre-Junta Fixes
+
+**Goal**: Correct the three gaps between the deployed dashboard and the PDF design approved by Luis Santillán before the June 25 presentation — a critical data bug in lost opportunities, a KPI toggle for the Por Talento view aligned to the approved PDF, and honesty fixes that remove invented projections where source data doesn't exist.
+**Mode:** mvp
+**Depends on**: Phase 7
+**Deadline**: Wednesday June 25, 2026 (day before the Luis Santillán meeting)
+**Requirements**: FIX-01, FIX-02, FIX-03, FIX-04 (optional)
+
+**Confirmed Pipedrive reality (verified against prod API v2):**
+- Pipeline has 4 real stages: Llamada (6), Cotización (7), Negociación (8), Contrato y factura (9). "En ejecución" and "Cobranza" come from Trello, not Pipedrive.
+- `lost_reason` EXISTS and HAS DATA as plain resolved text (e.g. "Ya no contestó"). 5 options: "Bateado por Talento", "Ya no contestó", "Cambió su estrategia de campaña", "Ya no se hizo la campaña o evento", "Se le hizo caro".
+- "Categoría de marca" does NOT exist in Pipedrive — only known custom field is `d18a0b75f074043eb6d11baaf2045936e164e45b` (appears to be owner_id). This section cannot be populated — to be discussed with Luis.
+- "Fecha de cobro" does NOT exist in Pipedrive. Only `expected_close_date`, `local_won_date`, `local_close_date` are available. Stacked projection cannot be computed — to be discussed with Luis.
+- Talents field is a multi-select with options including duplas (e.g. "Don Silverio y Don Wicho"). A deal can have multiple talents assigned.
+
+**Success Criteria** (what must be TRUE):
+
+  1. The "Oportunidades perdidas" donut in Por Talento shows the 5 real loss reasons with correct percentages (no more "Sin razón — 100%")
+  2. The Por Talento view has a visible toggle between "Flujo de dinero" (PDF-aligned) and "Operativa" (current) KPI views
+  3. The "Proyección de ingresos" chart is renamed "Histórico de ingresos por mes" and shows only real historical data (no invented future projections)
+  4. The funnel visually distinguishes the 4 Pipedrive stages from the 2 Trello-sourced stages so zeros don't look like bugs
+
+**Constraints (non-negotiable):**
+- 100% read-only for Pipedrive, Trello, and Google Sheets. Only local SQLite writes allowed.
+- Trello card creation remains disabled (`TRELLO_AUTO_CREATE_ENABLED = False`, `create_card()` raises `RuntimeError`). Do NOT change.
+- "Categorías de marca" section: do NOT invent or approximate — field doesn't exist in Pipedrive. Leave for Luis discussion.
+- Revenue projection: do NOT invent future dates — simplify to real historical data only.
+
+**Plans**: TBD
+Plans:
+**Wave 1** — FIX-01: Oportunidades perdidas bug (CRITICAL)
+
+- [ ] 08-01-PLAN.md — Diagnose `lost_reason` vs `loss_reason` mismatch across `app/models.py` (Deal column name), `app/sync/jobs.py` (field mapping from Pipedrive), and `app/services/kpis.py` (talent_detail function). Fix whichever layer has the mismatch, re-sync deals, verify donut shows real percentages.
+
+**Wave 2** *(can start after Wave 1 or in parallel)* — FIX-02: KPI Toggle en Por Talento
+
+- [ ] 08-02-PLAN.md — Add segmented control (toggle) above Por Talento KPI cards with two views: "Flujo de dinero" (Campañas firmadas / Cobrado / Pendiente por cobrar — counts + amounts, aligned to approved PDF colors: azul/verde/naranja) and "Operativa" (current KPIs). Backend endpoint extension + frontend JS toggle logic.
+
+**Wave 3** *(blocked on Wave 1)* — FIX-03: Honesty fixes
+
+- [ ] 08-03-PLAN.md — (a) Funnel: add visual distinction (label/tooltip) that "En ejecución" and "Cobranza" stages come from Trello, not Pipedrive, so zeros aren't alarming. (b) Rename "Proyección de ingresos por mes" → "Histórico de ingresos por mes" and simplify chart to real historical data only (Cobrado by `local_won_date`, Firmado by `won_time`). No invented future projections.
+
+**Wave 4** *(optional — only if time permits Wednesday)* — FIX-04: Polish
+
+- [ ] 08-04-PLAN.md — (a) Improve "Sin talento asignado" card in Resumen to make it more actionable. (b) Verify APScheduler sync is running every 30 min in production and logging to SyncLog.
+
+**Relevant files:**
+- `app/models.py` — Deal model column names
+- `app/sync/jobs.py` — Pipedrive field mapping
+- `app/services/kpis.py` — `talent_detail()` function (lost reasons + KPIs)
+- `app/services/funnel.py` — 6-stage funnel logic (4 Pipedrive + 2 Trello)
+- `app/integrations/pipedrive.py` — API v2 client
+- `frontend/index.html` + associated JS — Por Talento tab, donut chart, funnel display
+
+**What will NOT be done (conscious decision):**
+- No "Categorías de marca" section — field doesn't exist in Pipedrive. Discuss with Luis.
+- No future revenue projection — "Fecha de cobro" doesn't exist in Pipedrive. Simplify to historical only.
+
+**UI hint**: yes
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -230,3 +291,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. AI-Generated PDF Reports | 4/4 | Complete    | 2026-06-16 |
 | 6. Embedded Natural-Language Agent | 2/2 | Complete | 2026-06-16 |
 | 7. Docker & EasyPanel Deployment | — | Complete | 2026-06-24 |
+| 8. Pre-Junta Fixes | 0/4 | Not started | - |

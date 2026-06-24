@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: complete
-stopped_at: Phase 7 complete — deployed to EasyPanel in production
+status: executing
+stopped_at: Phase 8 added — pre-junta fixes before June 25 Luis Santillán meeting
 last_updated: "2026-06-24T19:40:00.000Z"
-last_activity: 2026-06-24 -- Phase 7 (Docker & EasyPanel Deployment) complete — running in production
+last_activity: 2026-06-24 -- Phase 8 scoped (lost_reason bug + KPI toggle + honesty fixes) — planning next
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 7
   total_plans: 19
   completed_plans: 19
-  percent: 100
+  percent: 87
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-09)
 
 **Core value:** Dar visibilidad consolidada y en tiempo real del funnel comercial e ingresos por talento — reemplazando el proceso manual disperso entre Pipedrive, Sheets y Trello.
-**Current focus:** v1.0 milestone complete — all 7 phases shipped to production
+**Current focus:** Phase 8 — pre-junta fixes before June 25 meeting with Luis Santillán
 
 ## Current Position
 
-Phase: 7 complete — all phases done
-Plan: All complete (19/19)
-Status: v1.0 deployed and running in EasyPanel production
-Last activity: 2026-06-24 -- Phase 7 complete (Docker + EasyPanel deployment — persistent SQLite verified in production)
+Phase: 8 — planning
+Plan: 0/4 (waves defined, plans TBD)
+Status: Phase 8 scoped — ready to plan and execute Wednesday June 25
+Last activity: 2026-06-24 -- Phase 8 added to roadmap (lost_reason bug fix + KPI toggle + funnel honesty fixes)
 
 Progress: [████████░░] 83%
 
