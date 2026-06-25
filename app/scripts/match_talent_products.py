@@ -18,11 +18,10 @@ from app.models import Talent, TalentProduct
 THRESHOLD = 85
 
 # Manual overrides for talents whose Pipedrive product name can't be resolved
-# by the single-best-fuzzy-match loop below (D-19): two talents that perform
-# together and share a single Pipedrive product.
+# by the single-best-fuzzy-match loop below (D-19). 5.2: Don Silverio y Don Wicho
+# is now a single merged talent mapped to its single shared Pipedrive product.
 MANUAL_PRODUCT_MATCHES = {
-    "Don Silverio": "Don Silverio y Don Wicho",
-    "Don Wicho": "Don Silverio y Don Wicho",
+    "Don Silverio y Don Wicho": "Don Silverio y Don Wicho",
 }
 
 # Talents with no Pipedrive product yet (D-15) — always reported as unmatched,

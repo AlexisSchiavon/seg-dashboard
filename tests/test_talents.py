@@ -90,3 +90,16 @@ def test_seeded_talents_present(auth_client):
     response_again = auth_client.get("/talents")
     assert response_again.status_code == 200
     assert len(response_again.json()) == count_after_first_seed
+
+
+def test_don_silverio_wicho_is_single_merged_talent():
+    """5.2: Don Silverio y Don Wicho is one merged entry, never two separate
+    talents (Luis, 25-jun)."""
+    from app.scripts.match_talent_products import MANUAL_PRODUCT_MATCHES
+
+    assert "Don Silverio y Don Wicho" in TALENT_NAMES
+    assert "Don Silverio" not in TALENT_NAMES
+    assert "Don Wicho" not in TALENT_NAMES
+
+    # The merged talent maps to the single shared Pipedrive product.
+    assert MANUAL_PRODUCT_MATCHES == {"Don Silverio y Don Wicho": "Don Silverio y Don Wicho"}
