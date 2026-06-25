@@ -247,3 +247,59 @@ def talent_detail(db: Session, talent_id: int) -> dict:
         "lost_opportunities": lost_opportunities,
         "brand_categories": brand_categories,
     }
+
+
+def flujo_dinero_kpis(db: Session, talent_id: int) -> dict:
+    """Return the 3 money-flow KPI tiles for the Por Talento Flujo de dinero view.
+
+    Tiles:
+      - Campañas firmadas (blue): Contrato-stage deals (open + won) — count + total value
+      - Cobrado (green): deals linked to a TrelloCard with list_state="cerrado" — total value
+      - Pendiente por cobrar (amber): max(0, firmadas - cobrado) — never negative
+    """
+    from app.models import TrelloCard
+
+    # Campañas firmadas — Contrato stage, open or won
+    firmadas_row = db.query(
+        func.count(Deal.id),
+        func.coalesce(func.sum(Deal.value), 0.0),
+    ).filter(
+        Deal.talent_id == talent_id,
+        Deal.stage_name == "Contrato",
+        Deal.status.in_(["open", "won"]),
+    ).one()
+    firmadas_count, firmadas_value = firmadas_row[0], firmadas_row[1] or 0.0
+
+    # Cobrado — deals linked to a cerrado Trello card
+    cobrado_value = db.query(
+        func.coalesce(func.sum(Deal.value), 0.0),
+    ).join(TrelloCard, TrelloCard.deal_id == Deal.id).filter(
+        Deal.talent_id == talent_id,
+        TrelloCard.list_state == "cerrado",
+    ).scalar() or 0.0
+
+    # Pendiente — never negative
+    pendiente_value = max(0.0, float(firmadas_value) - float(cobrado_value))
+
+    return {
+        "kpis": [
+            {
+                "label": "Campañas firmadas",
+                "value": float(firmadas_value),
+                "count": firmadas_count,
+                "variant": "blue",
+            },
+            {
+                "label": "Cobrado",
+                "value": float(cobrado_value),
+                "count": None,
+                "variant": "green",
+            },
+            {
+                "label": "Pendiente por cobrar",
+                "value": pendiente_value,
+                "count": None,
+                "variant": "amber",
+            },
+        ]
+    }

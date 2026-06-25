@@ -167,6 +167,10 @@ def get_talent_detail(talent_id: int, db: Session = Depends(get_db)):
     payment_cal = [CalendarEntry(**c) for c in cal_dicts] if cal_dicts else None
     deals = [DealRow(**d) for d in deal_dicts] if deal_dicts else None
 
+    # Phase 8 FIX-02 — money-flow tiles for the Flujo de dinero toggle view
+    flujo_data = kpi_service.flujo_dinero_kpis(db, talent_id)
+    flujo_dinero_tiles = [KpiTile(**k) for k in flujo_data["kpis"]]
+
     return TalentDetail(
         talent_id=detail["talent_id"],
         name=detail["name"],
@@ -179,4 +183,5 @@ def get_talent_detail(talent_id: int, db: Session = Depends(get_db)):
         income_projection=income_proj,
         payment_calendar=payment_cal,
         deals=deals,
+        flujo_dinero=flujo_dinero_tiles,
     )

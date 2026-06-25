@@ -19,6 +19,10 @@ let _campaignDeals = null;
 let _campaignLostOpps = null;
 let _campaignFilter = 'all';
 
+// KPI toggle state (Por Talento view)
+let _kpiView = 'flujo';
+let _talentDetailData = null;
+
 const CAMPAIGN_FILTERS = [
   { key: 'all',         label: 'Todos',       cls: '' },
   { key: 'llamada',     label: 'Llamada',      cls: 'llamada' },
@@ -823,6 +827,22 @@ function setCampaignFilter(key) {
   renderCampaignRows();
 }
 
+function setKpiView(view) {
+  _kpiView = view;
+  const toggleEl = document.getElementById('kpi-toggle');
+  if (toggleEl) {
+    toggleEl.querySelectorAll('.kpi-toggle-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.view === view);
+    });
+  }
+  if (!_talentDetailData) return;
+  if (view === 'flujo') {
+    renderKpisInto(_talentDetailData.flujo_dinero || [], 'talent-kpis');
+  } else {
+    renderKpisInto(_talentDetailData.kpis, 'talent-kpis');
+  }
+}
+
 function renderCampaignRows() {
   const el = document.getElementById('talent-deals');
   if (!el) return;
@@ -1205,13 +1225,23 @@ async function loadTalentDetail(talentId) {
 
   const data = await res.json();
 
+  // Cache for KPI toggle re-renders; reset view to Flujo de dinero on each talent load
+  _talentDetailData = data;
+  _kpiView = 'flujo';
+  const toggleEl = document.getElementById('kpi-toggle');
+  if (toggleEl) {
+    toggleEl.querySelectorAll('.kpi-toggle-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.view === 'flujo');
+    });
+  }
+
   // Talent header — get name from active selector card
   const activeCard = document.querySelector("#talent-selector .talent-card.active");
   const talentName = activeCard ? activeCard.dataset.talentName : null;
   renderTalentHeader(talentName);
 
-  // KPIs (3-col row)
-  renderKpisInto(data.kpis, "talent-kpis");
+  // KPIs — default to Flujo de dinero view
+  renderKpisInto(data.flujo_dinero || data.kpis, "talent-kpis");
 
   // Funnel
   renderTalentFunnel(data.funnel);

@@ -2218,3 +2218,33 @@ body {
   accent-color: var(--accent);
   cursor: pointer;
 }
+
+/* ── KPI Toggle (Por Talento — Flujo de dinero / Operativa) ── */
+.kpi-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  margin-bottom: 12px;
+}
+.kpi-toggle-btn {
+  flex: 1;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.kpi-toggle-btn:hover { color: var(--text); }
+.kpi-toggle-btn.active {
+  background: var(--bg2);
+  border: 1px solid var(--borderM);
+  color: var(--text);
+}

@@ -122,3 +122,5 @@ class TalentDetail(BaseModel):
     income_projection: list[MonthProjection] | None = None   # 4-month sliding window
     payment_calendar: list[CalendarEntry] | None = None      # matching 4-month calendar
     deals: list[DealRow] | None = None                        # individual deal rows
+    # Phase 8 FIX-02 — Optional so existing tests that construct TalentDetail keep passing
+    flujo_dinero: list[KpiTile] | None = None                 # money-flow tiles (Flujo de dinero view)
