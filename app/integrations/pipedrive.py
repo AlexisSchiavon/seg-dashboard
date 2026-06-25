@@ -35,8 +35,9 @@ def _get_with_retry(
 
 
 def get_deals(client: httpx.Client, updated_since: str | None = None):
-    """GET /deals (paginated). Omit updated_since for a full first sync."""
-    params: dict = {}
+    """GET /deals (paginated). Omit updated_since for a full first sync.
+    Uses status=all_not_deleted to include open, won, and lost deals (default would only return open)."""
+    params: dict = {"status": "open,won,lost"}
     if updated_since:
         params["updated_since"] = updated_since  # RFC3339, e.g. 2026-06-11T10:00:00Z
     yield from _paginate(client, "/deals", params)

@@ -77,7 +77,6 @@ def sync_pipedrive(db: Session) -> SyncLog:
 
         # 3. Field maps + stage map (stage_id -> name).
         key_by_name, option_labels = pipedrive.build_field_maps(client)
-        loss_reason_key = key_by_name.get("Razón de pérdida")
         brand_category_key = key_by_name.get("Categoría de marca")
         expected_collection_date_key = key_by_name.get("Fecha de cobro esperada")
 
@@ -143,11 +142,7 @@ def sync_pipedrive(db: Session) -> SyncLog:
             commission_amount = value * COMMISSION_RATE
             is_sin_cotizar = value == 0
 
-            loss_reason = (
-                pipedrive.resolve_custom_field(deal, loss_reason_key, option_labels)
-                if loss_reason_key
-                else None
-            )
+            loss_reason = deal.get("lost_reason") or None
             brand_category = (
                 pipedrive.resolve_custom_field(deal, brand_category_key, option_labels)
                 if brand_category_key
