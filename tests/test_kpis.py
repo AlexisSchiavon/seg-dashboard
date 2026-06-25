@@ -305,3 +305,168 @@ def test_talent_detail_empty(db_session):
 
     # Empty brand categories
     assert result["brand_categories"] == []
+
+
+# ---------------------------------------------------------------------------
+# 5.1 (D1) — flujo_dinero_kpis: "Campañas firmadas" = status='won' only
+# ---------------------------------------------------------------------------
+
+
+def _tile(result, label):
+    return next(t for t in result["kpis"] if t["label"] == label)
+
+
+def test_flujo_firmadas_counts_only_won_not_contrato_stage(db_session):
+    """5.1/D1: a deal sitting in the 'Contrato' stage but still status='open'
+    is in the signing process — NOT firmada. Only status='won' counts."""
+    from app.models import TrelloCard
+
+    talent = Talent(name="Talento Flujo", active=True, category="Tech")
+    db_session.add(talent)
+    db_session.commit()
+    db_session.refresh(talent)
+
+    # status='won' — counts as firmada
+    won = Deal(
+        pipedrive_id=30001, title="Ganado", value=100000.0, currency="MXN",
+        stage_id=4, stage_name="Contrato", status="won", talent_id=talent.id,
+        commission_amount=70000.0, update_time="2026-06-10T10:00:00Z",
+    )
+    # In 'Contrato' stage but still open — must NOT count as firmada
+    contrato_open = Deal(
+        pipedrive_id=30002, title="En firma", value=999999.0, currency="MXN",
+        stage_id=4, stage_name="Contrato", status="open", talent_id=talent.id,
+        commission_amount=699999.3, update_time="2026-06-11T10:00:00Z",
+    )
+    db_session.add_all([won, contrato_open])
+    db_session.commit()
+
+    result = kpi_service.flujo_dinero_kpis(db_session, talent.id)
+    firmadas = _tile(result, "Campañas firmadas")
+
+    assert firmadas["count"] == 1                 # only the won deal
+    assert firmadas["value"] == 100000.0          # NOT the 999999 open Contrato deal
+
+
+def test_flujo_pendiente_equals_won_minus_cobrado(db_session):
+    """5.1/D1: 'Pendiente por cobrar' = firmadas(won) - cobrado, never negative."""
+    from datetime import date
+
+    from app.models import TrelloCard
+
+    talent = Talent(name="Talento Pendiente", active=True, category="Tech")
+    db_session.add(talent)
+    db_session.commit()
+    db_session.refresh(talent)
+
+    won_cobrado = Deal(
+        pipedrive_id=31001, title="Ganado y cobrado", value=100000.0, currency="MXN",
+        stage_id=4, stage_name="Contrato", status="won", talent_id=talent.id,
+        commission_amount=70000.0, update_time="2026-06-10T10:00:00Z",
+    )
+    won_pendiente = Deal(
+        pipedrive_id=31002, title="Ganado sin cobrar", value=40000.0, currency="MXN",
+        stage_id=4, stage_name="Contrato", status="won", talent_id=talent.id,
+        commission_amount=28000.0, update_time="2026-06-11T10:00:00Z",
+    )
+    db_session.add_all([won_cobrado, won_pendiente])
+    db_session.commit()
+    db_session.refresh(won_cobrado)
+
+    # Only won_cobrado has a 'cerrado' Trello card → counts as cobrado
+    db_session.add(TrelloCard(
+        trello_card_id="card-cerrado-flujo", name="Cobrado", list_id="L1",
+        list_name="Finalizados", list_state="cerrado", deal_id=won_cobrado.id,
+        collection_date=date(2026, 7, 1),
+    ))
+    db_session.commit()
+
+    result = kpi_service.flujo_dinero_kpis(db_session, talent.id)
+    firmadas = _tile(result, "Campañas firmadas")
+    cobrado = _tile(result, "Cobrado")
+    pendiente = _tile(result, "Pendiente por cobrar")
+
+    assert firmadas["value"] == 140000.0          # both won deals
+    assert cobrado["value"] == 100000.0           # only the cerrado-card deal
+    # Coherence: pendiente == ganados - cobrado
+    assert pendiente["value"] == firmadas["value"] - cobrado["value"]
+    assert pendiente["value"] == 40000.0
+
+
+# ---------------------------------------------------------------------------
+# 5.4 (D3) — deals_won_in_period: agent date-range filter on won_time
+# ---------------------------------------------------------------------------
+
+
+def _make_won_deal(db, pid, talent_id, value, won_time):
+    deal = Deal(
+        pipedrive_id=pid, title=f"Deal {pid}", value=value, currency="MXN",
+        stage_id=4, stage_name="Contrato", status="won", talent_id=talent_id,
+        commission_amount=value * 0.7, update_time="2026-06-30T10:00:00Z",
+        won_time=won_time,
+    )
+    db.add(deal)
+    return deal
+
+
+def test_deals_won_in_period_filters_by_won_time(db_session):
+    """5.4/D3: only status='won' deals whose won_time falls in [start, end]
+    (inclusive) are returned; open deals and out-of-range deals are excluded."""
+    talent = Talent(name="Talento Periodo", active=True, category="Tech")
+    db_session.add(talent)
+    db_session.commit()
+    db_session.refresh(talent)
+
+    # In June 2026 (boundaries inclusive)
+    _make_won_deal(db_session, 40001, talent.id, 10000.0, datetime(2026, 6, 1, 0, 0, 0))
+    _make_won_deal(db_session, 40002, talent.id, 20000.0, datetime(2026, 6, 30, 23, 59, 0))
+    # Out of range (May and July)
+    _make_won_deal(db_session, 40003, talent.id, 99999.0, datetime(2026, 5, 31, 23, 0, 0))
+    _make_won_deal(db_session, 40004, talent.id, 88888.0, datetime(2026, 7, 1, 0, 1, 0))
+    # won but NULL won_time -> excluded (cannot place in period)
+    _make_won_deal(db_session, 40005, talent.id, 77777.0, None)
+    # open deal in range by add_time but not won -> excluded
+    db_session.add(Deal(
+        pipedrive_id=40006, title="Abierto", value=66666.0, currency="MXN",
+        stage_id=4, stage_name="Contrato", status="open", talent_id=talent.id,
+        commission_amount=0.0, update_time="2026-06-15T10:00:00Z",
+        won_time=datetime(2026, 6, 15, 10, 0, 0),  # even with a won_time, status!=won
+    ))
+    db_session.commit()
+
+    result = kpi_service.deals_won_in_period(db_session, "2026-06-01", "2026-06-30")
+
+    assert result["count"] == 2
+    assert result["total_value"] == 30000.0
+    titles = {d["title"] for d in result["deals"]}
+    assert titles == {"Deal 40001", "Deal 40002"}
+    # talent name resolved
+    assert all(d["talent_name"] == talent.name for d in result["deals"])
+
+
+def test_deals_won_in_period_optional_talent_filter(db_session):
+    """5.4/D3: talent_id narrows the period to a single talent."""
+    t1 = Talent(name="Talento A", active=True)
+    t2 = Talent(name="Talento B", active=True)
+    db_session.add_all([t1, t2])
+    db_session.commit()
+    db_session.refresh(t1)
+    db_session.refresh(t2)
+
+    _make_won_deal(db_session, 41001, t1.id, 10000.0, datetime(2026, 6, 10, 12, 0, 0))
+    _make_won_deal(db_session, 41002, t2.id, 50000.0, datetime(2026, 6, 11, 12, 0, 0))
+    db_session.commit()
+
+    all_result = kpi_service.deals_won_in_period(db_session, "2026-06-01", "2026-06-30")
+    assert all_result["count"] == 2
+
+    t1_result = kpi_service.deals_won_in_period(db_session, "2026-06-01", "2026-06-30", talent_id=t1.id)
+    assert t1_result["count"] == 1
+    assert t1_result["total_value"] == 10000.0
+    assert t1_result["deals"][0]["talent_name"] == "Talento A"
+
+
+def test_deals_won_in_period_rejects_bad_dates(db_session):
+    """5.4/D3: malformed date strings raise ValueError (caught by the agent loop)."""
+    with pytest.raises(ValueError):
+        kpi_service.deals_won_in_period(db_session, "junio", "2026-06-30")

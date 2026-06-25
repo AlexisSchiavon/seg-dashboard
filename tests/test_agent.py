@@ -139,7 +139,7 @@ class TestToolExecutor:
 
         talent_id = seed_talent_products["talent_a"].id
 
-        # Build sentinel mocks for all 11 service functions
+        # Build sentinel mocks for all 12 service functions
         sentinels = {
             "global_kpis": MagicMock(return_value={"total": 0}),
             "talent_ranking": MagicMock(return_value=[]),
@@ -152,6 +152,7 @@ class TestToolExecutor:
             "deals_for_talent": MagicMock(return_value=[]),
             "leads_summary": MagicMock(return_value={}),
             "leads_by_talent": MagicMock(return_value=[]),
+            "deals_won_in_period": MagicMock(return_value={"count": 0}),
         }
 
         # Patch each service function used by _execute_tool
@@ -166,6 +167,7 @@ class TestToolExecutor:
         monkeypatch.setattr(agent_module.trello_service, "deals_for_talent", sentinels["deals_for_talent"])
         monkeypatch.setattr(agent_module.leads_service, "leads_summary", sentinels["leads_summary"])
         monkeypatch.setattr(agent_module.leads_service, "leads_by_talent", sentinels["leads_by_talent"])
+        monkeypatch.setattr(agent_module.kpi_service, "deals_won_in_period", sentinels["deals_won_in_period"])
 
         # No-param tools
         agent_module._execute_tool("global_kpis", {}, db_session)
@@ -203,17 +205,29 @@ class TestToolExecutor:
         agent_module._execute_tool("deals_for_talent", {"talent_id": talent_id}, db_session)
         sentinels["deals_for_talent"].assert_called_once_with(db_session, talent_id)
 
+        # 5.4: deals_won_in_period — required start/end, optional talent_id
+        agent_module._execute_tool(
+            "deals_won_in_period",
+            {"start_date": "2026-06-01", "end_date": "2026-06-30"},
+            db_session,
+        )
+        sentinels["deals_won_in_period"].assert_called_once_with(
+            db_session, "2026-06-01", "2026-06-30", None
+        )
+
         # Unknown tool name raises ValueError
         with pytest.raises(ValueError, match="Unknown tool"):
             agent_module._execute_tool("nonexistent_tool", {}, db_session)
 
     def test_tool_definitions_complete(self):
-        """TOOL_DEFINITIONS has exactly 11 entries; every entry has the required fields."""
+        """TOOL_DEFINITIONS has exactly 12 entries; every entry has the required fields."""
         from app.services.agent import TOOL_DEFINITIONS
 
-        assert len(TOOL_DEFINITIONS) == 11, (
-            f"Expected 11 tool definitions, got {len(TOOL_DEFINITIONS)}"
+        assert len(TOOL_DEFINITIONS) == 12, (
+            f"Expected 12 tool definitions, got {len(TOOL_DEFINITIONS)}"
         )
+        # 5.4: the period tool must be present for date-range "what was signed" queries.
+        assert any(t["name"] == "deals_won_in_period" for t in TOOL_DEFINITIONS)
 
         for tool in TOOL_DEFINITIONS:
             assert "name" in tool, f"Tool missing 'name': {tool}"

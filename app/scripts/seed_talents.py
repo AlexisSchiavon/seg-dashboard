@@ -3,8 +3,9 @@ from app.models import Talent
 
 TALENT_NAMES = [
     "Navarretes Show",
-    "Don Silverio",
-    "Don Wicho",
+    # 5.2: Don Silverio y Don Wicho nunca se venden por separado (Luis, 25-jun).
+    # Una sola entrada, mapeada a un único producto de Pipedrive.
+    "Don Silverio y Don Wicho",
     "Deliberracion",
     "Emicanico",
     "Abelito",

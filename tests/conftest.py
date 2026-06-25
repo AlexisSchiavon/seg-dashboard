@@ -111,6 +111,7 @@ def seed_test_user(db_session):
         user = User(
             email=settings.ADMIN_EMAIL,
             hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+            is_admin=True,  # admin so /auth/users (is_admin guard) is testable
         )
         db_session.add(user)
         db_session.commit()

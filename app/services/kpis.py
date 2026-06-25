@@ -10,6 +10,8 @@ Pitfall 4 (global vs per-talent split):
     query for the Sin-talento bucket (Deal.talent_id.is_(None)) appended last.
 """
 
+from datetime import datetime, timedelta
+
 from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
 
@@ -249,24 +251,94 @@ def talent_detail(db: Session, talent_id: int) -> dict:
     }
 
 
+def deals_won_in_period(
+    db: Session,
+    start_date: str,
+    end_date: str,
+    talent_id: int | None = None,
+) -> dict:
+    """Return deals signed (status='won') whose won_time falls in [start, end].
+
+    5.4 (D3): the agent uses this for date-range questions like "¿qué se firmó
+    en junio 2026?". "Firmado/ganado/cerrado" = status='won' (5.1/D1), and the
+    date filter is on won_time (NOT add_time/update_time) — see 5.3.
+
+    Args:
+      start_date, end_date: inclusive 'YYYY-MM-DD' bounds (UTC). end_date is
+        inclusive of the whole day.
+      talent_id: optional filter to a single talent.
+
+    Returns a dict: {start_date, end_date, count, total_value, deals:[...]}.
+    Won deals with a NULL won_time are excluded (cannot be placed in a period).
+    Raises ValueError if a date string is not 'YYYY-MM-DD'.
+    """
+    try:
+        start = datetime.strptime(start_date, "%Y-%m-%d")
+        # Inclusive end: everything strictly before the next day's midnight.
+        end_exclusive = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+    except ValueError as exc:
+        raise ValueError("start_date and end_date must be 'YYYY-MM-DD'") from exc
+
+    # won_time round-trips naive UTC from SQLite, so compare against naive bounds.
+    query = (
+        db.query(Deal)
+        .filter(
+            Deal.status == "won",
+            Deal.won_time.isnot(None),
+            Deal.won_time >= start,
+            Deal.won_time < end_exclusive,
+        )
+    )
+    if talent_id is not None:
+        query = query.filter(Deal.talent_id == talent_id)
+
+    deals = query.order_by(Deal.won_time).all()
+
+    talent_ids = {d.talent_id for d in deals if d.talent_id is not None}
+    talent_names: dict[int, str] = {}
+    if talent_ids:
+        for t in db.query(Talent.id, Talent.name).filter(Talent.id.in_(talent_ids)).all():
+            talent_names[t[0]] = t[1]
+
+    deal_list = [
+        {
+            "title": d.title,
+            "value": float(d.value),
+            "talent_name": talent_names.get(d.talent_id, "Sin talento asignado"),
+            "won_time": d.won_time.isoformat() if d.won_time else None,
+        }
+        for d in deals
+    ]
+
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "count": len(deal_list),
+        "total_value": float(sum(d["value"] for d in deal_list)),
+        "deals": deal_list,
+    }
+
+
 def flujo_dinero_kpis(db: Session, talent_id: int) -> dict:
     """Return the 3 money-flow KPI tiles for the Por Talento Flujo de dinero view.
 
     Tiles:
-      - Campañas firmadas (blue): Contrato-stage deals (open + won) — count + total value
+      - Campañas firmadas (blue): won deals (status='won') — count + total value.
+        5.1 (D1): "firmado" = "ganado" = status='won' ONLY. The "Contrato" stage
+        means a deal is in the signing process — NOT yet signed/won (Luis, 25-jun).
       - Cobrado (green): deals linked to a TrelloCard with list_state="cerrado" — total value
-      - Pendiente por cobrar (amber): max(0, firmadas - cobrado) — never negative
+      - Pendiente por cobrar (amber): max(0, firmadas - cobrado) — never negative.
+        Equals won_value - cobrado_value, i.e. ganados aún no cobrados.
     """
     from app.models import TrelloCard
 
-    # Campañas firmadas — Contrato stage, open or won
+    # Campañas firmadas — won deals only (5.1 / D1: status='won', never stage='Contrato')
     firmadas_row = db.query(
         func.count(Deal.id),
         func.coalesce(func.sum(Deal.value), 0.0),
     ).filter(
         Deal.talent_id == talent_id,
-        Deal.stage_name == "Contrato",
-        Deal.status.in_(["open", "won"]),
+        Deal.status == "won",
     ).one()
     firmadas_count, firmadas_value = firmadas_row[0], firmadas_row[1] or 0.0
 

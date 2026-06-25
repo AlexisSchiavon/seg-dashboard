@@ -22,7 +22,10 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.email == form_data.username).first()
+    # 5.5.1: email is not case-sensitive in practice — normalize to lowercase
+    # before lookup (only the password is hashed, never the username).
+    username = form_data.username.strip().lower()
+    user = db.query(User).filter(User.email == username).first()
     if user is None or not verify_password(form_data.password, user.hashed_password):
         # D-06: generic message, do not reveal whether the email exists
         raise HTTPException(
@@ -85,7 +88,9 @@ def create_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can create users",
         )
-    existing = db.query(User).filter(User.email == payload.email).first()
+    # 5.5.1: normalize on write so the whole users table stays lowercase.
+    email = payload.email.strip().lower()
+    existing = db.query(User).filter(User.email == email).first()
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -93,7 +98,7 @@ def create_user(
         )
 
     user = User(
-        email=payload.email,
+        email=email,
         hashed_password=get_password_hash(payload.password),
         is_admin=payload.is_admin,
     )
