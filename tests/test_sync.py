@@ -287,3 +287,38 @@ def test_sync_persists_won_time_for_won_deals(
 
     still_open = db_session.query(Deal).filter(Deal.pipedrive_id == 2002).one()
     assert still_open.won_time is None
+
+
+# ---------------------------------------------------------------------------
+# 5.5.2 — "Última sync: hace 0 min" (timezone serialization)
+# ---------------------------------------------------------------------------
+
+
+def test_sync_status_serializes_timestamps_as_utc_with_offset():
+    """5.5.2: a naive (SQLite-stored) UTC timestamp must serialize WITH an
+    explicit offset, so the frontend stops parsing it as local time."""
+    from datetime import datetime, timezone
+
+    from app.schemas.sync import SyncStatus
+
+    naive_utc = datetime(2026, 6, 25, 14, 0, 0)  # how SQLite returns it
+    payload = SyncStatus(
+        status="success", started_at=naive_utc, finished_at=naive_utc, records_synced=5
+    ).model_dump(mode="json")
+
+    # Must carry an explicit UTC offset (not a bare naive string)
+    assert payload["finished_at"].endswith("+00:00")
+    assert payload["started_at"].endswith("+00:00")
+
+    # And parse back to the exact UTC instant
+    parsed = datetime.fromisoformat(payload["finished_at"])
+    assert parsed == naive_utc.replace(tzinfo=timezone.utc)
+
+
+def test_sync_status_serializes_none_timestamps():
+    """5.5.2: missing timestamps stay null (no spurious offset)."""
+    from app.schemas.sync import SyncStatus
+
+    payload = SyncStatus().model_dump(mode="json")
+    assert payload["started_at"] is None
+    assert payload["finished_at"] is None
