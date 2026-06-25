@@ -1089,7 +1089,7 @@ function renderTopCampaigns(deals) {
   if (!el) return;
 
   const top3 = (deals || [])
-    .slice()
+    .filter((d) => d.list_state !== "perdido")
     .sort((a, b) => (b.amount || 0) - (a.amount || 0))
     .slice(0, 3);
 
