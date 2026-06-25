@@ -15,6 +15,36 @@ def test_login_success(client, seed_test_user):
     assert "httponly" in set_cookie_header.lower()
 
 
+def test_login_is_case_insensitive(client, seed_test_user):
+    """5.5.1: email is not case-sensitive — any casing of a registered email
+    must authenticate against the lowercase-stored row."""
+    base = settings.ADMIN_EMAIL  # stored lowercase
+    variants = [base.upper(), base.capitalize(), base.title(), f"  {base.upper()}  "]
+    for username in variants:
+        response = client.post(
+            "/auth/login",
+            data={"username": username, "password": settings.ADMIN_PASSWORD},
+        )
+        assert response.status_code == 200, f"login failed for casing {username!r}"
+
+
+def test_create_user_normalizes_email_to_lowercase(auth_client):
+    """5.5.1: creating a user with mixed-case email stores it lowercase, and
+    that user can then log in using any casing."""
+    response = auth_client.post(
+        "/auth/users",
+        json={"email": "MixedCase@Example.com", "password": "case-user-password"},
+    )
+    assert response.status_code == 201
+    assert response.json()["email"] == "mixedcase@example.com"
+
+    login = auth_client.post(
+        "/auth/login",
+        data={"username": "MIXEDCASE@EXAMPLE.COM", "password": "case-user-password"},
+    )
+    assert login.status_code == 200
+
+
 def test_login_invalid_credentials(client, seed_test_user):
     response = client.post(
         "/auth/login",
