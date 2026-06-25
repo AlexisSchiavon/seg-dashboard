@@ -2248,3 +2248,21 @@ body {
   border: 1px solid var(--borderM);
   color: var(--text);
 }
+
+/* ── Trello-source badge (funnel stages sourced from Trello, not Pipedrive) ── */
+.trello-src-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: 'Sora', sans-serif;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(14, 165, 176, 0.12);
+  border: 1px solid rgba(14, 165, 176, 0.3);
+  color: #40d4de;
+  margin-left: 5px;
+  vertical-align: middle;
+  line-height: 1.4;
+}

@@ -43,6 +43,9 @@ const CALENDAR_NODE_COLORS = [
   { bg: 'var(--amberD)',  border: 'var(--amber)',  text: 'var(--amberT)' },
 ];
 
+// Stages sourced from Trello (not Pipedrive) — always show 0 from CRM
+const TRELLO_STAGES = ["En ejecución", "Cobranza"];
+
 // Avatar background/text color pairs for ranking rows
 const AVATAR_COLORS = [
   { bg: "rgba(232,82,10,0.15)", text: "var(--accent)" },
@@ -415,9 +418,10 @@ function renderFunnel(stages) {
     const countDisplay = stage.count > 0
       ? `<span style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.9);">${stage.count}</span>`
       : "";
+    const trelloBadge = TRELLO_STAGES.includes(stage.stage) ? '<span class="trello-src-badge">vía Trello</span>' : '';
     return `
       <div class="funnel-row">
-        <span class="f-label">${escHtml(stage.stage)}</span>
+        <span class="f-label">${escHtml(stage.stage)}${trelloBadge}</span>
         <div class="f-track">
           <div class="f-fill" style="width:${pct}%;background:${color};">${countDisplay}</div>
         </div>
@@ -627,9 +631,10 @@ function renderTalentFunnel(stages) {
     const countDisplay = stage.count > 0
       ? `<span style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.9);">${stage.count}</span>`
       : "";
+    const trelloBadge = TRELLO_STAGES.includes(stage.stage) ? '<span class="trello-src-badge">vía Trello</span>' : '';
     return `
       <div class="funnel-row">
-        <span class="f-label">${escHtml(stage.stage)}</span>
+        <span class="f-label">${escHtml(stage.stage)}${trelloBadge}</span>
         <div class="f-track">
           <div class="f-fill" style="width:${pct}%;background:${color};">${countDisplay}</div>
         </div>
@@ -972,7 +977,7 @@ function renderIncomeProjection(data) {
     const pctP   = ((m.proyeccion || 0) / maxVal * 100).toFixed(1);
     const pctPe  = ((m.pendiente  || 0) / maxVal * 100).toFixed(1);
     const isCurrent = m.is_current === true;
-    const sublabel  = isCurrent ? "(Real)" : "(Proyección)";
+    const sublabel  = isCurrent ? "(Real)" : "(Estimado)";
     const totalLbl  = total > 0
       ? `<div style="position:absolute;bottom:calc(${pctH}% + 4px);left:0;right:0;text-align:center;font-size:10px;font-family:'DM Mono',monospace;color:var(--text2);white-space:nowrap;">${formatMXN(total)}</div>`
       : "";
@@ -993,7 +998,7 @@ function renderIncomeProjection(data) {
   el.innerHTML = `
     <div class="proj-legend">
       <div class="proj-legend-item"><div class="proj-legend-dot" style="background:var(--green)"></div>Cobrado</div>
-      <div class="proj-legend-item"><div class="proj-legend-dot" style="background:var(--blue)"></div>Firmado (Proyección)</div>
+      <div class="proj-legend-item"><div class="proj-legend-dot" style="background:var(--blue)"></div>En campaña</div>
       <div class="proj-legend-item"><div class="proj-legend-dot" style="background:var(--amber)"></div>Pendiente</div>
     </div>
     <div class="proj-chart">${bars}</div>`;
