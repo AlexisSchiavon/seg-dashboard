@@ -122,7 +122,7 @@ def sync_pipedrive(db: Session) -> SyncLog:
         # 4. Determine updated_since for incremental sync (omit on first sync).
         last_success = (
             db.query(SyncLog)
-            .filter(SyncLog.status == "success")
+            .filter(SyncLog.status == "success", SyncLog.source == "pipedrive")
             .order_by(SyncLog.finished_at.desc())
             .first()
         )
