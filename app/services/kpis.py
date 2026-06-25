@@ -253,20 +253,22 @@ def flujo_dinero_kpis(db: Session, talent_id: int) -> dict:
     """Return the 3 money-flow KPI tiles for the Por Talento Flujo de dinero view.
 
     Tiles:
-      - Campañas firmadas (blue): Contrato-stage deals (open + won) — count + total value
+      - Campañas firmadas (blue): won deals (status='won') — count + total value.
+        5.1 (D1): "firmado" = "ganado" = status='won' ONLY. The "Contrato" stage
+        means a deal is in the signing process — NOT yet signed/won (Luis, 25-jun).
       - Cobrado (green): deals linked to a TrelloCard with list_state="cerrado" — total value
-      - Pendiente por cobrar (amber): max(0, firmadas - cobrado) — never negative
+      - Pendiente por cobrar (amber): max(0, firmadas - cobrado) — never negative.
+        Equals won_value - cobrado_value, i.e. ganados aún no cobrados.
     """
     from app.models import TrelloCard
 
-    # Campañas firmadas — Contrato stage, open or won
+    # Campañas firmadas — won deals only (5.1 / D1: status='won', never stage='Contrato')
     firmadas_row = db.query(
         func.count(Deal.id),
         func.coalesce(func.sum(Deal.value), 0.0),
     ).filter(
         Deal.talent_id == talent_id,
-        Deal.stage_name == "Contrato",
-        Deal.status.in_(["open", "won"]),
+        Deal.status == "won",
     ).one()
     firmadas_count, firmadas_value = firmadas_row[0], firmadas_row[1] or 0.0
 

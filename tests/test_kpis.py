@@ -305,3 +305,89 @@ def test_talent_detail_empty(db_session):
 
     # Empty brand categories
     assert result["brand_categories"] == []
+
+
+# ---------------------------------------------------------------------------
+# 5.1 (D1) — flujo_dinero_kpis: "Campañas firmadas" = status='won' only
+# ---------------------------------------------------------------------------
+
+
+def _tile(result, label):
+    return next(t for t in result["kpis"] if t["label"] == label)
+
+
+def test_flujo_firmadas_counts_only_won_not_contrato_stage(db_session):
+    """5.1/D1: a deal sitting in the 'Contrato' stage but still status='open'
+    is in the signing process — NOT firmada. Only status='won' counts."""
+    from app.models import TrelloCard
+
+    talent = Talent(name="Talento Flujo", active=True, category="Tech")
+    db_session.add(talent)
+    db_session.commit()
+    db_session.refresh(talent)
+
+    # status='won' — counts as firmada
+    won = Deal(
+        pipedrive_id=30001, title="Ganado", value=100000.0, currency="MXN",
+        stage_id=4, stage_name="Contrato", status="won", talent_id=talent.id,
+        commission_amount=70000.0, update_time="2026-06-10T10:00:00Z",
+    )
+    # In 'Contrato' stage but still open — must NOT count as firmada
+    contrato_open = Deal(
+        pipedrive_id=30002, title="En firma", value=999999.0, currency="MXN",
+        stage_id=4, stage_name="Contrato", status="open", talent_id=talent.id,
+        commission_amount=699999.3, update_time="2026-06-11T10:00:00Z",
+    )
+    db_session.add_all([won, contrato_open])
+    db_session.commit()
+
+    result = kpi_service.flujo_dinero_kpis(db_session, talent.id)
+    firmadas = _tile(result, "Campañas firmadas")
+
+    assert firmadas["count"] == 1                 # only the won deal
+    assert firmadas["value"] == 100000.0          # NOT the 999999 open Contrato deal
+
+
+def test_flujo_pendiente_equals_won_minus_cobrado(db_session):
+    """5.1/D1: 'Pendiente por cobrar' = firmadas(won) - cobrado, never negative."""
+    from datetime import date
+
+    from app.models import TrelloCard
+
+    talent = Talent(name="Talento Pendiente", active=True, category="Tech")
+    db_session.add(talent)
+    db_session.commit()
+    db_session.refresh(talent)
+
+    won_cobrado = Deal(
+        pipedrive_id=31001, title="Ganado y cobrado", value=100000.0, currency="MXN",
+        stage_id=4, stage_name="Contrato", status="won", talent_id=talent.id,
+        commission_amount=70000.0, update_time="2026-06-10T10:00:00Z",
+    )
+    won_pendiente = Deal(
+        pipedrive_id=31002, title="Ganado sin cobrar", value=40000.0, currency="MXN",
+        stage_id=4, stage_name="Contrato", status="won", talent_id=talent.id,
+        commission_amount=28000.0, update_time="2026-06-11T10:00:00Z",
+    )
+    db_session.add_all([won_cobrado, won_pendiente])
+    db_session.commit()
+    db_session.refresh(won_cobrado)
+
+    # Only won_cobrado has a 'cerrado' Trello card → counts as cobrado
+    db_session.add(TrelloCard(
+        trello_card_id="card-cerrado-flujo", name="Cobrado", list_id="L1",
+        list_name="Finalizados", list_state="cerrado", deal_id=won_cobrado.id,
+        collection_date=date(2026, 7, 1),
+    ))
+    db_session.commit()
+
+    result = kpi_service.flujo_dinero_kpis(db_session, talent.id)
+    firmadas = _tile(result, "Campañas firmadas")
+    cobrado = _tile(result, "Cobrado")
+    pendiente = _tile(result, "Pendiente por cobrar")
+
+    assert firmadas["value"] == 140000.0          # both won deals
+    assert cobrado["value"] == 100000.0           # only the cerrado-card deal
+    # Coherence: pendiente == ganados - cobrado
+    assert pendiente["value"] == firmadas["value"] - cobrado["value"]
+    assert pendiente["value"] == 40000.0
