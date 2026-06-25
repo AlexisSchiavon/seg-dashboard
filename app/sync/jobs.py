@@ -39,6 +39,29 @@ TRELLO_AUTO_CREATE_ENABLED = False
 COMMISSION_RATE = 0.70
 
 
+def _parse_pipedrive_datetime(value: str | None) -> datetime | None:
+    """Parse a Pipedrive timestamp into a timezone-aware UTC datetime.
+
+    Pipedrive v2 returns ISO 8601 like "2026-06-15T10:30:00Z"; older/v1-shaped
+    payloads may use a space separator ("2026-06-15 10:30:00"). Returns None for
+    empty/unparseable values. Naive results are assumed UTC (Pipedrive sends UTC).
+    """
+    if not value:
+        return None
+    text = value.strip()
+    if " " in text and "T" not in text:
+        text = text.replace(" ", "T", 1)
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def _is_stale(running: SyncLog) -> bool:
     started_at = running.started_at
     if started_at.tzinfo is None:
@@ -195,6 +218,8 @@ def sync_pipedrive(db: Session) -> SyncLog:
             existing_deal.stage_entered_at = stage_entered_at
             existing_deal.update_time = deal.get("update_time", "")
             existing_deal.add_time = deal.get("add_time")
+            # 5.3: persist Pipedrive v2 won_time (UTC) for status='won' deals.
+            existing_deal.won_time = _parse_pipedrive_datetime(deal.get("won_time"))
 
             records_synced += 1
 

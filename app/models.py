@@ -63,6 +63,11 @@ class Deal(Base):
     stage_entered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     update_time: Mapped[str] = mapped_column(String)  # for updated_since filter
     add_time: Mapped[str | None] = mapped_column(String, nullable=True)
+    # 5.3: timestamp the deal became status='won' (Pipedrive v2 won_time).
+    # Stored as timezone-aware UTC; convert to America/Mexico_City only at render.
+    won_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
 
 class DealStageEvent(Base):

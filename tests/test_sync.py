@@ -195,3 +195,95 @@ def test_sync_status_endpoint(auth_client):
     assert "status" in body
     assert "records_synced" in body
     assert "error_message" in body
+
+
+# ---------------------------------------------------------------------------
+# 5.3 — won_time (Pipedrive v2 close-of-contract timestamp)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_pipedrive_datetime_handles_formats():
+    """5.3: _parse_pipedrive_datetime normalizes Pipedrive timestamp shapes to
+    timezone-aware UTC, and returns None for empty/unparseable input."""
+    from datetime import timezone
+
+    from app.sync.jobs import _parse_pipedrive_datetime
+
+    assert _parse_pipedrive_datetime(None) is None
+    assert _parse_pipedrive_datetime("") is None
+    assert _parse_pipedrive_datetime("not-a-date") is None
+
+    # "Z" suffix -> UTC
+    z = _parse_pipedrive_datetime("2026-06-15T10:30:00Z")
+    assert z is not None and z.tzinfo is not None
+    assert z.utcoffset() == timezone.utc.utcoffset(None)
+    assert (z.year, z.month, z.day, z.hour, z.minute) == (2026, 6, 15, 10, 30)
+
+    # Space separator (v1-shaped) -> assumed UTC
+    s = _parse_pipedrive_datetime("2026-06-15 10:30:00")
+    assert s is not None and s.tzinfo is not None
+    assert s.utcoffset() == timezone.utc.utcoffset(None)
+
+    # Explicit offset preserved as an instant
+    o = _parse_pipedrive_datetime("2026-06-15T10:30:00+00:00")
+    assert o == z
+
+
+def test_sync_persists_won_time_for_won_deals(
+    db_session, seed_talent_products, mock_pipedrive_transport, monkeypatch
+):
+    """5.3: a won deal carrying won_time is persisted as a tz-aware datetime;
+    a deal without won_time keeps won_time NULL."""
+    from datetime import timezone
+
+    import httpx
+
+    from app.integrations import pipedrive
+    from app.sync import jobs
+
+    monkeypatch.setattr(pipedrive, "_client", lambda: httpx.Client(
+        base_url=pipedrive.BASE_URL,
+        transport=mock_pipedrive_transport,
+    ))
+
+    won_deal = {
+        "id": 2001,
+        "title": "Contrato firmado",
+        "value": 100000,
+        "currency": "MXN",
+        "stage_id": 4,  # Contrato
+        "status": "won",
+        "update_time": "2026-06-15 11:00:00",
+        "add_time": "2026-06-01 09:00:00",
+        "won_time": "2026-06-15T10:30:00Z",
+        "custom_fields": {},
+    }
+    open_deal = {
+        "id": 2002,
+        "title": "En negociación",
+        "value": 50000,
+        "currency": "MXN",
+        "stage_id": 3,
+        "status": "open",
+        "update_time": "2026-06-16 11:00:00",
+        "add_time": "2026-06-02 09:00:00",
+        "won_time": None,
+        "custom_fields": {},
+    }
+    monkeypatch.setattr(
+        pipedrive, "get_deals", lambda client, updated_since=None: iter([won_deal, open_deal])
+    )
+
+    jobs.sync_pipedrive(db_session)
+
+    from datetime import datetime
+
+    won = db_session.query(Deal).filter(Deal.pipedrive_id == 2001).one()
+    assert won.won_time is not None
+    # SQLite has no native tz storage: DateTime(timezone=True) round-trips naive.
+    # The parser normalized to UTC before persisting, so the stored instant is
+    # 10:30 UTC (this is exactly the mechanism behind the 5.5.2 sync-pill bug).
+    assert won.won_time.replace(tzinfo=None) == datetime(2026, 6, 15, 10, 30)
+
+    still_open = db_session.query(Deal).filter(Deal.pipedrive_id == 2002).one()
+    assert still_open.won_time is None
