@@ -13,7 +13,7 @@ from datetime import datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import Deal, DealStageEvent, Talent
+from app.models import Deal, DealStageEvent, Talent, TrelloCard
 
 # PIPE-05: canonical 6-stage order — do NOT reorder or remove
 STAGES = [
@@ -27,6 +27,53 @@ STAGES = [
 
 # Minimum deal count for bottleneck detection (RESEARCH.md Pattern 4)
 BOTTLENECK_MIN_SAMPLE = 10
+
+# Fase 6: the last two funnel stages are sourced from Trello (TrelloCard.list_state),
+# NOT from Pipedrive deals. 'cerrado' cards are deliberately excluded — they are
+# already-collected/archived, not an active funnel stage (D5).
+TRELLO_LIST_STATE_TO_STAGE = {
+    "ejecucion": "En ejecución",
+    "cobranza": "Cobranza",
+}
+
+
+def _trello_stage_aggregates(
+    db: Session, talent_id: int | None = None
+) -> dict[str, tuple[int, float]]:
+    """Return {stage_name: (card_count, amount)} for the two Trello-sourced stages.
+
+    Fase 6 mapping (D1/D2/D4):
+      - amount = SUM(COALESCE(Deal.value, 0)) of the deals linked via
+        TrelloCard.deal_id — same value semantics as the Pipedrive stages.
+      - Global funnel (talent_id=None): LEFT JOIN so orphan cards (deal_id NULL,
+        ~35%) still count toward card_count but contribute 0 to amount (D2).
+      - Per-talent (talent_id set): INNER JOIN + filter Deal.talent_id, so orphan
+        cards and cards whose deal has no talent are excluded (D4).
+    """
+    query = db.query(
+        TrelloCard.list_state,
+        func.count(TrelloCard.id),
+        func.coalesce(func.sum(Deal.value), 0.0),
+    )
+    if talent_id is None:
+        query = query.outerjoin(Deal, TrelloCard.deal_id == Deal.id)
+    else:
+        query = query.join(Deal, TrelloCard.deal_id == Deal.id).filter(
+            Deal.talent_id == talent_id
+        )
+
+    rows = (
+        query.filter(TrelloCard.list_state.in_(list(TRELLO_LIST_STATE_TO_STAGE)))
+        .group_by(TrelloCard.list_state)
+        .all()
+    )
+
+    result: dict[str, tuple[int, float]] = {}
+    for list_state, count, amount in rows:
+        stage = TRELLO_LIST_STATE_TO_STAGE.get(list_state)
+        if stage is not None:
+            result[stage] = (count, float(amount))
+    return result
 
 
 def funnel_overview(db: Session) -> dict:
@@ -62,6 +109,12 @@ def funnel_overview(db: Session) -> dict:
     for row in rows:
         stage_map[row[0]] = (row[1], float(row[2]))
 
+    # Fase 6: overlay the two Trello-sourced stages (count + amount come from
+    # TrelloCard, not Deal — deals never carry these stage_names).
+    trello_aggs = _trello_stage_aggregates(db)
+    for stage, count_amount in trello_aggs.items():
+        stage_map[stage] = count_amount
+
     # Build ordered stage buckets — always emit all 6, even with 0 count
     stages = []
     for stage in STAGES:
@@ -96,6 +149,16 @@ def funnel_overview(db: Session) -> dict:
         .all()
     )
     all_stage_counts: dict[str, int] = {r[0]: r[1] for r in all_rows}
+
+    # NOTA: bottleneck mezcla dos fuentes intencionalmente (Fase 6, D3):
+    # - Etapas Pipedrive: counts all-status de Deal (open+won+lost)
+    # - Etapas Trello: counts de TrelloCard (que viven separadas del
+    #   status de Deal)
+    # Esto es coherente con la heurística original — recalcula el embudo
+    # end-to-end con las 6 etapas. Las etapas Trello en 0 no rompen el
+    # cálculo (la guarda `if denom == 0: continue` cubre ese caso).
+    for stage, (count, _amount) in trello_aggs.items():
+        all_stage_counts[stage] = count
 
     # Cumulative counts: deals_at_or_after[i] = sum of counts for stages i..5
     cumulative = []
@@ -162,6 +225,12 @@ def talent_funnel(db: Session, talent_id: int) -> list[dict]:
     stage_map: dict[str, tuple[int, float]] = {}
     for row in rows:
         stage_map[row[0]] = (row[1], float(row[2]))
+
+    # Fase 6 (D4): overlay Trello stages filtered to THIS talent via Deal.talent_id.
+    # Orphan cards and cards whose deal has no talent are excluded by the INNER JOIN.
+    trello_aggs = _trello_stage_aggregates(db, talent_id=talent_id)
+    for stage, count_amount in trello_aggs.items():
+        stage_map[stage] = count_amount
 
     # Always emit all 6 stages, even with 0 count (same invariant as funnel_overview)
     stages = []
