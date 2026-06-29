@@ -59,8 +59,18 @@ def trigger_sync(background_tasks: BackgroundTasks, db: Session = Depends(get_db
 
 
 @router.get("/status", response_model=SyncStatus)
-def get_sync_status(db: Session = Depends(get_db)):
-    latest = db.query(SyncLog).order_by(SyncLog.started_at.desc()).first()
+def get_sync_status(source: str | None = None, db: Session = Depends(get_db)):
+    """Latest SyncLog. Default: any source (drives the header pill/banner).
+
+    6.2: pass ?source=pipedrive to get the latest Pipedrive sync specifically —
+    used by the post-sync toast so "X deals actualizados" reflects DEALS, not the
+    Trello card count (the background sync runs Trello last, so the unfiltered
+    latest log is Trello's, whose records_synced is cards, not deals).
+    """
+    query = db.query(SyncLog)
+    if source is not None:
+        query = query.filter(SyncLog.source == source)
+    latest = query.order_by(SyncLog.started_at.desc()).first()
     if latest is None:
         return SyncStatus()
     return latest

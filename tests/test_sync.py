@@ -197,6 +197,37 @@ def test_sync_status_endpoint(auth_client):
     assert "error_message" in body
 
 
+def test_sync_status_source_filter(auth_client, db_session):
+    """6.2: /sync/status?source=pipedrive returns the latest Pipedrive log so the
+    post-sync toast shows DEALS updated, not the (later) Trello card count."""
+    from datetime import datetime, timedelta, timezone
+
+    base = datetime(2026, 6, 26, 12, 0, 0, tzinfo=timezone.utc)
+    db_session.add_all([
+        SyncLog(
+            source="pipedrive", started_at=base, finished_at=base,
+            status="success", records_synced=7,
+        ),
+        # Trello starts later -> it is the unfiltered "latest"
+        SyncLog(
+            source="trello", started_at=base + timedelta(minutes=2),
+            finished_at=base + timedelta(minutes=2), status="success",
+            records_synced=190,
+        ),
+    ])
+    db_session.commit()
+
+    # Unfiltered (header pill/banner): latest across sources = Trello (190 cards)
+    r_all = auth_client.get("/sync/status")
+    assert r_all.status_code == 200
+    assert r_all.json()["records_synced"] == 190
+
+    # source=pipedrive: the deals count (7), regardless of Trello running later
+    r_pd = auth_client.get("/sync/status?source=pipedrive")
+    assert r_pd.status_code == 200
+    assert r_pd.json()["records_synced"] == 7
+
+
 # ---------------------------------------------------------------------------
 # 5.3 — won_time (Pipedrive v2 close-of-contract timestamp)
 # ---------------------------------------------------------------------------

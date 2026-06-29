@@ -265,7 +265,18 @@ async function triggerSync() {
     if (res.status === 202) {
       const result = await pollSyncUntilDone();
       if (result && result.status === "success") {
-        showToast(`Sync completado — ${result.records_synced} deals actualizados`);
+        // 6.2: report DEALS updated (Pipedrive), not the Trello card count that
+        // the unfiltered /sync/status returns (Trello syncs last). Fall back to
+        // the cross-source count if the Pipedrive-specific fetch fails.
+        let dealsUpdated = result.records_synced;
+        const pdRes = await apiFetch("/sync/status?source=pipedrive");
+        if (pdRes && pdRes.ok) {
+          const pd = await pdRes.json();
+          if (pd && typeof pd.records_synced === "number") {
+            dealsUpdated = pd.records_synced;
+          }
+        }
+        showToast(`Sync completado — ${dealsUpdated} deals actualizados`);
         // Refresh dashboard data after successful sync
         loadSummary();
         loadFunnel();

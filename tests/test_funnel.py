@@ -1,10 +1,10 @@
 """Tests for app/services/funnel.py — funnel aggregation, bottleneck detection, activity feed."""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from tests.conftest import TestSessionLocal
 from app.services import funnel as funnel_service
-from app.models import Deal, DealStageEvent, Talent
+from app.models import Deal, DealStageEvent, Talent, TrelloCard
 
 
 CANONICAL_STAGES = [
@@ -357,3 +357,115 @@ def test_recent_activity_sin_talento(db_session):
     activity = funnel_service.recent_activity(db_session)
     assert len(activity) == 1
     assert activity[0]["talent_name"] == "Sin talento"
+
+
+# ---------------------------------------------------------------------------
+# Fase 6 — Trello-sourced funnel stages (En ejecución / Cobranza)
+# ---------------------------------------------------------------------------
+
+
+def _deal(db, pid, value, talent_id=None, stage="Contrato", status="won"):
+    d = Deal(
+        pipedrive_id=pid, title=f"Deal {pid}", value=value, currency="MXN",
+        stage_id=4, stage_name=stage, status=status, talent_id=talent_id,
+        commission_amount=value * 0.7, is_sin_cotizar=False,
+        update_time="2026-06-01T10:00:00Z",
+    )
+    db.add(d)
+    db.commit()
+    db.refresh(d)
+    return d
+
+
+def _card(db, cid, list_state, deal_id=None):
+    state_to_list = {"ejecucion": "Contrato", "cobranza": "Cobrar", "cerrado": "Finalizados"}
+    c = TrelloCard(
+        trello_card_id=cid, name=f"Card {cid}", list_id="L",
+        list_name=state_to_list[list_state], list_state=list_state,
+        deal_id=deal_id, collection_date=date(2026, 7, 1),
+    )
+    db.add(c)
+    db.commit()
+    return c
+
+
+def test_funnel_counts_trello_cards(db_session):
+    """6.1/D1/D5: En ejecución & Cobranza counts+amounts come from TrelloCard
+    (linked Deal.value); 'cerrado' cards never enter the funnel."""
+    de1 = _deal(db_session, 70001, 10000.0)
+    de2 = _deal(db_session, 70002, 20000.0)
+    dcob = _deal(db_session, 70003, 5000.0)
+    dcer = _deal(db_session, 70004, 99999.0)
+    _card(db_session, "c-e1", "ejecucion", de1.id)
+    _card(db_session, "c-e2", "ejecucion", de2.id)
+    _card(db_session, "c-cob", "cobranza", dcob.id)
+    _card(db_session, "c-cer", "cerrado", dcer.id)  # must NOT appear in funnel
+
+    stages = {s["stage"]: s for s in funnel_service.funnel_overview(db_session)["stages"]}
+
+    assert stages["En ejecución"]["count"] == 2
+    assert stages["En ejecución"]["amount"] == pytest.approx(30000.0)
+    assert stages["Cobranza"]["count"] == 1
+    assert stages["Cobranza"]["amount"] == pytest.approx(5000.0)
+    # 'cerrado' is not a funnel stage and its value never leaks into the two Trello stages
+    assert "Cerrado" not in stages
+    assert stages["En ejecución"]["amount"] + stages["Cobranza"]["amount"] == pytest.approx(35000.0)
+
+
+def test_funnel_orphan_cards_count_but_zero_amount(db_session):
+    """6.1/D2: a card with no linked deal counts toward card_count but adds 0 amount."""
+    d = _deal(db_session, 71001, 10000.0)
+    _card(db_session, "c-linked", "ejecucion", d.id)
+    _card(db_session, "c-orphan", "ejecucion", None)  # deal_id NULL
+
+    stages = {s["stage"]: s for s in funnel_service.funnel_overview(db_session)["stages"]}
+    assert stages["En ejecución"]["count"] == 2          # both cards counted
+    assert stages["En ejecución"]["amount"] == pytest.approx(10000.0)  # orphan adds 0
+
+
+def test_talent_funnel_includes_trello_filtered_by_talent(db_session):
+    """6.1/D4: per-talent funnel shows only cards whose deal belongs to that talent;
+    orphan cards and other talents' cards are excluded."""
+    ta = Talent(name="Talento Trello A", active=True)
+    tb = Talent(name="Talento Trello B", active=True)
+    db_session.add_all([ta, tb])
+    db_session.commit()
+    db_session.refresh(ta)
+    db_session.refresh(tb)
+
+    da = _deal(db_session, 72001, 10000.0, talent_id=ta.id)
+    db_ = _deal(db_session, 72002, 50000.0, talent_id=tb.id)
+    _card(db_session, "c-a", "ejecucion", da.id)
+    _card(db_session, "c-b", "ejecucion", db_.id)
+    _card(db_session, "c-orphan2", "ejecucion", None)
+
+    a_stages = {s["stage"]: s for s in funnel_service.talent_funnel(db_session, ta.id)}
+    assert a_stages["En ejecución"]["count"] == 1            # only talent A's card
+    assert a_stages["En ejecución"]["amount"] == pytest.approx(10000.0)
+
+    b_stages = {s["stage"]: s for s in funnel_service.talent_funnel(db_session, tb.id)}
+    assert b_stages["En ejecución"]["count"] == 1
+    assert b_stages["En ejecución"]["amount"] == pytest.approx(50000.0)
+
+
+def test_bottleneck_handles_zero_count_trello_stage(db_session):
+    """6.1/D3: bottleneck recalculates over all 6 stages without crashing when a
+    Trello stage has count=0 (new talent / no cobranza cards yet)."""
+    # >=10 deals across Pipedrive stages to pass the sample-size gate
+    pid = 73000
+    for stage, n in {"Llamada": 5, "Cotización": 3, "Negociación": 2}.items():
+        for _ in range(n):
+            _deal(db_session, pid, 10000.0, stage=stage, status="open")
+            pid += 1
+    # ejecucion cards exist, but ZERO cobranza cards -> Cobranza count stays 0
+    de = _deal(db_session, 73900, 15000.0)
+    _card(db_session, "c-exec", "ejecucion", de.id)
+
+    result = funnel_service.funnel_overview(db_session)
+    stages = {s["stage"]: s for s in result["stages"]}
+    assert stages["En ejecución"]["count"] == 1
+    assert stages["Cobranza"]["count"] == 0          # zero-count Trello stage
+    assert result["insufficient_data"] is False
+    # Must not raise and must produce a valid bottleneck (or None) — no ZeroDivision
+    if result["bottleneck"] is not None:
+        assert 0.0 <= result["bottleneck"]["conversion_pct"] <= 100.0
