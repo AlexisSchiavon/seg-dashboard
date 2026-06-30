@@ -18,6 +18,7 @@ Security (T-02-01): on error, persist only `str(exc)` to SyncLog.error_message
 header is a secret).
 """
 import logging
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 import bleach
@@ -25,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.integrations import pipedrive, sheets, trello
 from app.models import Deal, DealStageEvent, Lead, SyncLog, Talent, TalentProduct, TrelloCard
+from app.services import talents as talents_service
 from app.services import trello_service
 
 logger = logging.getLogger(__name__)
@@ -337,15 +339,27 @@ def sync_sheets(db: Session) -> SyncLog:
     try:
         rows = sheets.get_leads_rows()  # Single API call, ~0.40s for 730 rows
 
-        # Build talent name → id map once (avoid N+1 per-row queries — Anti-Pattern in RESEARCH.md)
-        talent_map: dict[str, int] = {
-            t.name: t.id for t in db.query(Talent).all()
+        # Build the talent-resolution maps once (fix/fase-8). The Sheet stores
+        # informal short forms (first names, partials, no-space, case/accent
+        # variants) that an exact dict.get() against Talent.name missed — see
+        # resolve_talent_id_smart for the layered matching.
+        all_talents = db.query(Talent).all()
+        talent_map_normalized = {
+            talents_service.normalize_talent_name(t.name): t.id for t in all_talents
         }
+        canonical_names = [t.name for t in all_talents]
+        layer_counts: Counter = Counter()
 
         records_synced = 0
         for row in rows:
             # None = "Sin talento asignado" bucket (D-33)
-            talent_id = talent_map.get(row.talento_mencionado) if row.talento_mencionado else None
+            talent_id, match_layer = talents_service.resolve_talent_id_smart(
+                row.talento_mencionado,
+                talent_map_normalized,
+                talents_service.TALENT_ALIASES,
+                canonical_names,
+            )
+            layer_counts[match_layer] += 1
 
             existing = db.query(Lead).filter(Lead.sheet_row_id == row.sheet_row_id).first()
             if existing is None:
@@ -384,6 +398,16 @@ def sync_sheets(db: Session) -> SyncLog:
                 bleach.clean(categoria, tags=[], attributes={}, strip=True) if categoria else None
             )
             records_synced += 1
+
+        # fix/fase-8: talent-resolution health at a glance after each sync.
+        logger.info(
+            "Talent resolution: exact=%d no_spaces=%d prefix=%d alias=%d miss=%d",
+            layer_counts["exact"],
+            layer_counts["no_spaces"],
+            layer_counts["prefix"],
+            layer_counts["alias"],
+            layer_counts["miss"],
+        )
 
         db.commit()
         sync_log.status = "success"

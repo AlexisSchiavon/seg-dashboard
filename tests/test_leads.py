@@ -686,3 +686,44 @@ class TestLeadDetailEndpoint:
         data = auth_client.get(f"/leads/{lead_id}").json()
         assert data["talent_id"] is None
         assert data["talent_name"] is None
+
+
+# ---------------------------------------------------------------------------
+# fix(fase-8) — sync resolves the 8 real informal Talento_Mencionado patterns
+# ---------------------------------------------------------------------------
+
+class TestSyncSmartTalentResolution:
+    """The 8 real Sheet patterns that produced 501 NULLs must now all resolve."""
+
+    def test_sync_resolves_all_informal_patterns_zero_nulls(self, db_session, monkeypatch):
+        from app.sync import jobs
+        from app.models import Lead, Talent
+
+        # Canonical talents (as stored in the live Talent table).
+        for name in [
+            "Navarretes Show", "Mariana Sanchez", "Mama mecanic", "Edgar Cardenas",
+            "Don Silverio y Don Wicho", "Ale Voale", "Deliberracion", "Dr Fitness",
+        ]:
+            db_session.add(Talent(name=name, active=True))
+        db_session.commit()
+
+        # The 8 informal forms observed in the Sheet for the NULL leads.
+        patterns = [
+            (2, "Navarretes show"),   # case   -> exact
+            (3, "Mariana"),           # prefix -> Mariana Sanchez
+            (4, "Mamamecanic"),       # nospace-> Mama mecanic
+            (5, "Edgar"),             # prefix -> Edgar Cardenas
+            (6, "Don Silverio"),      # prefix -> Don Silverio y Don Wicho
+            (7, "Ale"),               # prefix -> Ale Voale
+            (8, "Deliberración"),     # accent -> Deliberracion
+            (9, "Doc Fitness"),       # alias  -> Dr Fitness
+        ]
+        rows = [_sheet_row(sheet_row_id=rid, talento_mencionado=tm) for rid, tm in patterns]
+        monkeypatch.setattr(jobs.sheets, "get_leads_rows", lambda: rows)
+
+        jobs.sync_sheets(db_session)
+
+        total = db_session.query(Lead).count()
+        nulls = db_session.query(Lead).filter(Lead.talent_id.is_(None)).count()
+        assert total == 8
+        assert nulls == 0, "every informal pattern must resolve to a talent"
