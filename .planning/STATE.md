@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6 context gathered
-last_updated: "2026-06-24T23:18:22.104Z"
-last_activity: 2026-06-24 -- Phase 8 planning complete
+stopped_at: Fase 8 (leads-interactivos) implemented — awaiting merge decision
+last_updated: "2026-06-30T22:00:00.000Z"
+last_activity: 2026-06-30 -- Fase 8 (leads-interactivos) complete incl. fix(fase-8) talent-resolution hotfix
 progress:
   total_phases: 8
   completed_phases: 6
@@ -21,14 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-09)
 
 **Core value:** Dar visibilidad consolidada y en tiempo real del funnel comercial e ingresos por talento — reemplazando el proceso manual disperso entre Pipedrive, Sheets y Trello.
-**Current focus:** Phase 8 — pre-junta fixes before June 25 meeting with Luis Santillán
+**Current focus:** Fase 8 — leads-interactivos (brief-driven; implemented, awaiting merge)
 
 ## Current Position
 
-Phase: 8 — planning
-Plan: 0/4 (waves defined, plans TBD)
-Status: Ready to execute
-Last activity: 2026-06-24 -- Phase 8 planning complete
+Phase: Fase 8 (leads-interactivos) — IMPLEMENTED, awaiting merge to main
+Status: 8.1–8.5 done + fix(fase-8) talent-resolution hotfix; 237 tests green
+Last activity: 2026-06-30 -- Fase 8 complete incl. talent-resolution hotfix (833b070)
 
 Progress: [████████░░] 83%
 
