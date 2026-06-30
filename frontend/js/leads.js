@@ -156,9 +156,12 @@ function renderLeadsList(leads) {
     const statusDisplay = escHtml(lead.status_display || lead.status_filtrado);
     const statusPill = `<span class="pill" style="${statusPillStyle(lead.status_display)}">${statusDisplay}</span>`;
 
-    const talentLabel = lead.talent_name
-      ? escHtml(lead.talent_name)
-      : "Sin talento asignado";
+    // Fase 8.4: talent name is clickable to filter the list — but only when the
+    // lead actually has a talent (filtering by "Sin talento asignado"/null is
+    // meaningless). event.stopPropagation keeps the row's openLeadModal from firing.
+    const talentLabel = (lead.talent_id != null && lead.talent_name)
+      ? `<span class="lead-talent-link" onclick="event.stopPropagation(); filterByTalent(${lead.talent_id})">${escHtml(lead.talent_name)}</span>`
+      : `<span class="lead-talent-muted">Sin talento asignado</span>`;
     const dotColor = lead.bloqueado
       ? "var(--red)"
       : lead.status_display === "Aprobado"
@@ -244,11 +247,63 @@ async function loadLeads() {
   const res = await apiFetch(`/leads${qs}`);
   if (!res) return; // 401 redirect
   if (!res.ok) {
-    showToast("Error cargando leads");
+    // 404 = talent_id not in DB (Fase 8.4) — friendly message, not a raw error.
+    if (res.status === 404) {
+      showToast("Talento no encontrado");
+      renderLeadsList([]);
+    } else {
+      showToast("Error cargando leads");
+    }
+    updateTalentChip();
     return;
   }
   const leads = await res.json();
   renderLeadsList(leads);
+  updateTalentChip(); // keep the chip in sync regardless of how the filter was set (D6)
+}
+
+// ============================================================
+// Talent filter chip (Fase 8.4)
+// ============================================================
+
+/** Click a talent in a lead row → select it in the dropdown and refilter. */
+function filterByTalent(talentId) {
+  const sel = document.getElementById("filter-talent");
+  if (sel) sel.value = String(talentId);
+  loadLeads(); // loadLeads() refreshes the chip via updateTalentChip()
+}
+
+/** The chip's × clears the talent filter back to "Todos los talentos". */
+function clearTalentFilter() {
+  const sel = document.getElementById("filter-talent");
+  if (sel) sel.value = "";
+  loadLeads();
+}
+
+/**
+ * Render (or hide) the "Talento: <nombre> [×]" chip from the CURRENT dropdown
+ * state, so it reflects the filter whether it was set via the dropdown or a
+ * row click. The label is read from the selected <option> text.
+ */
+function updateTalentChip() {
+  const chip = document.getElementById("leads-filter-chip");
+  const sel = document.getElementById("filter-talent");
+  if (!chip) return;
+
+  const value = sel ? sel.value : "";
+  if (!value) {
+    chip.style.display = "none";
+    chip.innerHTML = "";
+    return;
+  }
+
+  const opt = sel.options[sel.selectedIndex];
+  const label = opt ? opt.text : value;
+  chip.style.display = "";
+  chip.innerHTML =
+    `<span class="leads-chip">Talento: ${escHtml(label)}` +
+    `<button class="leads-chip-x" onclick="clearTalentFilter()" aria-label="Quitar filtro">&times;</button>` +
+    `</span>`;
 }
 
 // ============================================================

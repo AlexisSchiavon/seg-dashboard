@@ -2175,6 +2175,50 @@ body {
   word-break: break-word;
 }
 
+/* ── Talent filter: clickable name in rows + active filter chip (Fase 8.4) ── */
+.lead-talent-link {
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.12s, background 0.12s;
+}
+.lead-talent-link:hover {
+  color: var(--text);
+  background: var(--accentD);
+  text-decoration: underline;
+}
+.lead-talent-muted { color: var(--text3); }
+
+.leads-chip-wrap { margin-bottom: 12px; }
+.leads-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px 5px 12px;
+  background: var(--accentD);
+  border: 1px solid var(--accentB);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+.leads-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text2);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.leads-chip-x:hover { color: var(--text); background: rgba(255,255,255,0.1); }
+
 /* ── Form elements ──────────────────────────────────────────── */
 .form-group {
   margin-bottom: 12px;
