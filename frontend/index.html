@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>SEG · Talent Intelligence</title>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=DM+Sans:wght@400;500&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/styles.css?v=20260625a">
+  <link rel="stylesheet" href="/css/styles.css?v=20260629a">
 </head>
 <body style="visibility:hidden">
   <nav class="nav">
@@ -92,6 +92,18 @@
   <div class="page" id="page-talent">
     <div class="spacer"></div>
 
+    <!-- (0) Period filter (Fase 7) — discreet, right-aligned -->
+    <div class="section">
+      <div class="period-bar">
+        <span class="period-showing" id="talent-period-showing">Mostrando: —</span>
+        <div class="period-toggle" id="talent-period-toggle">
+          <button class="period-toggle-btn active" data-ptype="month" onclick="setTalentPeriodType('month', event)">Mes</button>
+          <button class="period-toggle-btn" data-ptype="quarter" onclick="setTalentPeriodType('quarter', event)">Trimestre</button>
+        </div>
+        <select class="sel period-select" id="talent-period-select" onchange="onTalentPeriodChange()"></select>
+      </div>
+    </div>
+
     <!-- (1) Talent selector -->
     <div class="section">
       <div id="talent-selector" class="talent-selector"></div>
@@ -127,7 +139,7 @@
 
     <!-- (4) Income projection chart -->
     <div class="section">
-      <div class="section-title">Histórico de ingresos por mes</div>
+      <div class="section-title">Proyección de ingresos por mes <span class="snapshot-tag">Estado actual</span></div>
       <div class="card">
         <div id="income-projection"></div>
       </div>
@@ -135,7 +147,7 @@
 
     <!-- (5) Payment calendar -->
     <div class="section">
-      <div class="section-title">Calendario de cobranza</div>
+      <div class="section-title">Calendario de cobranza <span class="snapshot-tag">Estado actual</span></div>
       <div class="card">
         <div id="payment-calendar"></div>
       </div>
@@ -145,7 +157,7 @@
     <div class="section">
       <div class="two-col-grid">
         <div>
-          <div class="section-title">Embudo de venta</div>
+          <div class="section-title">Embudo de venta <span class="snapshot-tag">Estado actual</span></div>
           <div class="card">
             <div id="talent-funnel"></div>
           </div>
@@ -162,7 +174,7 @@
 
     <!-- (7) Categorías de marca -->
     <div class="section">
-      <div class="section-title">Categorías de marca</div>
+      <div class="section-title">Categorías de marca <span class="snapshot-tag">Estado actual</span></div>
       <div class="card" id="brand-donut-card">
         <div class="donut-wrap">
           <div id="brand-donut"></div>
@@ -262,12 +274,17 @@
 
       <!-- Formulario de generación -->
       <div class="section-title" style="padding:0 0 16px;">Generar reporte con IA</div>
+      <!-- Period toggle (Fase 7) -->
+      <div class="period-toggle" id="report-period-toggle" style="max-width:240px;margin-bottom:8px;">
+        <button class="period-toggle-btn active" data-ptype="month" onclick="setReportPeriodType('month', event)">Mes</button>
+        <button class="period-toggle-btn" data-ptype="quarter" onclick="setReportPeriodType('quarter', event)">Trimestre</button>
+      </div>
       <div style="display:flex;gap:8px;margin-bottom:16px;">
         <select class="sel" style="flex:1;" id="report-talent">
           <option value="">Selecciona un talento</option>
         </select>
         <select class="sel" style="flex:1;" id="report-month" disabled>
-          <option value="">Selecciona un mes</option>
+          <option value="">Selecciona un periodo</option>
         </select>
       </div>
 
@@ -434,12 +451,12 @@
     </div>
   </div>
 
-  <script src="/js/auth.js?v=20260625a"></script>
-  <script src="/js/dashboard.js?v=20260625a"></script>
-  <script src="/js/leads.js?v=20260625a"></script>
-  <script src="/js/reports.js?v=20260625a"></script>
+  <script src="/js/auth.js?v=20260629a"></script>
+  <script src="/js/dashboard.js?v=20260629a"></script>
+  <script src="/js/leads.js?v=20260629a"></script>
+  <script src="/js/reports.js?v=20260629a"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
-  <script src="/js/agent.js?v=20260625a"></script>
+  <script src="/js/agent.js?v=20260629a"></script>
 </body>
 </html>

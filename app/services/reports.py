@@ -18,7 +18,7 @@ Security (STRIDE threat register, 05-02-PLAN.md):
 import json
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 
 import anthropic
 from jinja2 import Environment, FileSystemLoader
@@ -35,6 +35,7 @@ HTML = None  # replaced by mock_weasyprint in tests; lazy-imported in _render_pd
 from app.services import funnel as funnel_service
 from app.services import kpis as kpi_service
 from app.services import leads as leads_service
+from app.services import periods as periods_service
 
 # Jinja2 environment — autoescape=True to HTML-escape all Jinja2 variables,
 # including Claude-generated prose (protects against XSS in any future web rendering).
@@ -80,45 +81,55 @@ def available_months(db: Session, talent_id: int) -> list[str]:
     return sorted(months, reverse=True)
 
 
-def _build_payload(db: Session, talent: Talent, month: str) -> dict:
+def _build_payload(
+    db: Session,
+    talent: Talent,
+    period_value: str,
+    start: date | None = None,
+    end: date | None = None,
+) -> dict:
     """Assemble the Python-computed figures dict to pass to Claude.
 
-    ALL numeric values in this dict come from direct DB queries filtered by (talent_id, month).
-    The `month` parameter (YYYY-MM) is used as a LIKE prefix filter on Deal.add_time so that
-    all KPI, funnel, and top-deal figures represent the chosen month only (CR-01 fix).
+    ALL numeric values come from direct DB queries. Fase 7 (P2/D4) changes the
+    semantics from the previous "everything filtered by add_time month" behavior:
 
-    Leads (from Google Sheets) do not have a deal add_time — they are reported all-time
-    and the payload keys are named accordingly to avoid confusion.
+      - CLOSED metrics are scoped to the period: cerrados_count/valor and comisión
+        filter by Deal.won_time (the correct signing date — see brief, not add_time).
+      - ACTIVE/SNAPSHOT metrics are NOT period-filtered: open pipeline, the funnel,
+        and the top open-deal highlights are the current live state ("estado vivo"
+        per D4 — Luis asks "what did we sign in the period?", not "how big was my
+        pipeline in the period?").
 
+    period_value is the label ("YYYY-MM" or "YYYY-QN") stored in payload["month"]
+    and used for the filename/Report row. start/end are the inclusive period bounds;
+    when omitted they are derived from period_value (month vs quarter inferred from
+    the presence of "Q") so direct callers can still pass just a month string.
+
+    Leads (from Google Sheets) have no deal date and are reported all-time.
     No ORM instances are placed in the returned dict — it must be JSON-serializable.
     """
-    month_prefix = f"{month}%"  # e.g. "2026-05%" for LIKE filtering on add_time
+    if start is None or end is None:
+        period_type = "quarter" if "Q" in period_value else "month"
+        start, end = periods_service.parse_period(period_type, period_value)
 
-    # KPIs — filtered by talent_id AND month via add_time LIKE prefix (CR-01)
+    # Pipeline — open deals, all-time SNAPSHOT (D4: active pipeline is not period-scoped).
     pipeline_val = (
         db.query(func.coalesce(func.sum(Deal.value), 0.0))
         .filter(
             Deal.talent_id == talent.id,
             Deal.status == "open",
-            Deal.add_time.like(month_prefix),
         )
         .scalar()
     ) or 0.0
 
-    won_row = db.query(
-        func.count(Deal.id),
-        func.coalesce(func.sum(Deal.value), 0.0),
-        func.coalesce(func.sum(Deal.commission_amount), 0.0),
-    ).filter(
-        Deal.talent_id == talent.id,
-        Deal.status == "won",
-        Deal.add_time.like(month_prefix),
-    ).one()
-    cerrados_count = won_row[0]
-    cerrados_valor = won_row[1] or 0.0
-    comision = won_row[2] or 0.0
+    # Cerrados/Comisión — won deals scoped to the period by won_time (P2/D4).
+    # 7.4: reuse deals_won_in_period (canonical won-in-range query) — no duplication.
+    won = kpi_service.deals_won_in_period(db, start.isoformat(), end.isoformat(), talent.id)
+    cerrados_count = won["count"]
+    cerrados_valor = won["total_value"]
+    comision = won["total_commission"]
 
-    # Funnel stages — per-talent, open deals, filtered by month (CR-01)
+    # Funnel stages — per-talent, open deals, all-time SNAPSHOT (D4: active state).
     funnel_rows = (
         db.query(
             Deal.stage_name,
@@ -128,7 +139,6 @@ def _build_payload(db: Session, talent: Talent, month: str) -> dict:
         .filter(
             Deal.status == "open",
             Deal.talent_id == talent.id,
-            Deal.add_time.like(month_prefix),
         )
         .group_by(Deal.stage_name)
         .all()
@@ -145,13 +155,12 @@ def _build_payload(db: Session, talent: Talent, month: str) -> dict:
         for stage in funnel_service.STAGES
     ]
 
-    # Top 3 open deals by value for this talent in the requested month (CR-01)
+    # Top 3 open deals by value — all-time SNAPSHOT (D4: active pipeline highlights).
     top_deals_rows = (
         db.query(Deal.title, Deal.value, Deal.stage_name)
         .filter(
             Deal.talent_id == talent.id,
             Deal.status == "open",
-            Deal.add_time.like(month_prefix),
         )
         .order_by(desc(Deal.value))
         .limit(3)
@@ -176,7 +185,7 @@ def _build_payload(db: Session, talent: Talent, month: str) -> dict:
 
     return {
         "talent_name": talent.name,
-        "month": month,
+        "month": period_value,
         "kpis": {
             "pipeline": float(pipeline_val),
             "cerrados_count": int(cerrados_count) if cerrados_count is not None else 0,
@@ -271,8 +280,20 @@ def _render_pdf(html_str: str, output_path: str) -> int:
     return os.path.getsize(output_path)
 
 
-def generate_report(db: Session, talent_id: int, month: str) -> dict:
+def generate_report(
+    db: Session,
+    talent_id: int,
+    period_value: str,
+    start: date | None = None,
+    end: date | None = None,
+) -> dict:
     """Orchestrate: build payload → call Claude → render PDF → upsert Report row.
+
+    Fase 7: period_value is the period label ("YYYY-MM" or "YYYY-QN"). It is used
+    as the report identifier (filename, Report.month column, upsert key). start/end
+    are the inclusive period bounds for the won_time-scoped figures; when omitted
+    they are derived from period_value (month vs quarter inferred from "Q"), so
+    legacy positional callers passing just a month string keep working.
 
     Returns a dict matching the ReportOut schema shape, including a 'narrative' sub-dict.
     Raises ValueError(f"Talent {talent_id} not found") if the talent doesn't exist.
@@ -282,8 +303,12 @@ def generate_report(db: Session, talent_id: int, month: str) -> dict:
     if talent is None:
         raise ValueError(f"Talent {talent_id} not found")
 
+    if start is None or end is None:
+        period_type = "quarter" if "Q" in period_value else "month"
+        start, end = periods_service.parse_period(period_type, period_value)
+
     # 1. Build Python-computed payload
-    payload = _build_payload(db, talent, month)
+    payload = _build_payload(db, talent, period_value, start, end)
 
     # 2. Call Claude for 3 narrative prose sections
     narrative = _call_claude(payload)
@@ -292,17 +317,18 @@ def generate_report(db: Session, talent_id: int, month: str) -> dict:
     template = _jinja_env.get_template("reports/template.html")
     html_str = template.render(
         talent_name=talent.name,
-        month=month,
+        month=period_value,
         narrative=narrative,
         data=payload,
     )
-    file_path = f"reports/{_slug(talent)}/{month}.pdf"
+    file_path = f"reports/{_slug(talent)}/{period_value}.pdf"
     file_size_bytes = _render_pdf(html_str, file_path)
 
-    # 4. Upsert Report row (upsert semantics: overwrite if same talent_id+month exists)
+    # 4. Upsert Report row (upsert semantics: overwrite if same talent_id+period exists).
+    # The `month` column stores the period label (now also "YYYY-QN" for quarters).
     existing = (
         db.query(Report)
-        .filter(Report.talent_id == talent_id, Report.month == month)
+        .filter(Report.talent_id == talent_id, Report.month == period_value)
         .first()
     )
     if existing is not None:
@@ -315,7 +341,7 @@ def generate_report(db: Session, talent_id: int, month: str) -> dict:
     else:
         report = Report(
             talent_id=talent_id,
-            month=month,
+            month=period_value,
             file_path=file_path,
             file_size_bytes=file_size_bytes,
             generated_at=datetime.utcnow(),

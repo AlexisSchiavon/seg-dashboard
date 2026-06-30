@@ -470,3 +470,147 @@ def test_deals_won_in_period_rejects_bad_dates(db_session):
     """5.4/D3: malformed date strings raise ValueError (caught by the agent loop)."""
     with pytest.raises(ValueError):
         kpi_service.deals_won_in_period(db_session, "junio", "2026-06-30")
+
+
+# ---------------------------------------------------------------------------
+# Fase 7 (7.1/7.4) — period filtering on talent_detail / flujo_dinero_kpis
+# ---------------------------------------------------------------------------
+
+from datetime import date as _date, datetime as _dt  # noqa: E402
+
+
+def _won_deal(pid, talent_id, value, won_dt, *, commission=0.0, update_time="2026-01-01T00:00:00"):
+    return Deal(
+        pipedrive_id=pid, title=f"Won {pid}", value=value, currency="MXN",
+        stage_id=4, stage_name="Contrato", status="won", talent_id=talent_id,
+        commission_amount=commission, update_time=update_time, won_time=won_dt,
+    )
+
+
+def test_deals_won_in_period_includes_total_commission(db_session):
+    """7.4: deals_won_in_period also returns total_commission so talent_detail can
+    reuse it for the Comisión KPI without a second query."""
+    t = Talent(name="Comision T", active=True)
+    db_session.add(t)
+    db_session.commit()
+    db_session.refresh(t)
+    db_session.add_all([
+        _won_deal(40001, t.id, 10000.0, _dt(2026, 6, 5), commission=7000.0),
+        _won_deal(40002, t.id, 20000.0, _dt(2026, 6, 15), commission=14000.0),
+    ])
+    db_session.commit()
+
+    result = kpi_service.deals_won_in_period(db_session, "2026-06-01", "2026-06-30")
+    assert result["total_commission"] == 21000.0
+
+
+def test_talent_detail_period_filters_cerrados_by_won_time(db_session):
+    """7.1/D4: Cerrados KPI counts only deals whose won_time falls in the period."""
+    t = Talent(name="Cerrados T", active=True)
+    db_session.add(t)
+    db_session.commit()
+    db_session.refresh(t)
+    db_session.add_all([
+        _won_deal(41001, t.id, 10000.0, _dt(2026, 6, 10), commission=7000.0),
+        _won_deal(41002, t.id, 99000.0, _dt(2026, 3, 10), commission=69300.0),  # outside June
+    ])
+    db_session.commit()
+
+    scoped = kpi_service.talent_detail(db_session, t.id, start=_date(2026, 6, 1), end=_date(2026, 6, 30))
+    cerrados = next(k for k in scoped["kpis"] if k["label"] == "Cerrados")
+    comision = next(k for k in scoped["kpis"] if k["label"] == "Comisión")
+    assert cerrados["count"] == 1
+    assert cerrados["value"] == 10000.0
+    assert comision["value"] == 7000.0
+
+    # No period → all-time (back-compat for existing callers)
+    alltime = kpi_service.talent_detail(db_session, t.id)
+    assert next(k for k in alltime["kpis"] if k["label"] == "Cerrados")["count"] == 2
+
+
+def test_talent_detail_pipeline_and_funnel_are_snapshot(db_session):
+    """7.1/D4: open pipeline + funnel are NOT filtered by period (estado vivo)."""
+    t = Talent(name="Pipeline T", active=True)
+    db_session.add(t)
+    db_session.commit()
+    db_session.refresh(t)
+    db_session.add(Deal(
+        pipedrive_id=42001, title="Abierto", value=55000.0, currency="MXN",
+        stage_id=2, stage_name="Negociación", status="open", talent_id=t.id,
+        update_time="2026-03-01T00:00:00",
+    ))
+    db_session.commit()
+
+    # Period in June where nothing was won — pipeline must still show the open deal
+    scoped = kpi_service.talent_detail(db_session, t.id, start=_date(2026, 6, 1), end=_date(2026, 6, 30))
+    pipeline = next(k for k in scoped["kpis"] if k["label"] == "Pipeline")
+    assert pipeline["value"] == 55000.0
+
+
+def test_talent_detail_period_filters_lost_by_update_time(db_session):
+    """7.1/P1: lost donut filters by update_time (ISO string lexicographic range)."""
+    t = Talent(name="Lost T", active=True)
+    db_session.add(t)
+    db_session.commit()
+    db_session.refresh(t)
+    db_session.add_all([
+        Deal(pipedrive_id=43001, title="Perdido junio", value=1.0, stage_id=1,
+             stage_name="Llamada", status="lost", talent_id=t.id,
+             loss_reason="Presupuesto", update_time="2026-06-20T23:30:00"),
+        Deal(pipedrive_id=43002, title="Perdido marzo", value=1.0, stage_id=1,
+             stage_name="Llamada", status="lost", talent_id=t.id,
+             loss_reason="Presupuesto", update_time="2026-03-02T10:00:00"),
+    ])
+    db_session.commit()
+
+    scoped = kpi_service.talent_detail(db_session, t.id, start=_date(2026, 6, 1), end=_date(2026, 6, 30))
+    titles = {o["title"] for o in scoped["lost_opportunities"]}
+    assert titles == {"Perdido junio"}
+
+
+def test_flujo_period_filters_firmadas_and_cobrado(db_session):
+    """7.1/D4: firmadas filter by won_time, cobrado by collection_date."""
+    from app.models import TrelloCard
+
+    t = Talent(name="Flujo Period T", active=True)
+    db_session.add(t)
+    db_session.commit()
+    db_session.refresh(t)
+    won_jun = _won_deal(44001, t.id, 10000.0, _dt(2026, 6, 10))
+    won_mar = _won_deal(44002, t.id, 30000.0, _dt(2026, 3, 10))
+    db_session.add_all([won_jun, won_mar])
+    db_session.commit()
+    db_session.refresh(won_jun)
+    db_session.refresh(won_mar)
+    db_session.add_all([
+        TrelloCard(trello_card_id="c-jun", name="Jun", list_id="L", list_name="Fin",
+                   list_state="cerrado", deal_id=won_jun.id, collection_date=_date(2026, 6, 15)),
+        TrelloCard(trello_card_id="c-mar", name="Mar", list_id="L", list_name="Fin",
+                   list_state="cerrado", deal_id=won_mar.id, collection_date=_date(2026, 3, 15)),
+    ])
+    db_session.commit()
+
+    scoped = kpi_service.flujo_dinero_kpis(db_session, t.id, start=_date(2026, 6, 1), end=_date(2026, 6, 30))
+    firmadas = _tile(scoped, "Campañas firmadas")
+    cobrado = _tile(scoped, "Cobrado")
+    assert firmadas["count"] == 1 and firmadas["value"] == 10000.0
+    assert cobrado["value"] == 10000.0
+
+
+def test_flujo_pendiente_is_alltime_snapshot(db_session):
+    """7.1/D4: 'Pendiente por cobrar' is a state — all-time, never period-scoped."""
+    from app.models import TrelloCard
+
+    t = Talent(name="Pendiente Snap T", active=True)
+    db_session.add(t)
+    db_session.commit()
+    db_session.refresh(t)
+    won_jun = _won_deal(45001, t.id, 10000.0, _dt(2026, 6, 10))
+    won_mar = _won_deal(45002, t.id, 30000.0, _dt(2026, 3, 10))
+    db_session.add_all([won_jun, won_mar])
+    db_session.commit()
+    db_session.refresh(won_jun)
+    # Nothing cobrado at all → pendiente = all-time firmadas (40000), even scoped to June
+    scoped = kpi_service.flujo_dinero_kpis(db_session, t.id, start=_date(2026, 6, 1), end=_date(2026, 6, 30))
+    pendiente = _tile(scoped, "Pendiente por cobrar")
+    assert pendiente["value"] == 40000.0

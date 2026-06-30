@@ -23,6 +23,52 @@ let _campaignFilter = 'all';
 let _kpiView = 'flujo';
 let _talentDetailData = null;
 
+// Period filter state (Fase 7) — Por Talento. Default = current month (D2).
+// Initialized synchronously so the first loadTalentDetail() always has a value,
+// even before the period dropdowns finish loading.
+let _currentTalentId = null;
+let _talentPeriod = { type: 'month', value: null };  // value set below at load
+let _talentPeriodLists = { months: [], quarters: [] };
+
+// KPI tiles that are a live state (D4) — NOT scoped by the period filter.
+// "Pendiente por cobrar" (Flujo view) and "Pipeline" (Operativa view).
+const SNAPSHOT_KPI_LABELS = new Set(['Pendiente por cobrar', 'Pipeline']);
+
+// Spanish month names for period labels (dashboard.js loads before reports.js,
+// so it cannot borrow reports.js's MONTH_NAMES_ES — keep a local copy).
+const MONTH_NAMES_ES_DASH = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
+/** Current month as "YYYY-MM" (local time). */
+function currentMonthValueJS() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Current quarter as "YYYY-QN" (local time). */
+function currentQuarterValueJS() {
+  const d = new Date();
+  return `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
+}
+
+/** Human label for a period value, e.g. "Junio 2026" or "Q2 2026". */
+function formatPeriodLabel(type, value) {
+  if (!value) return '—';
+  if (type === 'quarter') {
+    const m = /^(\d{4})-Q([1-4])$/.exec(value);
+    return m ? `Q${m[2]} ${m[1]}` : value;
+  }
+  const m = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!m) return value;
+  const idx = parseInt(m[2], 10) - 1;
+  return idx >= 0 && idx < 12 ? `${MONTH_NAMES_ES_DASH[idx]} ${m[1]}` : value;
+}
+
+// Resolve the default period value now (D2) so the first detail load is scoped.
+_talentPeriod.value = currentMonthValueJS();
+
 const CAMPAIGN_FILTERS = [
   { key: 'all',         label: 'Todos',       cls: '' },
   { key: 'llamada',     label: 'Llamada',      cls: 'llamada' },
@@ -86,12 +132,14 @@ function setPage(name, e) {
   } else if (name === "funnel") {
     loadFunnel();
   } else if (name === "talent") {
+    loadTalentPeriods();   // Fase 7: populate the period dropdown (async, non-blocking)
     loadTalentSelector();
   } else if (name === "leads") {
     loadLeadsSummary();
     loadLeads();
   } else if (name === "reports") {
     loadReportTalents();
+    loadReportPeriods();   // Fase 7: populate the won-based month/quarter picker
     loadReportHistory();
   } else if (name === "agent") {
     initAgentTab();
@@ -589,6 +637,11 @@ function renderKpisInto(kpis, containerId) {
     const amountHtml = hasCount
       ? `<div class="kpi-t-amount">${formatMXN(tile.value)}</div>`
       : "";
+    // Fase 7/D4: these tiles are a live state, not period-scoped — flag them.
+    const isSnapshot = SNAPSHOT_KPI_LABELS.has(tile.label);
+    const snapshotHtml = isSnapshot
+      ? `<div class="snapshot-tag" title="No se filtra por periodo — refleja el estado actual">Estado actual</div>`
+      : "";
 
     return `
       <div class="kpi-t ${tile.variant}">
@@ -597,6 +650,7 @@ function renderKpisInto(kpis, containerId) {
         <div class="kpi-t-val">${bigVal}</div>
         <div class="kpi-t-sub">${subLabel}</div>
         ${amountHtml}
+        ${snapshotHtml}
       </div>`;
   }).join("");
 }
@@ -1167,6 +1221,65 @@ function renderCampaignTable(deals, lostOpps) {
 }
 
 /**
+ * Load the available won-based periods (months + quarters) and populate the
+ * Por Talento period dropdown. Won-based and global (the filter operates on
+ * won_time, so only periods with signings are offered). The current period is
+ * always ensured present so the D2 default works even with no won deals yet.
+ */
+async function loadTalentPeriods() {
+  const [mRes, qRes] = await Promise.all([
+    apiFetch('/reports/months'),
+    apiFetch('/reports/quarters'),
+  ]);
+  if (!mRes || !qRes) return; // 401 redirected
+  _talentPeriodLists.months = mRes.ok ? (await mRes.json()) || [] : [];
+  _talentPeriodLists.quarters = qRes.ok ? (await qRes.json()) || [] : [];
+  populateTalentPeriodSelect();
+}
+
+/** Fill #talent-period-select with the options for the active period type. */
+function populateTalentPeriodSelect() {
+  const sel = document.getElementById('talent-period-select');
+  if (!sel) return;
+
+  const isMonth = _talentPeriod.type === 'month';
+  const list = isMonth ? _talentPeriodLists.months.slice() : _talentPeriodLists.quarters.slice();
+  const current = isMonth ? currentMonthValueJS() : currentQuarterValueJS();
+  // Always offer the current period (D2 default) even if it has no won deals.
+  if (!list.includes(current)) list.unshift(current);
+  // Keep _talentPeriod.value valid for the active type.
+  if (!list.includes(_talentPeriod.value)) _talentPeriod.value = current;
+
+  sel.innerHTML = list
+    .map((v) => `<option value="${escHtml(v)}"${v === _talentPeriod.value ? ' selected' : ''}>${escHtml(formatPeriodLabel(_talentPeriod.type, v))}</option>`)
+    .join('');
+}
+
+/** Toggle month/quarter mode, repopulate the dropdown, reload the talent. */
+function setTalentPeriodType(type, e) {
+  if (type !== 'month' && type !== 'quarter') return;
+  _talentPeriod.type = type;
+  _talentPeriod.value = type === 'month' ? currentMonthValueJS() : currentQuarterValueJS();
+
+  const toggle = document.getElementById('talent-period-toggle');
+  if (toggle) {
+    toggle.querySelectorAll('.period-toggle-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.ptype === type);
+    });
+  }
+  populateTalentPeriodSelect();
+  if (_currentTalentId !== null) loadTalentDetail(_currentTalentId);
+}
+
+/** Dropdown change → update the selected value and reload the current talent. */
+function onTalentPeriodChange() {
+  const sel = document.getElementById('talent-period-select');
+  if (!sel) return;
+  _talentPeriod.value = sel.value;
+  if (_currentTalentId !== null) loadTalentDetail(_currentTalentId);
+}
+
+/**
  * Populate the talent selector from the /dashboard/summary ranking.
  * Clicking a .talent-card calls loadTalentDetail(talentId).
  * Auto-loads the first talent's detail on activation.
@@ -1230,7 +1343,15 @@ function selectTalentCard(cardEl, talentId) {
  * Load and render full per-talent detail from GET /dashboard/talents/{id}.
  */
 async function loadTalentDetail(talentId) {
-  const res = await apiFetch("/dashboard/talents/" + talentId);
+  _currentTalentId = talentId;
+
+  // Fase 7: scope the closed metrics to the selected period (D2 default applies).
+  const p = _talentPeriod;
+  const qs = `?period_type=${encodeURIComponent(p.type)}&period_value=${encodeURIComponent(p.value)}`;
+  const showingEl = document.getElementById("talent-period-showing");
+  if (showingEl) showingEl.textContent = `Mostrando: ${formatPeriodLabel(p.type, p.value)}`;
+
+  const res = await apiFetch("/dashboard/talents/" + talentId + qs);
   if (!res) return; // 401 redirected
 
   if (!res.ok) {
