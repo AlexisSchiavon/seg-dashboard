@@ -8,7 +8,7 @@ T-02B-01 mitigated: all routes require a valid JWT cookie.
 T-02B-02 mitigated: response_model validates the shape at the boundary.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -33,6 +33,7 @@ from app.schemas.dashboard import (
 from app.services import kpis as kpi_service
 from app.services import funnel as funnel_service
 from app.services import leads as leads_service
+from app.services import periods as periods_service
 from app.services import trello_service
 
 router = APIRouter(
@@ -124,8 +125,22 @@ def get_funnel(db: Session = Depends(get_db)):
 
 
 @router.get("/talents/{talent_id}", response_model=TalentDetail)
-def get_talent_detail(talent_id: int, db: Session = Depends(get_db)):
+def get_talent_detail(
+    talent_id: int,
+    period_type: str = Query("month", description="'month' or 'quarter' (Fase 7/D5)"),
+    period_value: str | None = Query(
+        None,
+        description="'YYYY-MM' or 'YYYY-QN'. Defaults to the current period (D2).",
+    ),
+    db: Session = Depends(get_db),
+):
     """Return per-talent KPIs, funnel, lost opportunities, and brand categories.
+
+    Fase 7 (D2/D4): period_type/period_value scope the *closed* metrics
+    (Cerrados/Comisión by won_time, lost donut by update_time, Cobrado tile by
+    collection_date). Active metrics (Pipeline, funnel, brand, pendiente,
+    income projection, payment calendar) stay all-time snapshots. When
+    period_value is omitted the current month/quarter is used (D2).
 
     T-02C-01 mitigated: inherited from router-level dependencies=[Depends(get_current_user)].
     T-02C-02 mitigated: FastAPI coerces talent_id: int (422 on non-int); 404 via db.get guard.
@@ -140,8 +155,23 @@ def get_talent_detail(talent_id: int, db: Session = Depends(get_db)):
             detail="Talent not found",
         )
 
+    # Resolve the period (D2 default), validate (D6) — malformed input → 400.
+    if period_value is None:
+        period_value = (
+            periods_service.current_quarter_value()
+            if period_type == "quarter"
+            else periods_service.current_month_value()
+        )
     try:
-        detail = kpi_service.talent_detail(db, talent_id)
+        start, end = periods_service.parse_period(period_type, period_value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        detail = kpi_service.talent_detail(db, talent_id, start=start, end=end)
     except ValueError:
         # Defensive catch for the unlikely race where a talent is deleted
         # between the guard above and the service lookup (WR-03). Surfaces
@@ -167,8 +197,10 @@ def get_talent_detail(talent_id: int, db: Session = Depends(get_db)):
     payment_cal = [CalendarEntry(**c) for c in cal_dicts] if cal_dicts else None
     deals = [DealRow(**d) for d in deal_dicts] if deal_dicts else None
 
-    # Phase 8 FIX-02 — money-flow tiles for the Flujo de dinero toggle view
-    flujo_data = kpi_service.flujo_dinero_kpis(db, talent_id)
+    # Phase 8 FIX-02 — money-flow tiles for the Flujo de dinero toggle view.
+    # Fase 7/D4: firmadas (won_time) + cobrado (collection_date) scoped to period;
+    # pendiente stays all-time inside the service.
+    flujo_data = kpi_service.flujo_dinero_kpis(db, talent_id, start=start, end=end)
     flujo_dinero_tiles = [KpiTile(**k) for k in flujo_data["kpis"]]
 
     return TalentDetail(

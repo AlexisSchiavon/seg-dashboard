@@ -10,10 +10,22 @@ from pydantic import BaseModel, Field
 
 
 class ReportGenerate(BaseModel):
-    """POST /reports/generate request body."""
+    """POST /reports/generate request body.
+
+    Fase 7 (D8): the report can be scoped to a month or a quarter.
+    - period_type/period_value are the Fase-7 way ("month"/"quarter" + "YYYY-MM"
+      / "YYYY-QN"). When both are present they take precedence.
+    - `month` is the legacy parameter, now optional and DEPRECATED. A month-only
+      body is treated as period_type="month", period_value=<month>.
+    The router validates period_value via periods.parse_period (400 on bad input).
+    """
 
     talent_id: int
-    month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")  # T-05-VAL: rejects malformed month strings and invalid month values (e.g. 2026-00, 2026-13)
+    # DEPRECATED (D8): kept for back-compat. Strict YYYY-MM regex still rejects
+    # malformed months (e.g. 2026-00, 2026-13) at the schema boundary (422).
+    month: str | None = Field(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    period_type: str | None = None
+    period_value: str | None = None
 
 
 class NarrativeSections(BaseModel):

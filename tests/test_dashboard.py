@@ -399,3 +399,83 @@ def test_talent_detail_no_trello_data_returns_null_fields(auth_client, db_sessio
     assert "income_projection" in data
     assert "payment_calendar" in data
     assert "deals" in data
+
+
+# ---------------------------------------------------------------------------
+# Fase 7 (7.1) — period query params on /dashboard/talents/{id}
+# ---------------------------------------------------------------------------
+
+def test_talent_detail_accepts_period_params(auth_client, db_session):
+    """7.1: endpoint accepts period_type + period_value and returns 200."""
+    from app.models import Talent
+
+    t = Talent(name="Periodo OK", active=True)
+    db_session.add(t)
+    db_session.commit()
+    db_session.refresh(t)
+
+    response = auth_client.get(
+        f"/dashboard/talents/{t.id}?period_type=month&period_value=2026-06"
+    )
+    assert response.status_code == 200
+    assert response.json()["talent_id"] == t.id
+
+
+def test_talent_detail_accepts_quarter_period(auth_client, db_session):
+    """7.1: quarter period_value is accepted."""
+    from app.models import Talent
+
+    t = Talent(name="Periodo Q", active=True)
+    db_session.add(t)
+    db_session.commit()
+    db_session.refresh(t)
+
+    response = auth_client.get(
+        f"/dashboard/talents/{t.id}?period_type=quarter&period_value=2026-Q2"
+    )
+    assert response.status_code == 200
+
+
+def test_talent_detail_invalid_period_value_returns_400(auth_client, db_session):
+    """7.1/D6: malformed period_value → 400, not 500."""
+    from app.models import Talent
+
+    t = Talent(name="Periodo Malo", active=True)
+    db_session.add(t)
+    db_session.commit()
+    db_session.refresh(t)
+
+    response = auth_client.get(
+        f"/dashboard/talents/{t.id}?period_type=month&period_value=2026-13"
+    )
+    assert response.status_code == 400
+
+
+def test_talent_detail_default_period_is_current_month(auth_client, db_session):
+    """7.1/D2: with no params, Cerrados reflects the current month only."""
+    from datetime import date, datetime
+    from app.models import Talent, Deal
+
+    t = Talent(name="Default Mes", active=True)
+    db_session.add(t)
+    db_session.commit()
+    db_session.refresh(t)
+
+    today = date.today()
+    db_session.add_all([
+        Deal(pipedrive_id=46001, title="Won este mes", value=1000.0, stage_id=4,
+             stage_name="Contrato", status="won", talent_id=t.id,
+             update_time="2026-01-01T00:00:00",
+             won_time=datetime(today.year, today.month, 15)),
+        Deal(pipedrive_id=46002, title="Won hace un anio", value=9999.0, stage_id=4,
+             stage_name="Contrato", status="won", talent_id=t.id,
+             update_time="2025-01-01T00:00:00",
+             won_time=datetime(today.year - 1, today.month, 15)),
+    ])
+    db_session.commit()
+
+    response = auth_client.get(f"/dashboard/talents/{t.id}")
+    assert response.status_code == 200
+    cerrados = next(k for k in response.json()["kpis"] if k["label"] == "Cerrados")
+    assert cerrados["count"] == 1
+    assert cerrados["value"] == 1000.0

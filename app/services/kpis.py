@@ -10,7 +10,7 @@ Pitfall 4 (global vs per-talent split):
     query for the Sin-talento bucket (Deal.talent_id.is_(None)) appended last.
 """
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
@@ -146,8 +146,21 @@ def talent_ranking(db: Session) -> list[dict]:
     return ranking
 
 
-def talent_detail(db: Session, talent_id: int) -> dict:
+def talent_detail(
+    db: Session,
+    talent_id: int,
+    start: date | None = None,
+    end: date | None = None,
+) -> dict:
     """Return per-talent KPIs, lost opportunities, and brand-category breakdown.
+
+    Fase 7 (D4): when (start, end) are given, the *closed* metrics are scoped to
+    that period — Cerrados/Comisión by won_time, the lost donut by update_time.
+    The *active* metrics (Pipeline open, funnel, brand mix) stay all-time
+    snapshots ("estado vivo del negocio" — Luis never asks "how big was my
+    pipeline in March?"). start/end default to None = all-time (back-compat for
+    existing callers / direct tests); the endpoint layer resolves the D2
+    current-month default and always passes explicit bounds.
 
     Per-talent figures exclude talent_id IS NULL deals (Pitfall 4).
     loss_reason is read directly as a resolved Spanish label (Plan 02-01 — Pitfall 2).
@@ -177,12 +190,19 @@ def talent_detail(db: Session, talent_id: int) -> dict:
         func.coalesce(func.sum(Deal.value), 0.0),
     ).filter(Deal.talent_id == talent_id, Deal.status == "open").scalar() or 0.0
 
-    won_row = db.query(
-        func.count(Deal.id),
-        func.coalesce(func.sum(Deal.value), 0.0),
-        func.coalesce(func.sum(Deal.commission_amount), 0.0),
-    ).filter(Deal.talent_id == talent_id, Deal.status == "won").one()
-    won_count, won_value, commission = won_row[0], won_row[1] or 0.0, won_row[2] or 0.0
+    # Cerrados/Comisión — won deals (D4: filtered by won_time when a period is set).
+    # 7.4: reuse deals_won_in_period (the canonical won-in-range query) instead of
+    # duplicating the date filter here.
+    if start is not None and end is not None:
+        won = deals_won_in_period(db, start.isoformat(), end.isoformat(), talent_id)
+        won_count, won_value, commission = won["count"], won["total_value"], won["total_commission"]
+    else:
+        won_row = db.query(
+            func.count(Deal.id),
+            func.coalesce(func.sum(Deal.value), 0.0),
+            func.coalesce(func.sum(Deal.commission_amount), 0.0),
+        ).filter(Deal.talent_id == talent_id, Deal.status == "won").one()
+        won_count, won_value, commission = won_row[0], won_row[1] or 0.0, won_row[2] or 0.0
 
     kpis = [
         {"label": "Pipeline", "value": float(pipeline_row), "count": None, "variant": "accent"},
@@ -193,12 +213,22 @@ def talent_detail(db: Session, talent_id: int) -> dict:
     # 3. Per-talent funnel (reuses shared STAGES constant via funnel.py)
     funnel_stages = talent_funnel(db, talent_id)
 
-    # 4. Lost opportunities (D-25)
-    lost_deals = (
-        db.query(Deal)
-        .filter(Deal.talent_id == talent_id, Deal.status == "lost")
-        .all()
-    )
+    # 4. Lost opportunities (D-25). Fase 7/P1: filter by loss date when a period
+    # is set. No close_time/lost_time column exists, so update_time is the proxy
+    # (it is the last Pipedrive touch — for a lost deal, approximately when it was
+    # marked lost). update_time is stored as an ISO-8601 *string*
+    # ("2026-06-20T23:30:00"), so a lexicographic range over [start, day-after-end)
+    # selects the correct calendar window: fixed-width ISO strings sort in the same
+    # order as the instants they encode. Documented as an approximation, not exact.
+    lost_query = db.query(Deal).filter(Deal.talent_id == talent_id, Deal.status == "lost")
+    if start is not None and end is not None:
+        start_str = start.isoformat()
+        end_exclusive_str = (end + timedelta(days=1)).isoformat()
+        lost_query = lost_query.filter(
+            Deal.update_time >= start_str,
+            Deal.update_time < end_exclusive_str,
+        )
+    lost_deals = lost_query.all()
 
     # Build per-reason summary (group by the resolved Spanish label — never re-resolve integers)
     reason_counts: dict[str, int] = {}
@@ -315,43 +345,75 @@ def deals_won_in_period(
         "end_date": end_date,
         "count": len(deal_list),
         "total_value": float(sum(d["value"] for d in deal_list)),
+        # 7.4: total_commission lets talent_detail reuse this for the Comisión KPI
+        # without a second won-in-period query (no duplicated date-filter logic).
+        "total_commission": float(sum(d.commission_amount or 0.0 for d in deals)),
         "deals": deal_list,
     }
 
 
-def flujo_dinero_kpis(db: Session, talent_id: int) -> dict:
+def flujo_dinero_kpis(
+    db: Session,
+    talent_id: int,
+    start: date | None = None,
+    end: date | None = None,
+) -> dict:
     """Return the 3 money-flow KPI tiles for the Por Talento Flujo de dinero view.
 
     Tiles:
       - Campañas firmadas (blue): won deals (status='won') — count + total value.
         5.1 (D1): "firmado" = "ganado" = status='won' ONLY. The "Contrato" stage
         means a deal is in the signing process — NOT yet signed/won (Luis, 25-jun).
-      - Cobrado (green): deals linked to a TrelloCard with list_state="cerrado" — total value
+        Fase 7/D4: filtered by won_time when (start, end) are set.
+      - Cobrado (green): deals linked to a TrelloCard with list_state="cerrado".
+        Fase 7/D4: filtered by the card's collection_date when a period is set.
       - Pendiente por cobrar (amber): max(0, firmadas - cobrado) — never negative.
-        Equals won_value - cobrado_value, i.e. ganados aún no cobrados.
+        Fase 7/D4: this is a *state* ("ganados aún no cobrados"), NOT a period — it
+        is ALWAYS computed from all-time figures, independent of the selected
+        period, so it does not silently drop receivables signed before the period.
+
+    start/end default to None = all-time (back-compat for direct callers/tests).
     """
     from app.models import TrelloCard
 
-    # Campañas firmadas — won deals only (5.1 / D1: status='won', never stage='Contrato')
-    firmadas_row = db.query(
-        func.count(Deal.id),
+    # Pendiente is a state (D4) — always all-time, regardless of the period filter.
+    alltime_firmadas_value = db.query(
         func.coalesce(func.sum(Deal.value), 0.0),
-    ).filter(
-        Deal.talent_id == talent_id,
-        Deal.status == "won",
-    ).one()
-    firmadas_count, firmadas_value = firmadas_row[0], firmadas_row[1] or 0.0
-
-    # Cobrado — deals linked to a cerrado Trello card
-    cobrado_value = db.query(
+    ).filter(Deal.talent_id == talent_id, Deal.status == "won").scalar() or 0.0
+    alltime_cobrado_value = db.query(
         func.coalesce(func.sum(Deal.value), 0.0),
     ).join(TrelloCard, TrelloCard.deal_id == Deal.id).filter(
         Deal.talent_id == talent_id,
         TrelloCard.list_state == "cerrado",
     ).scalar() or 0.0
+    pendiente_value = max(0.0, float(alltime_firmadas_value) - float(alltime_cobrado_value))
 
-    # Pendiente — never negative
-    pendiente_value = max(0.0, float(firmadas_value) - float(cobrado_value))
+    # Campañas firmadas tile — won deals (D4: by won_time within the period).
+    # 7.4: reuse deals_won_in_period rather than re-deriving the won-in-range query.
+    if start is not None and end is not None:
+        won = deals_won_in_period(db, start.isoformat(), end.isoformat(), talent_id)
+        firmadas_count, firmadas_value = won["count"], won["total_value"]
+    else:
+        firmadas_row = db.query(
+            func.count(Deal.id),
+            func.coalesce(func.sum(Deal.value), 0.0),
+        ).filter(Deal.talent_id == talent_id, Deal.status == "won").one()
+        firmadas_count, firmadas_value = firmadas_row[0], firmadas_row[1] or 0.0
+
+    # Cobrado tile — cerrado cards (D4: by collection_date within the period).
+    cobrado_query = db.query(
+        func.coalesce(func.sum(Deal.value), 0.0),
+    ).join(TrelloCard, TrelloCard.deal_id == Deal.id).filter(
+        Deal.talent_id == talent_id,
+        TrelloCard.list_state == "cerrado",
+    )
+    if start is not None and end is not None:
+        # collection_date is a Date column → compare directly (inclusive bounds).
+        cobrado_query = cobrado_query.filter(
+            TrelloCard.collection_date >= start,
+            TrelloCard.collection_date <= end,
+        )
+    cobrado_value = cobrado_query.scalar() or 0.0
 
     return {
         "kpis": [

@@ -352,3 +352,107 @@ class TestReportesTabExists:
         # Check that reports.js exists
         reports_js_path = os.path.join(project_root, "frontend", "js", "reports.js")
         assert os.path.exists(reports_js_path), "frontend/js/reports.js not found"
+
+
+# ---------------------------------------------------------------------------
+# Fase 7 (7.1) — period filtering on the Reporte PDF (D4 selective + quarter + D8)
+# ---------------------------------------------------------------------------
+
+from datetime import date as _date, datetime as _dt  # noqa: E402
+
+from app.models import Talent as _Talent, Deal as _Deal  # noqa: E402
+
+
+def _mk_talent(db):
+    t = _Talent(name=f"Rep T {id(object())}", active=True)
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    return t
+
+
+def _mk_won(db, talent_id, pid, value, won_dt, commission=0.0):
+    d = _Deal(
+        pipedrive_id=pid, title=f"Won {pid}", value=value, currency="MXN",
+        stage_id=4, stage_name="Contrato", status="won", talent_id=talent_id,
+        commission_amount=commission, update_time="2026-01-01T00:00:00", won_time=won_dt,
+    )
+    db.add(d)
+    db.commit()
+    return d
+
+
+def test_build_payload_filters_won_by_won_time(db_session):
+    """7.1/P2/D4: report 'cerrados' figures use won_time within the period."""
+    from app.services import reports as reports_service
+
+    t = _mk_talent(db_session)
+    _mk_won(db_session, t.id, 50001, 10000.0, _dt(2026, 6, 10), commission=7000.0)
+    _mk_won(db_session, t.id, 50002, 90000.0, _dt(2026, 3, 10), commission=63000.0)  # outside June
+
+    payload = reports_service._build_payload(
+        db_session, t, "2026-06", _date(2026, 6, 1), _date(2026, 6, 30)
+    )
+    assert payload["kpis"]["cerrados_count"] == 1
+    assert payload["kpis"]["cerrados_valor"] == 10000.0
+    assert payload["kpis"]["comision"] == 7000.0
+
+
+def test_build_payload_pipeline_is_snapshot(db_session):
+    """7.1/P2/D4: open pipeline is NOT filtered by period in the report."""
+    from app.services import reports as reports_service
+
+    t = _mk_talent(db_session)
+    db_session.add(_Deal(
+        pipedrive_id=50101, title="Abierto", value=55000.0, currency="MXN",
+        stage_id=2, stage_name="Negociación", status="open", talent_id=t.id,
+        update_time="2026-03-01T00:00:00", add_time="2026-03-01T00:00:00",
+    ))
+    db_session.commit()
+
+    # June period — the March-created open deal must still appear in pipeline (snapshot)
+    payload = reports_service._build_payload(
+        db_session, t, "2026-06", _date(2026, 6, 1), _date(2026, 6, 30)
+    )
+    assert payload["kpis"]["pipeline"] == 55000.0
+
+
+def test_generate_accepts_quarter_period(auth_client, db_session, mock_anthropic, mock_weasyprint):
+    """7.1/D5: POST with period_type=quarter generates a report labelled by quarter."""
+    t = _mk_talent(db_session)
+    response = auth_client.post(
+        "/reports/generate",
+        json={"talent_id": t.id, "period_type": "quarter", "period_value": "2026-Q2"},
+    )
+    assert response.status_code == 200
+    assert response.json()["month"] == "2026-Q2"
+
+
+def test_generate_month_backcompat_still_works(auth_client, db_session, mock_anthropic, mock_weasyprint):
+    """7.1/D8: legacy `month`-only body is treated as period_type=month."""
+    t = _mk_talent(db_session)
+    response = auth_client.post(
+        "/reports/generate",
+        json={"talent_id": t.id, "month": "2026-05"},
+    )
+    assert response.status_code == 200
+    assert response.json()["month"] == "2026-05"
+
+
+def test_generate_invalid_period_value_returns_400(auth_client, db_session, mock_anthropic, mock_weasyprint):
+    """7.1/D6: malformed period_value → 400 (not 422/500)."""
+    t = _mk_talent(db_session)
+    response = auth_client.post(
+        "/reports/generate",
+        json={"talent_id": t.id, "period_type": "month", "period_value": "2026-13"},
+    )
+    assert response.status_code == 400
+
+
+def test_quarters_endpoint_lists_won_quarters(auth_client, db_session):
+    """7.1: GET /reports/quarters returns quarters that have a won deal."""
+    t = _mk_talent(db_session)
+    _mk_won(db_session, t.id, 50201, 1000.0, _dt(2026, 6, 1))
+    response = auth_client.get("/reports/quarters")
+    assert response.status_code == 200
+    assert "2026-Q2" in response.json()
