@@ -17,17 +17,60 @@ Security (T-02-01): on error, persist only `str(exc)` to SyncLog.error_message
 -- never log/store full request or response objects (the `x-api-token`
 header is a secret).
 """
+import logging
 from datetime import datetime, timedelta, timezone
 
+import bleach
 from sqlalchemy.orm import Session
 
 from app.integrations import pipedrive, sheets, trello
 from app.models import Deal, DealStageEvent, Lead, SyncLog, Talent, TalentProduct, TrelloCard
 from app.services import trello_service
 
+logger = logging.getLogger(__name__)
+
 # If a SyncLog has been "running" for longer than this, treat it as stale
 # (e.g. the process crashed mid-sync) and allow a new sync to start.
 STALE_RUNNING_TIMEOUT = timedelta(hours=1)
+
+# Fase 8 (8.1) — email body sanitization + size cap.
+# D9: the body is plain text, so allow ZERO tags and STRIP any that appear.
+# bleach.clean with tags=[] strip=True removes markup entirely (defense in depth
+# against a future where n8n stores HTML). D8: cap at 1 MB measured in UTF-8 bytes
+# (not len(str) — multibyte chars count differently).
+_EMAIL_ALLOWED_TAGS: list[str] = []
+_EMAIL_ALLOWED_ATTRIBUTES: dict = {}
+_EMAIL_ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
+_EMAIL_MAX_BYTES = 1_000_000  # 1 MB
+
+
+def _sanitize_email_body(raw: str | None) -> tuple[str | None, bool]:
+    """Sanitize and size-cap a raw email body for storage.
+
+    Returns (clean_text_or_None, truncated_flag).
+    - None/empty in → (None, False): D7 fallback is handled at render time.
+    - bleach.clean strips all tags (D9). For innocent plain text this is a no-op.
+    - Truncates to <= 1 MB of UTF-8 bytes (D8), cutting on a char boundary, and
+      returns truncated=True when it had to cut.
+    """
+    if raw is None or raw == "":
+        return None, False
+
+    cleaned = bleach.clean(
+        raw,
+        tags=_EMAIL_ALLOWED_TAGS,
+        attributes=_EMAIL_ALLOWED_ATTRIBUTES,
+        protocols=_EMAIL_ALLOWED_PROTOCOLS,
+        strip=True,
+    )
+
+    encoded = cleaned.encode("utf-8")
+    if len(encoded) <= _EMAIL_MAX_BYTES:
+        return cleaned, False
+
+    # Cut at the byte cap, then back off to a valid UTF-8 char boundary.
+    truncated = encoded[:_EMAIL_MAX_BYTES].decode("utf-8", errors="ignore")
+    return truncated, True
 
 # DECISIÓN PERMANENTE: este flag debe permanecer en False indefinidamente.
 # La creación de tarjetas en Trello cuando un deal llega a "Contrato y factura"
@@ -319,6 +362,27 @@ def sync_sheets(db: Session) -> SyncLog:
             existing.score_calidad = row.score_calidad
             existing.bloqueado = row.bloqueado
             existing.convertido_a_prospecto = row.convertido_a_prospecto
+
+            # Fase 8 (8.1): sanitize (bleach, D9) + size-cap (1 MB, D8) at write-time.
+            email_body, truncated = _sanitize_email_body(row.email_completo)
+            existing.email_completo = email_body
+            existing.email_truncated = truncated
+            if truncated:
+                logger.warning(
+                    "Lead sheet_row_id=%s email body exceeded %d bytes — truncated.",
+                    row.sheet_row_id,
+                    _EMAIL_MAX_BYTES,
+                )
+            # razon_validacion / categoria_detectada are short classifier text:
+            # sanitize (bleach, D9) but no size cap; empty → None (D7 fallbacks).
+            razon = row.razon_validacion.strip() if row.razon_validacion else ""
+            existing.razon_validacion = (
+                bleach.clean(razon, tags=[], attributes={}, strip=True) if razon else None
+            )
+            categoria = row.categoria_detectada.strip() if row.categoria_detectada else ""
+            existing.categoria_detectada = (
+                bleach.clean(categoria, tags=[], attributes={}, strip=True) if categoria else None
+            )
             records_synced += 1
 
         db.commit()

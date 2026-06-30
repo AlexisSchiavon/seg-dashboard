@@ -479,3 +479,144 @@ class TestLeadsListEndpoint:
         for row in data:
             for field in required_fields:
                 assert field in row, f"Missing field: {field}"
+
+
+# ---------------------------------------------------------------------------
+# Fase 8 (8.1) — email body sanitization, truncation, sync wiring
+# ---------------------------------------------------------------------------
+
+def _sheet_row(**overrides):
+    """Build a SheetLeadRow with sane defaults; override any field per test."""
+    from app.integrations.sheets import SheetLeadRow
+    defaults = dict(
+        sheet_row_id=2,
+        remitente_email="lead@example.com",
+        remitente_nombre="Lead Uno",
+        asunto="Colaboración",
+        fecha_recepcion="",
+        talento_mencionado="",
+        status_filtrado="En revisión",
+        score_calidad=None,
+        bloqueado=False,
+        convertido_a_prospecto=False,
+        email_completo="",
+        razon_validacion="",
+        categoria_detectada="",
+    )
+    defaults.update(overrides)
+    return SheetLeadRow(**defaults)
+
+
+class TestSanitizeEmailBody:
+    """_sanitize_email_body: bleach (D9) + 1 MB cap (D8)."""
+
+    def test_innocent_plain_text_passes_through_unchanged(self):
+        from app.sync.jobs import _sanitize_email_body
+        text = "Hola, muy bien. Soy Pame. Visita https://x.com o a@b.com. Saludos,"
+        clean, truncated = _sanitize_email_body(text)
+        assert clean == text          # plain text must NOT be mangled
+        assert truncated is False
+
+    def test_none_and_empty_return_none(self):
+        from app.sync.jobs import _sanitize_email_body
+        assert _sanitize_email_body(None) == (None, False)
+        assert _sanitize_email_body("") == (None, False)
+
+    def test_html_script_tag_is_stripped(self):
+        from app.sync.jobs import _sanitize_email_body
+        clean, _ = _sanitize_email_body("Hola <script>alert(1)</script> mundo")
+        assert "<script>" not in clean
+        assert "</script>" not in clean
+
+    def test_oversize_ascii_is_truncated_under_cap(self):
+        from app.sync.jobs import _sanitize_email_body, _EMAIL_MAX_BYTES
+        clean, truncated = _sanitize_email_body("a" * (_EMAIL_MAX_BYTES + 5000))
+        assert truncated is True
+        assert len(clean.encode("utf-8")) <= _EMAIL_MAX_BYTES
+
+    def test_multibyte_truncation_stays_valid_utf8(self):
+        from app.sync.jobs import _sanitize_email_body, _EMAIL_MAX_BYTES
+        clean, truncated = _sanitize_email_body("ñ" * _EMAIL_MAX_BYTES)  # 2 bytes each
+        assert truncated is True
+        assert len(clean.encode("utf-8")) <= _EMAIL_MAX_BYTES
+        clean.encode("utf-8")  # raises if a partial multibyte char survived
+
+
+class TestSheetLeadRowEmailFields:
+    """SheetLeadRow carries the two new Fase 8 columns."""
+
+    def test_email_fields_present(self):
+        row = _sheet_row(
+            email_completo="cuerpo",
+            razon_validacion="industria prohibida",
+            categoria_detectada="Moda/Retail",
+        )
+        assert row.email_completo == "cuerpo"
+        assert row.razon_validacion == "industria prohibida"
+        assert row.categoria_detectada == "Moda/Retail"
+
+    def test_email_fields_default_empty(self):
+        from app.integrations.sheets import SheetLeadRow
+        row = SheetLeadRow(
+            sheet_row_id=3, remitente_email="x@y.com", remitente_nombre="X",
+            asunto="a", fecha_recepcion="", talento_mencionado="",
+            status_filtrado="En revisión", score_calidad=None,
+            bloqueado=False, convertido_a_prospecto=False,
+        )
+        assert row.email_completo == ""
+        assert row.razon_validacion == ""
+        assert row.categoria_detectada == ""
+
+
+class TestSyncSheetsEmailBody:
+    """sync_sheets persists sanitized, size-capped email bodies (8.1)."""
+
+    def test_sync_stores_sanitized_email_and_razon(self, db_session, monkeypatch):
+        from app.sync import jobs
+        from app.models import Lead
+        monkeypatch.setattr(
+            jobs.sheets, "get_leads_rows",
+            lambda: [_sheet_row(
+                sheet_row_id=2,
+                email_completo="Hola <script>alert(1)</script> mundo",
+                razon_validacion="<b>industria prohibida (casino)</b>",
+                categoria_detectada="<i>Casino</i>",
+            )],
+        )
+        jobs.sync_sheets(db_session)
+
+        lead = db_session.query(Lead).filter(Lead.sheet_row_id == 2).one()
+        assert "<script>" not in lead.email_completo
+        assert "<b>" not in lead.razon_validacion
+        assert "industria prohibida (casino)" in lead.razon_validacion
+        assert "<i>" not in lead.categoria_detectada
+        assert lead.categoria_detectada == "Casino"
+        assert lead.email_truncated is False
+
+    def test_sync_empty_email_stores_none(self, db_session, monkeypatch):
+        from app.sync import jobs
+        from app.models import Lead
+        monkeypatch.setattr(
+            jobs.sheets, "get_leads_rows",
+            lambda: [_sheet_row(sheet_row_id=5, email_completo="", razon_validacion="")],
+        )
+        jobs.sync_sheets(db_session)
+
+        lead = db_session.query(Lead).filter(Lead.sheet_row_id == 5).one()
+        assert lead.email_completo is None
+        assert lead.razon_validacion is None
+        assert lead.email_truncated is False
+
+    def test_sync_oversize_email_sets_truncated_flag(self, db_session, monkeypatch):
+        from app.sync import jobs
+        from app.sync.jobs import _EMAIL_MAX_BYTES
+        from app.models import Lead
+        monkeypatch.setattr(
+            jobs.sheets, "get_leads_rows",
+            lambda: [_sheet_row(sheet_row_id=7, email_completo="a" * (_EMAIL_MAX_BYTES + 1000))],
+        )
+        jobs.sync_sheets(db_session)
+
+        lead = db_session.query(Lead).filter(Lead.sheet_row_id == 7).one()
+        assert lead.email_truncated is True
+        assert len(lead.email_completo.encode("utf-8")) <= _EMAIL_MAX_BYTES
