@@ -2249,6 +2249,67 @@ body {
   color: var(--text);
 }
 
+/* ── Period filter (Fase 7) — month/quarter selector, discreet ── */
+.period-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.period-showing {
+  margin-right: auto;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--text2);
+}
+/* Compact toggle — mirrors .kpi-toggle but inline (not full-width). */
+.period-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+.period-toggle-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.period-toggle-btn:hover { color: var(--text); }
+.period-toggle-btn.active {
+  background: var(--bg2);
+  border: 1px solid var(--borderM);
+  color: var(--text);
+}
+.period-select.sel { width: auto; min-width: 150px; }
+
+/* ── Snapshot tag — marks widgets NOT scoped by the period (D4 "estado actual") ── */
+.snapshot-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 7px;
+  font-size: 9px;
+  font-weight: 600;
+  font-family: 'Sora', sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text2);
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
 /* ── Trello-source badge (funnel stages sourced from Trello, not Pipedrive) ── */
 .trello-src-badge {
   display: inline-block;

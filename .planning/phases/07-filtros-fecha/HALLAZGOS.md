@@ -14,3 +14,9 @@ Bugs / deuda técnica detectados durante Fase 7, fuera de scope. Anotados para r
 **Detectado**: 30 jun 2026, durante discovery 7.1.
 **Severidad**: media (afecta cómo se interpreta D4 para esos widgets).
 **Detalle**: `app/services/trello_service.py:179` (`income_projection`) y `:237` (`payment_calendar`) NO son históricos por `won_time`. Son una ventana deslizante de 4 meses anclada en `date.today()`, agrupada por `TrelloCard.collection_date`, que reparte `deal.value` en cobrado (cerrado) / proyección (ejecución) / pendiente (cobranza). D4 asume que "histórico de ingresos" filtra por `won_time` y "calendario" por `collection_date` para el periodo elegido, pero la implementación real es forward-looking. Reconciliarlos requiere decisión de producto (ver pregunta abierta planteada a Luis/Alexis en sesión 7.1).
+
+## H-07-03 — `reports_service.available_months` quedó huérfana tras 7.2
+
+**Detectado**: 30 jun 2026, durante 7.2.
+**Severidad**: baja (código muerto, tests verdes).
+**Detalle**: En 7.2 el endpoint `GET /reports/months` se repuntó a `periods.available_months` (won-based, global) por decisión de producto (el filtro opera sobre `won_time`, el dropdown debe ofrecer solo meses con firmas). La función previa `app/services/reports.py:available_months(db, talent_id)` (basada en `add_time`, per-talent) ya no la consume ningún endpoint, pero se conservó junto con su clase de tests `TestAvailableMonths` para no reducir el conteo de la suite en un commit de frontend. **Decisión**: eliminar `reports_service.available_months` + `TestAvailableMonths` en una limpieza posterior (no en Fase 7).

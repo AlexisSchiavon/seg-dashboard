@@ -32,6 +32,17 @@ function formatMonthLabel(yyyyMM) {
 }
 
 /**
+ * Format a stored period value ("YYYY-MM" or "YYYY-QN") to a human label.
+ * Infers month vs quarter from the presence of "Q" and reuses formatPeriodLabel
+ * (global, from dashboard.js).
+ */
+function formatReportPeriod(value) {
+  if (!value) return "";
+  const type = value.includes("Q") ? "quarter" : "month";
+  return formatPeriodLabel(type, value);
+}
+
+/**
  * Format a date string ("YYYY-MM-DDTHH:MM:SSZ") to "D MMM" in Spanish.
  * E.g. "2026-06-15T10:00:00" → "15 jun"
  */
@@ -49,6 +60,13 @@ function formatShortDate(isoStr) {
 // ============================================================
 
 let _currentReportId = null;
+
+// Period filter state (Fase 7). The #report-month select holds the period value
+// (month "YYYY-MM" or quarter "YYYY-QN") depending on the active toggle.
+// currentMonthValueJS / currentQuarterValueJS / formatPeriodLabel are global
+// helpers defined in dashboard.js (loaded before this file).
+let _reportPeriodType = 'month';
+let _reportPeriodLists = { months: [], quarters: [] };
 
 // ============================================================
 // loadReportTalents — GET /reports/talents
@@ -85,57 +103,69 @@ async function loadReportTalents() {
 }
 
 // ============================================================
-// loadReportMonths — GET /reports/months?talent_id={id}
+// loadReportPeriods — GET /reports/months + /reports/quarters (Fase 7)
 // ============================================================
 
 /**
- * Populate #report-month based on the selected talent's deals.
- * Called on change of #report-talent.
- * API: GET /reports/months?talent_id={id} → ["2025-05", "2025-04", ...]
+ * Load the won-based, global period lists (months + quarters) and populate the
+ * #report-month picker for the active toggle. Called on setPage('reports').
+ * Both lists come from Deal.won_time (only periods with signings are offered).
  */
-async function loadReportMonths(talentId) {
-  const monthSelect = document.getElementById("report-month");
+async function loadReportPeriods() {
+  const [mRes, qRes] = await Promise.all([
+    apiFetch("/reports/months"),
+    apiFetch("/reports/quarters"),
+  ]);
+  if (!mRes || !qRes) return; // 401 redirected
+  if (!mRes.ok || !qRes.ok) {
+    showToast("Error al cargar los periodos");
+    return;
+  }
+  _reportPeriodLists.months = (await mRes.json()) || [];
+  _reportPeriodLists.quarters = (await qRes.json()) || [];
+  populateReportPeriodSelect();
+}
+
+/** Fill #report-month with options for the active period type. */
+function populateReportPeriodSelect() {
+  const sel = document.getElementById("report-month");
   const noMonthsEl = document.getElementById("report-no-months");
   const btnGenerate = document.getElementById("btn-generate");
+  if (!sel) return;
 
-  if (!monthSelect) return;
+  const isMonth = _reportPeriodType === "month";
+  const list = isMonth ? _reportPeriodLists.months.slice() : _reportPeriodLists.quarters.slice();
+  const current = isMonth ? currentMonthValueJS() : currentQuarterValueJS();
+  if (!list.includes(current)) list.unshift(current);  // D2: always offer current
 
-  // Reset month dropdown
-  monthSelect.innerHTML = `<option value="">Selecciona un mes</option>`;
-  monthSelect.disabled = true;
-  if (btnGenerate) btnGenerate.disabled = true;
-  if (noMonthsEl) noMonthsEl.style.display = "none";
-
-  if (!talentId) return;
-
-  const res = await apiFetch(`/reports/months?talent_id=${encodeURIComponent(talentId)}`);
-  if (!res) return; // 401 redirected
-  if (!res.ok) {
-    showToast("Error al cargar los meses");
-    return;
-  }
-
-  const months = await res.json();
-
-  if (!months || months.length === 0) {
-    // Estado 2 — sin meses disponibles
-    if (noMonthsEl) noMonthsEl.style.display = "";
-    monthSelect.disabled = true;
+  if (list.length === 0) {
+    // No won deals at all → no periods to report on.
+    sel.innerHTML = `<option value="">Sin periodos</option>`;
+    sel.disabled = true;
     if (btnGenerate) btnGenerate.disabled = true;
+    if (noMonthsEl) noMonthsEl.style.display = "";
     return;
   }
 
-  // Populate month dropdown with formatted labels
-  months.forEach((m) => {
-    const opt = document.createElement("option");
-    opt.value = m;
-    opt.textContent = formatMonthLabel(m);
-    monthSelect.appendChild(opt);
-  });
-
-  monthSelect.disabled = false;
+  sel.innerHTML = list
+    .map((v) => `<option value="${escHtml(v)}"${v === current ? " selected" : ""}>${escHtml(formatPeriodLabel(_reportPeriodType, v))}</option>`)
+    .join("");
+  sel.disabled = false;
   if (btnGenerate) btnGenerate.disabled = false;
   if (noMonthsEl) noMonthsEl.style.display = "none";
+}
+
+/** Toggle month/quarter mode for the report period picker. */
+function setReportPeriodType(type, e) {
+  if (type !== "month" && type !== "quarter") return;
+  _reportPeriodType = type;
+  const toggle = document.getElementById("report-period-toggle");
+  if (toggle) {
+    toggle.querySelectorAll(".period-toggle-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.ptype === type);
+    });
+  }
+  populateReportPeriodSelect();
 }
 
 // ============================================================
@@ -158,10 +188,10 @@ async function generateReport() {
   const pdfBody = document.getElementById("pdf-body");
 
   const talentId = talentSelect ? parseInt(talentSelect.value, 10) : null;
-  const month = monthSelect ? monthSelect.value : "";
+  const periodValue = monthSelect ? monthSelect.value : "";
 
-  if (!talentId || !month) {
-    showToast("Selecciona un talento y un mes antes de generar");
+  if (!talentId || !periodValue) {
+    showToast("Selecciona un talento y un periodo antes de generar");
     return;
   }
 
@@ -208,7 +238,7 @@ async function generateReport() {
     const res = await apiFetch("/reports/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ talent_id: talentId, month }),
+      body: JSON.stringify({ talent_id: talentId, period_type: _reportPeriodType, period_value: periodValue }),
     });
 
     if (!res) return; // 401 redirected
@@ -227,10 +257,11 @@ async function generateReport() {
     // Estado 4 — Reporte generado
     // Populate preview header
     if (previewTitle) {
-      previewTitle.textContent = `Reporte mensual · ${data.talent_name}`;
+      const kind = data.month && data.month.includes("Q") ? "trimestral" : "mensual";
+      previewTitle.textContent = `Reporte ${kind} · ${data.talent_name}`;
     }
     if (previewSub) {
-      previewSub.textContent = `${formatMonthLabel(data.month)} · Generado con IA`;
+      previewSub.textContent = `${formatReportPeriod(data.month)} · Generado con IA`;
     }
 
     // Render 3 narrative blocks — ALL Claude text escaped via escHtml (T-xss)
@@ -310,7 +341,7 @@ async function loadReportHistory() {
   }
 
   container.innerHTML = reports.map((report) => {
-    const monthLabel = formatMonthLabel(report.month);
+    const monthLabel = formatReportPeriod(report.month);
     // Talent name and month label are API-sourced — escape before innerHTML (T-xss)
     const talentName = escHtml(report.talent_name || "Desconocido");
     const shortDate = escHtml(formatShortDate(report.generated_at));
@@ -347,16 +378,6 @@ function downloadReport(reportId) {
   window.location.href = `/reports/${reportId}/download`;
 }
 
-// ============================================================
-// Initialization: wire onChange listener for talent select
-// ============================================================
-
-document.addEventListener("DOMContentLoaded", () => {
-  const talentSelect = document.getElementById("report-talent");
-  if (talentSelect) {
-    talentSelect.addEventListener("change", (e) => {
-      const talentId = e.target.value;
-      loadReportMonths(talentId || null);
-    });
-  }
-});
+// Fase 7: periods are global (won-based), no longer tied to talent selection —
+// they are loaded once per tab activation via loadReportPeriods() in setPage().
+// No DOMContentLoaded wiring needed here anymore.

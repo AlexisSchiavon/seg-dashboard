@@ -53,12 +53,15 @@ def get_report_talents(db: Session = Depends(get_db)):
 
 
 @router.get("/months", response_model=list[str])
-def get_available_months(talent_id: int, db: Session = Depends(get_db)):
-    """Return distinct YYYY-MM strings from Deal.add_time for the given talent.
+def get_available_months(talent_id: int | None = None, db: Session = Depends(get_db)):
+    """Return distinct YYYY-MM strings for months that have a won deal (Fase 7).
 
-    Returns [] if the talent has no deals or if talent_id does not exist.
+    Won-based (Deal.won_time) and global — the period filter operates on won_time,
+    so the dropdown must offer only months that actually have signings (offering
+    empty months would be confusing). `talent_id` is accepted but ignored, kept
+    for back-compat with the pre-Fase-7 query string.
     """
-    return reports_service.available_months(db, talent_id)
+    return periods_service.available_months(db)
 
 
 @router.get("/quarters", response_model=list[str])
