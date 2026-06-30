@@ -43,3 +43,24 @@ Bugs / deuda técnica detectados durante Fase 7, fuera de scope. Anotados para r
 - Refrescar blacklist de dominios (SHEIN, casinos, crypto, SEO spam).
 - Ajustar thresholds del score.
 - Reducir falsos "En revisión 35" con mejor signal extraction.
+
+## H-07-05 — Drill-down de tiles snapshot (Pendiente por cobrar, Cobrado, Campañas firmadas, etc.)
+
+**Detectado**: 30 jun 2026, durante la validación visual de Fase 7.
+**Severidad**: media (UX/claridad; el dato es correcto pero opaco).
+
+**Problema**: el tile "Pendiente por cobrar" muestra el total acumulado como snapshot ($2.5M para Don Silverio y Wicho). Es semánticamente correcto (D4: es un estado, no un periodo), pero visualmente confuso: el usuario no sabe qué deals componen ese monto.
+
+**Solución diferida a Fase 8 (interactividad)**: implementar drill-down en los tiles relevantes. Al hacer clic en un tile, abrir modal/panel lateral con:
+- Lista de deals que componen el monto.
+- Cada deal: título, valor, talento, fecha de firma, días pendientes (para Pendiente) o fecha de cobro (para Cobrado).
+- Ordenable por valor o fecha.
+- Exportable a CSV (opcional).
+
+Aplicar el mismo patrón consistentemente a:
+- **Pendiente por cobrar** (prioridad alta — el más confuso hoy).
+- **Cobrado en el periodo**.
+- **Campañas firmadas en el periodo**.
+- Posiblemente: tiles de Resumen global.
+
+**NO** se implementa en Fase 7 (scope: filtros por fecha) ni se parchea con un cambio de label en Fase 7. Se diseña como parte de Fase 8 junto con la otra interactividad ya planeada (click en talento en Leads, click en lead → detalle).
