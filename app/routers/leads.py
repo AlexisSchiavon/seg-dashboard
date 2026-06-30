@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.models import Talent
-from app.schemas.leads import LeadRow, LeadsSummary, TalentLeadBar
+from app.schemas.leads import LeadDetail, LeadRow, LeadsSummary, TalentLeadBar
 from app.services import leads as leads_service
 
 router = APIRouter(
@@ -62,3 +62,22 @@ def get_leads_summary(db: Session = Depends(get_db)):
         calificados=summary["calificados"],
         por_talento=[TalentLeadBar(**bar) for bar in bars],
     )
+
+
+# NOTE: declared AFTER /summary so the literal "/leads/summary" route matches
+# first — otherwise "summary" would be coerced against {lead_id: int} (422).
+@router.get("/{lead_id}", response_model=LeadDetail)
+def get_lead_detail(lead_id: int, db: Session = Depends(get_db)):
+    """Return the full detail for one lead (8.2) — drives the detail modal.
+
+    Auth inherited from the router-level Depends(get_current_user) (no new auth).
+    404 when the lead does not exist. NULL Sheet fields are returned as null;
+    the frontend renders the D7 fallback copy.
+    """
+    detail = leads_service.lead_detail(db, lead_id)
+    if detail is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Lead not found",
+        )
+    return LeadDetail(**detail)

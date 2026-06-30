@@ -151,3 +151,41 @@ def leads_list(
         }
         for lead in leads
     ]
+
+
+def lead_detail(db: Session, lead_id: int) -> dict | None:
+    """Return the full detail dict for one lead, or None if it does not exist (8.2).
+
+    Same resolved shape as leads_list rows plus the Fase 8 detail fields
+    (email_completo, razon_validacion, categoria_detectada, email_truncated).
+    NULL Sheet values stay None — the frontend renders the D7 fallback copy.
+    """
+    lead = (
+        db.query(Lead)
+        .options(joinedload(Lead.talent))
+        .filter(Lead.id == lead_id)
+        .first()
+    )
+    if lead is None:
+        return None
+
+    return {
+        "id": lead.id,
+        "sheet_row_id": lead.sheet_row_id,
+        "remitente_nombre": lead.remitente_nombre,
+        "remitente_email": lead.remitente_email,
+        "asunto": lead.asunto,
+        "fecha_recepcion": lead.fecha_recepcion,
+        "talent_id": lead.talent_id,
+        "talent_name": lead.talent.name if lead.talent is not None else None,
+        "status_filtrado": lead.status_filtrado,
+        "status_display": STATUS_DISPLAY.get(lead.status_filtrado, lead.status_filtrado),
+        "fuente": lead.fuente,
+        "score_calidad": lead.score_calidad,
+        "bloqueado": lead.bloqueado,
+        "convertido_a_prospecto": lead.convertido_a_prospecto,
+        "email_completo": lead.email_completo,
+        "razon_validacion": lead.razon_validacion,
+        "categoria_detectada": lead.categoria_detectada,
+        "email_truncated": lead.email_truncated,
+    }

@@ -38,3 +38,17 @@ class LeadRow(BaseModel):
     score_calidad: int | None
     bloqueado: bool
     convertido_a_prospecto: bool
+
+
+class LeadDetail(LeadRow):
+    """GET /leads/{id} response — the list row plus the Fase 8 detail fields.
+
+    email_completo / razon_validacion / categoria_detectada are None when the
+    Sheet had no value (D7); the frontend renders fallback copy. email_truncated
+    flags bodies clipped at the 1 MB cap (D8).
+    """
+
+    email_completo: str | None
+    razon_validacion: str | None
+    categoria_detectada: str | None
+    email_truncated: bool

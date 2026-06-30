@@ -620,3 +620,69 @@ class TestSyncSheetsEmailBody:
         lead = db_session.query(Lead).filter(Lead.sheet_row_id == 7).one()
         assert lead.email_truncated is True
         assert len(lead.email_completo.encode("utf-8")) <= _EMAIL_MAX_BYTES
+
+
+# ---------------------------------------------------------------------------
+# Fase 8 (8.2) — GET /leads/{id} detail endpoint
+# ---------------------------------------------------------------------------
+
+class TestLeadDetailEndpoint:
+    """Tests for GET /leads/{id} (lead detail for the modal)."""
+
+    def _lead_id(self, email):
+        from tests.conftest import TestSessionLocal
+        from app.models import Lead
+        db = TestSessionLocal()
+        try:
+            return db.query(Lead).filter(Lead.remitente_email == email).one().id
+        finally:
+            db.close()
+
+    def test_detail_requires_auth(self, client, seed_leads):
+        """GET /leads/{id} without auth → 401."""
+        lead_id = self._lead_id("aprobado@example.com")
+        assert client.get(f"/leads/{lead_id}").status_code == 401
+
+    def test_detail_returns_200_with_full_shape(self, auth_client, seed_leads, seed_talent_products):
+        """GET /leads/{id} returns the full Lead shape + resolved talent_name."""
+        lead_id = self._lead_id("aprobado@example.com")
+        response = auth_client.get(f"/leads/{lead_id}")
+        assert response.status_code == 200
+        data = response.json()
+
+        required = {
+            "id", "sheet_row_id", "remitente_email", "remitente_nombre", "asunto",
+            "fecha_recepcion", "talent_id", "talent_name", "status_filtrado",
+            "status_display", "fuente", "score_calidad", "bloqueado",
+            "convertido_a_prospecto", "email_completo", "razon_validacion",
+            "categoria_detectada", "email_truncated",
+        }
+        assert required <= set(data.keys()), f"missing: {required - set(data.keys())}"
+        assert data["id"] == lead_id
+        assert data["talent_name"] == "Talento Uno"
+        assert data["status_display"] == "Aprobado"
+        assert isinstance(data["email_truncated"], bool)
+
+    def test_detail_404_for_missing_lead(self, auth_client):
+        """GET /leads/{id} for a nonexistent id → 404."""
+        response = auth_client.get("/leads/99999")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Lead not found"
+
+    def test_detail_null_email_body_returns_null_not_error(self, auth_client, seed_leads):
+        """A lead with NULL email_completo returns 200 with null fields (D7)."""
+        lead_id = self._lead_id("aprobado@example.com")  # seeded without email body
+        response = auth_client.get(f"/leads/{lead_id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["email_completo"] is None
+        assert data["razon_validacion"] is None
+        assert data["categoria_detectada"] is None
+        assert data["email_truncated"] is False
+
+    def test_detail_sin_talento_has_null_talent_name(self, auth_client, seed_leads):
+        """A lead with talent_id=None → talent_name is null (frontend shows 'Sin talento')."""
+        lead_id = self._lead_id("revision@example.com")
+        data = auth_client.get(f"/leads/{lead_id}").json()
+        assert data["talent_id"] is None
+        assert data["talent_name"] is None
