@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>SEG · Talent Intelligence</title>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=DM+Sans:wght@400;500&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/styles.css?v=20260629a">
+  <link rel="stylesheet" href="/css/styles.css?v=20260630a">
 </head>
 <body style="visibility:hidden">
   <nav class="nav">
@@ -451,12 +451,47 @@
     </div>
   </div>
 
-  <script src="/js/auth.js?v=20260629a"></script>
-  <script src="/js/dashboard.js?v=20260629a"></script>
-  <script src="/js/leads.js?v=20260629a"></script>
-  <script src="/js/reports.js?v=20260629a"></script>
+  <!-- ========== LEAD DETAIL MODAL (Fase 8.3) ========== -->
+  <div class="modal-overlay" id="lead-modal" onclick="handleLeadModalBackdrop(event)">
+    <div class="modal lead-modal" role="dialog" aria-modal="true" aria-labelledby="lead-modal-title">
+      <div class="modal-header">
+        <div class="lead-modal-head">
+          <div class="modal-title" id="lead-modal-title">—</div>
+          <div class="lead-modal-sub" id="lead-modal-sub">—</div>
+        </div>
+        <div class="lead-modal-head-right">
+          <span class="pill" id="lead-modal-status">—</span>
+          <button class="modal-close-btn" onclick="closeLeadModal()" aria-label="Cerrar">&times;</button>
+        </div>
+      </div>
+
+      <div class="lead-trunc-banner" id="lead-modal-trunc" style="display:none">
+        ⚠️ Cuerpo truncado por tamaño (&gt;1 MB)
+      </div>
+
+      <div class="lead-modal-scroll">
+        <div class="modal-section">
+          <div class="modal-section-title">Email</div>
+          <div class="lead-email-asunto" id="lead-modal-asunto"></div>
+          <div class="lead-email-body" id="lead-modal-body"></div>
+        </div>
+
+        <div class="modal-divider"></div>
+
+        <div class="modal-section">
+          <div class="modal-section-title">Clasificación</div>
+          <div class="lead-class-grid" id="lead-modal-classification"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/auth.js?v=20260630a"></script>
+  <script src="/js/dashboard.js?v=20260630a"></script>
+  <script src="/js/leads.js?v=20260630a"></script>
+  <script src="/js/reports.js?v=20260630a"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
-  <script src="/js/agent.js?v=20260629a"></script>
+  <script src="/js/agent.js?v=20260630a"></script>
 </body>
 </html>

@@ -166,7 +166,7 @@ function renderLeadsList(leads) {
       : "var(--amber)";
 
     return `
-      <div class="deal-row">
+      <div class="deal-row lead-row-clickable" onclick="openLeadModal(${lead.id})">
         <div class="deal-l">
           <div class="deal-dot" style="background:${dotColor};"></div>
           <div>
@@ -252,12 +252,167 @@ async function loadLeads() {
 }
 
 // ============================================================
-// Filter change listeners (wired when DOM is ready via index.html onload order)
+// Lead detail modal (Fase 8.3)
 // ============================================================
 
-document.addEventListener("DOMContentLoaded", () => {
-  ["filter-talent", "filter-status", "filter-fuente"].forEach((id) => {
+/**
+ * Reformat a plain-text email body into safe display HTML (D11, revised per H-08-03).
+ *
+ * Security ordering is critical:
+ *   1. HTML-escape the raw input first (so any markup becomes inert text),
+ *   2. then apply the readability heuristics on the escaped text,
+ *   3. then turn the controlled markers \n -> <br> and *x* -> <strong>x</strong>.
+ * A malicious "*<script>*" becomes "*&lt;script&gt;*" after escaping and finally
+ * "<strong>&lt;script&gt;</strong>" — completely inert.
+ *
+ * Format detection (H-08-03): real bodies already contain "\n", so we RESPECT the
+ * existing line breaks and skip the line-rebuilding rules (1-5). Only the no-newline
+ * fallback (old/malformed leads) gets the full split heuristics.
+ *
+ * Returns null for empty/null input — the caller renders the D7 fallback copy.
+ */
+function formatLeadEmail(text) {
+  if (!text) return null;
+
+  // Step 1: escape HTML.
+  let safe = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // Step 2: only rebuild line breaks when the source has none.
+  const hasNewlines = safe.includes("\n");
+  if (!hasNewlines) {
+    safe = safe.replace(/\s+/g, " ");
+    safe = safe.replace(/,([A-ZÁÉÍÓÚÑ])/g, ",\n\n$1");
+    safe = safe.replace(/\.([A-ZÁÉÍÓÚÑ])/g, ".\n\n$1");
+    safe = safe.replace(/([a-záéíóúñ])([A-ZÁÉÍÓÚÑ])/g, "$1\n\n$2");
+    safe = safe.replace(/^(Abrazo|Saludos|Atentamente|Best),/gm, "\n\n$1,");
+  }
+
+  // Step 3 (always): markdown bold + newlines -> <br>.
+  safe = safe.replace(/\*(.+?)\*/g, "<strong>$1</strong>");
+  safe = safe.replace(/\n/g, "<br>");
+
+  return safe;
+}
+
+/**
+ * Fetch GET /leads/{id} and render the detail modal.
+ * The whole lead row calls this with the lead id.
+ */
+async function openLeadModal(leadId) {
+  const res = await apiFetch(`/leads/${encodeURIComponent(leadId)}`);
+  if (!res) return; // 401 redirected
+  if (!res.ok) {
+    showToast("No se pudo cargar el detalle del lead");
+    return;
+  }
+  const lead = await res.json();
+  renderLeadModal(lead);
+
+  const modal = document.getElementById("lead-modal");
+  if (modal) modal.classList.add("open");
+}
+
+/** Populate the modal DOM from a LeadDetail object (all values escaped/controlled). */
+function renderLeadModal(lead) {
+  const setText = (id, value) => {
     const el = document.getElementById(id);
-    if (el) el.addEventListener("change", () => loadLeads());
+    if (el) el.textContent = value;
+  };
+
+  // Header
+  setText("lead-modal-title", lead.remitente_nombre || lead.remitente_email || "Lead");
+  const fecha = lead.fecha_recepcion ? formatLeadDate(lead.fecha_recepcion) : "Sin fecha";
+  setText("lead-modal-sub", `${lead.remitente_email} · ${fecha}`);
+
+  const statusEl = document.getElementById("lead-modal-status");
+  if (statusEl) {
+    const display = lead.status_display || lead.status_filtrado;
+    statusEl.textContent = display;
+    statusEl.setAttribute("style", `${statusPillStyle(display)}`);
+  }
+
+  // Truncation banner (D8)
+  const banner = document.getElementById("lead-modal-trunc");
+  if (banner) banner.style.display = lead.email_truncated ? "" : "none";
+
+  // Email section — asunto + body (D7 fallback when null)
+  setText("lead-modal-asunto", lead.asunto || "(Sin asunto)");
+  const bodyEl = document.getElementById("lead-modal-body");
+  if (bodyEl) {
+    const html = formatLeadEmail(lead.email_completo);
+    if (html === null) {
+      bodyEl.textContent = "Cuerpo del email no disponible para este lead";
+      bodyEl.classList.add("lead-email-empty");
+    } else {
+      bodyEl.innerHTML = html; // safe: formatLeadEmail escaped first, then added controlled tags
+      bodyEl.classList.remove("lead-email-empty");
+    }
+  }
+
+  // Classification section — 5 fields with D7 fallbacks
+  const grid = document.getElementById("lead-modal-classification");
+  if (grid) {
+    const score = lead.score_calidad != null ? String(lead.score_calidad) : "—";
+    const rows = [
+      ["Status", lead.status_display || lead.status_filtrado],
+      ["Score", score],
+      ["Razón", lead.razon_validacion || "Sin razón registrada"],
+      ["Talento", lead.talent_name || "Sin talento asignado"],
+      ["Categoría", lead.categoria_detectada || "Sin categoría"],
+    ];
+    grid.innerHTML = rows
+      .map(
+        ([label, value]) =>
+          `<div class="lead-class-label">${escHtml(label)}</div>` +
+          `<div class="lead-class-value">${escHtml(value)}</div>`,
+      )
+      .join("");
+  }
+}
+
+/** Format an ISO date for the modal header, e.g. "30 mar 2026, 17:39". */
+function formatLeadDate(isoStr) {
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return "Sin fecha";
+  const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${d.getDate()} ${meses[d.getMonth()]} ${d.getFullYear()}, ${hh}:${mm}`;
+}
+
+function closeLeadModal() {
+  const modal = document.getElementById("lead-modal");
+  if (modal) modal.classList.remove("open");
+}
+
+/** Backdrop click closes only when the click is on the overlay itself. */
+function handleLeadModalBackdrop(e) {
+  if (e.target === document.getElementById("lead-modal")) closeLeadModal();
+}
+
+// ============================================================
+// DOM wiring — guarded so this file can be require()'d in Node tests
+// (formatLeadEmail is a pure function; the rest needs a browser DOM).
+// ============================================================
+
+if (typeof document !== "undefined") {
+  document.addEventListener("DOMContentLoaded", () => {
+    ["filter-talent", "filter-status", "filter-fuente"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener("change", () => loadLeads());
+    });
   });
-});
+
+  // ESC closes the lead modal (the settings modal has no ESC handler; this is new).
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeLeadModal();
+  });
+}
+
+// Node test hook (no-op in the browser, where `module` is undefined).
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { formatLeadEmail };
+}
