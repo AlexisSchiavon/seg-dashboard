@@ -61,3 +61,34 @@ Hallazgos durante la implementación. Anotados para retomar o para corregir el b
 **Resultado del re-sync real**: `exact=477 no_spaces=67 prefix=264 alias=12 miss=0` → 820 leads, **0 NULL** (antes 501). +12 tests (suite 237).
 
 **Robustez a futuro**: la guardia de unicidad del prefix evita mis-atribución (ej. si se agrega "Mariana López", "Mariana" se vuelve ambiguo → `talent_ambiguous` log + NULL); cualquier forma nueva no resuelta sube el contador `miss` y dispara `talent_not_resolved` en logs.
+
+## H-08-06 — Proyección de ingresos vacía en meses futuros para talentos con TrelloCards no actualizadas
+
+**Detectado**: 30 jun 2026, al revisar la proyección de Don Silverio y Don Wicho.
+**Severidad**: media (problema de datos operativos en Trello, NO bug del dashboard).
+**Estado**: diagnóstico confirmado; acciones diferidas (fuera de Fase 8).
+
+**Descripción**: La proyección de ingresos por mes (Jul–Oct 2026) muestra $0 para Don Silverio y Don Wicho a pesar de que el widget "Pendiente por cobrar" indica $2.5M. **El dashboard NO está roto** — refleja fielmente lo que hay en Trello.
+
+**Causa raíz** (confirmada por query directo a producción, 30 jun 2026):
+
+Estado de los deals ganados de Don Silverio y Don Wicho (14 deals, ~$4.66M histórico):
+- **3 deals ($1.18M) sin TrelloCard asignada**: Dutton Ranch $225K, Nu3 Gallos $175K, Huevos San Juan Mundial $780K.
+- **11 deals con TrelloCard, pero TODAS las `collection_date` son de meses pasados** (Dic 2025 a Jun 2026).
+- **0 deals con `collection_date >= 2026-07-01`** → por eso la ventana Jul–Oct sale en $0.
+
+Deals operativamente atorados (`list_state != 'cerrado'` con `collection_date` pasada):
+- 3 Hermanos MM+DsDw $200K — en cobranza, fecha Dic 2025 (7 meses vencido).
+- 3 Hermanos Nov-Dic $300K — en ejecución, fecha Feb 2026 (5 meses vencido).
+- Telcel $200K, Coppel $400K, Nariz Roja $75K, Nu3 Gallos $175K — todos con fecha May 2026 (2 meses vencidos).
+
+**Implicación**:
+- La proyección vacía en Jul–Oct 2026 es **correcta** bajo los datos existentes. El dashboard es SOLO LECTURA sobre Trello y muestra lo que hay.
+- El gap está en el **proceso operativo de Trello**: (a) actualizar `collection_date` cuando la fecha original se vence, o (b) crear tarjetas para los 3 deals que no las tienen.
+
+**Acciones diferidas (NO en Fase 8)**:
+1. **Comunicar a Luis**: los $2.5M pendientes de Don Silverio incluyen $700K+ en deals vencidos operativamente. Necesitan seguimiento humano de cobranza.
+2. Considerar en una fase futura un widget de **"Deals vencidos"** o **"TrelloCards sin fecha de cobro futura"** para hacer visible este gap automáticamente.
+3. Considerar en **Fase 11 (automatizaciones)** un flow que marque `collection_date` vencidas y sugiera una nueva fecha.
+
+**Nota**: un hallazgo similar probablemente exista para otros talentos — este diagnóstico se hizo solo sobre Don Silverio y Don Wicho.
