@@ -62,7 +62,14 @@ Fase 8 hace los leads **inspeccionables y navegables**, y de paso corrige un bug
 | `feat(fase-8.4)` | `05faf6c` | filtro por talento + chip |
 | `fix(fase-8)` | `833b070` | **smart talent resolution (hotfix)** |
 | `docs(fase-8.5)` | `ab4f07c` | documentación cambio n8n |
-| `docs(fase-8)` close | (este commit) | hallazgos + summary |
+| `docs(fase-8)` close | `fe7dbe5` | hallazgos + summary |
+| `merge` Fase 8 | `c02a022` | merge a `main` (features 8.1–8.5 + hotfix) — desplegado a producción |
+| `docs(fase-8)` H-08-06 | `ac25a7e` | hallazgo Trello `collection_date` vencidas |
+| `docs(fase-8)` SUMMARY H-08-06 | `9e2b255` | sincroniza SUMMARY con H-08-06 |
+
+> El commit que sincroniza esta tabla (`docs(fase-8): sync commits table`) no se
+> autolista: su hash depende del contenido que se está escribiendo — limitación
+> inherente de git. Es el commit inmediatamente posterior a `9e2b255`.
 
 > **Nota para el review/merge**: Fase 8 incluyó un **hotfix de matching de talentos** (`fix(fase-8)` `833b070`), no solo features — recuperó el 61% del dataset que estaba sin atribuir.
 
