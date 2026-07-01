@@ -129,31 +129,12 @@ def _build_payload(
     cerrados_valor = won["total_value"]
     comision = won["total_commission"]
 
-    # Funnel stages — per-talent, open deals, all-time SNAPSHOT (D4: active state).
-    funnel_rows = (
-        db.query(
-            Deal.stage_name,
-            func.count(Deal.id),
-            func.coalesce(func.sum(Deal.value), 0.0),
-        )
-        .filter(
-            Deal.status == "open",
-            Deal.talent_id == talent.id,
-        )
-        .group_by(Deal.stage_name)
-        .all()
-    )
-    stage_map: dict[str, tuple[int, float]] = {
-        row[0]: (row[1], float(row[2])) for row in funnel_rows
-    }
-    funnel_stages = [
-        {
-            "stage": stage,
-            "count": int(stage_map.get(stage, (0, 0.0))[0]),
-            "amount": float(stage_map.get(stage, (0, 0.0))[1]),
-        }
-        for stage in funnel_service.STAGES
-    ]
+    # Funnel stages — per-talent, all-time SNAPSHOT (D4: active state).
+    # H-04/H-09-01 (Fase 9.2): reuse the shared funnel_service.talent_funnel helper
+    # instead of re-implementing the per-talent funnel inline. This also overlays the
+    # two Trello-sourced stages (En ejecución / Cobranza), making the PDF consistent
+    # with the "Por Talento" dashboard tab, which already uses the same helper.
+    funnel_stages = funnel_service.talent_funnel(db, talent.id)
 
     # Top 3 open deals by value — all-time SNAPSHOT (D4: active pipeline highlights).
     top_deals_rows = (

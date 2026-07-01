@@ -137,6 +137,45 @@ class TestGenerateReportPayload:
         assert isinstance(kpis.get("cerrados_valor"), (int, float))
         assert isinstance(kpis.get("comision"), (int, float))
 
+    def test_payload_funnel_includes_trello_stages(self, db_session, seed_deals):
+        """H-04 / H-09-01: the PDF payload funnel must reuse funnel_service.talent_funnel,
+        which overlays the two Trello-sourced stages (En ejecución / Cobranza).
+
+        RED before the 9.2 refactor: the old inline query only counted open Pipedrive
+        deals, so 'En ejecución' was always 0 even with a linked TrelloCard.
+        GREEN after: the stage reflects the talent's card.
+        """
+        from datetime import date
+
+        from app.models import TrelloCard
+        from app.services import reports as reports_service
+
+        deal_open = seed_deals["deal_open"]  # talent_a, value 50000, open
+        talent = db_session.get(Talent, deal_open.talent_id)
+
+        card = TrelloCard(
+            trello_card_id="card-ejecucion-report",
+            name="Card ejecución reporte",
+            list_id="L",
+            list_name="Contrato",
+            list_state="ejecucion",
+            deal_id=deal_open.id,
+            collection_date=date(2026, 7, 1),
+        )
+        db_session.add(card)
+        db_session.commit()
+
+        payload = reports_service._build_payload(db_session, talent, "2026-05")
+        stages = {s["stage"]: s for s in payload["funnel"]}
+
+        # The refactor must delegate to talent_funnel, which overlays Trello stages.
+        assert stages["En ejecución"]["count"] == 1
+        assert stages["En ejecución"]["amount"] == pytest.approx(50000.0)
+        # All 6 canonical stages must still be present (invariant preserved).
+        from app.services import funnel as funnel_service
+
+        assert [s["stage"] for s in payload["funnel"]] == funnel_service.STAGES
+
 
 class TestPdfWrittenToDisk:
     """5-02-03 — REPORT-01: PDF file is written to disk; path sanitized (T-path-traversal).
