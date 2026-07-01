@@ -9,6 +9,7 @@ service-account credentials in error messages. Callers in app/sync/jobs.py must
 catch exceptions and persist only str(exc).
 """
 import json
+import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FuturesTimeout
 
 import gspread
@@ -17,7 +18,18 @@ from pydantic import BaseModel, field_validator
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 _SHEETS_TIMEOUT_SECS = 30
+
+# Fase 8 (8.1): headers read for the lead detail modal. Names verified against the
+# LIVE Sheet on 30-jun-2026 (a real sync revealed the brief's "Razon_Validacion"
+# was actually "Razon_validacion" — lowercase v — and that Categoria_Detectada
+# exists). If a header is renamed/absent we log a WARNING and continue with "" —
+# NOT an error (old leads stay valid with NULL values, D7).
+_EMAIL_BODY_HEADER = "Email_Completo"
+_VALIDATION_REASON_HEADER = "Razon_validacion"
+_CATEGORY_HEADER = "Categoria_Detectada"
 
 _SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
@@ -48,6 +60,11 @@ class SheetLeadRow(BaseModel):
     score_calidad: int | None
     bloqueado: bool
     convertido_a_prospecto: bool
+    # Fase 8 (8.1): raw Sheet text — sanitized (bleach) + size-capped at write-time
+    # in app/sync/jobs.py, NOT here. Default "" when the column is empty/absent.
+    email_completo: str = ""
+    razon_validacion: str = ""
+    categoria_detectada: str = ""
 
     @field_validator("score_calidad", mode="before")
     @classmethod
@@ -104,6 +121,17 @@ def get_leads_rows() -> list[SheetLeadRow]:
         return []
 
     headers = all_values[0]
+
+    # Fase 8 (8.1): warn once per sync if the email-body headers are missing, so a
+    # Sheet rename surfaces in logs instead of silently storing empty bodies (D7).
+    for expected in (_EMAIL_BODY_HEADER, _VALIDATION_REASON_HEADER, _CATEGORY_HEADER):
+        if expected not in headers:
+            logger.warning(
+                "Leads sheet is missing expected column %r — leads will be synced "
+                "with an empty value for it.",
+                expected,
+            )
+
     rows = []
     for row_idx, row in enumerate(all_values[1:], start=2):
         # Pad short rows — gspread omits trailing empty cells (Pitfall 2 in RESEARCH.md)
@@ -121,6 +149,9 @@ def get_leads_rows() -> list[SheetLeadRow]:
                 score_calidad=row_dict.get("Score_Calidad"),
                 bloqueado=row_dict.get("Bloqueado", ""),
                 convertido_a_prospecto=row_dict.get("Convertido_a_Prospecto", ""),
+                email_completo=row_dict.get(_EMAIL_BODY_HEADER, ""),
+                razon_validacion=row_dict.get(_VALIDATION_REASON_HEADER, ""),
+                categoria_detectada=row_dict.get(_CATEGORY_HEADER, ""),
             )
         )
     return rows

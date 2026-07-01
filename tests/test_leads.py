@@ -479,3 +479,251 @@ class TestLeadsListEndpoint:
         for row in data:
             for field in required_fields:
                 assert field in row, f"Missing field: {field}"
+
+
+# ---------------------------------------------------------------------------
+# Fase 8 (8.1) — email body sanitization, truncation, sync wiring
+# ---------------------------------------------------------------------------
+
+def _sheet_row(**overrides):
+    """Build a SheetLeadRow with sane defaults; override any field per test."""
+    from app.integrations.sheets import SheetLeadRow
+    defaults = dict(
+        sheet_row_id=2,
+        remitente_email="lead@example.com",
+        remitente_nombre="Lead Uno",
+        asunto="Colaboración",
+        fecha_recepcion="",
+        talento_mencionado="",
+        status_filtrado="En revisión",
+        score_calidad=None,
+        bloqueado=False,
+        convertido_a_prospecto=False,
+        email_completo="",
+        razon_validacion="",
+        categoria_detectada="",
+    )
+    defaults.update(overrides)
+    return SheetLeadRow(**defaults)
+
+
+class TestSanitizeEmailBody:
+    """_sanitize_email_body: bleach (D9) + 1 MB cap (D8)."""
+
+    def test_innocent_plain_text_passes_through_unchanged(self):
+        from app.sync.jobs import _sanitize_email_body
+        text = "Hola, muy bien. Soy Pame. Visita https://x.com o a@b.com. Saludos,"
+        clean, truncated = _sanitize_email_body(text)
+        assert clean == text          # plain text must NOT be mangled
+        assert truncated is False
+
+    def test_none_and_empty_return_none(self):
+        from app.sync.jobs import _sanitize_email_body
+        assert _sanitize_email_body(None) == (None, False)
+        assert _sanitize_email_body("") == (None, False)
+
+    def test_html_script_tag_is_stripped(self):
+        from app.sync.jobs import _sanitize_email_body
+        clean, _ = _sanitize_email_body("Hola <script>alert(1)</script> mundo")
+        assert "<script>" not in clean
+        assert "</script>" not in clean
+
+    def test_oversize_ascii_is_truncated_under_cap(self):
+        from app.sync.jobs import _sanitize_email_body, _EMAIL_MAX_BYTES
+        clean, truncated = _sanitize_email_body("a" * (_EMAIL_MAX_BYTES + 5000))
+        assert truncated is True
+        assert len(clean.encode("utf-8")) <= _EMAIL_MAX_BYTES
+
+    def test_multibyte_truncation_stays_valid_utf8(self):
+        from app.sync.jobs import _sanitize_email_body, _EMAIL_MAX_BYTES
+        clean, truncated = _sanitize_email_body("ñ" * _EMAIL_MAX_BYTES)  # 2 bytes each
+        assert truncated is True
+        assert len(clean.encode("utf-8")) <= _EMAIL_MAX_BYTES
+        clean.encode("utf-8")  # raises if a partial multibyte char survived
+
+
+class TestSheetLeadRowEmailFields:
+    """SheetLeadRow carries the two new Fase 8 columns."""
+
+    def test_email_fields_present(self):
+        row = _sheet_row(
+            email_completo="cuerpo",
+            razon_validacion="industria prohibida",
+            categoria_detectada="Moda/Retail",
+        )
+        assert row.email_completo == "cuerpo"
+        assert row.razon_validacion == "industria prohibida"
+        assert row.categoria_detectada == "Moda/Retail"
+
+    def test_email_fields_default_empty(self):
+        from app.integrations.sheets import SheetLeadRow
+        row = SheetLeadRow(
+            sheet_row_id=3, remitente_email="x@y.com", remitente_nombre="X",
+            asunto="a", fecha_recepcion="", talento_mencionado="",
+            status_filtrado="En revisión", score_calidad=None,
+            bloqueado=False, convertido_a_prospecto=False,
+        )
+        assert row.email_completo == ""
+        assert row.razon_validacion == ""
+        assert row.categoria_detectada == ""
+
+
+class TestSyncSheetsEmailBody:
+    """sync_sheets persists sanitized, size-capped email bodies (8.1)."""
+
+    def test_sync_stores_sanitized_email_and_razon(self, db_session, monkeypatch):
+        from app.sync import jobs
+        from app.models import Lead
+        monkeypatch.setattr(
+            jobs.sheets, "get_leads_rows",
+            lambda: [_sheet_row(
+                sheet_row_id=2,
+                email_completo="Hola <script>alert(1)</script> mundo",
+                razon_validacion="<b>industria prohibida (casino)</b>",
+                categoria_detectada="<i>Casino</i>",
+            )],
+        )
+        jobs.sync_sheets(db_session)
+
+        lead = db_session.query(Lead).filter(Lead.sheet_row_id == 2).one()
+        assert "<script>" not in lead.email_completo
+        assert "<b>" not in lead.razon_validacion
+        assert "industria prohibida (casino)" in lead.razon_validacion
+        assert "<i>" not in lead.categoria_detectada
+        assert lead.categoria_detectada == "Casino"
+        assert lead.email_truncated is False
+
+    def test_sync_empty_email_stores_none(self, db_session, monkeypatch):
+        from app.sync import jobs
+        from app.models import Lead
+        monkeypatch.setattr(
+            jobs.sheets, "get_leads_rows",
+            lambda: [_sheet_row(sheet_row_id=5, email_completo="", razon_validacion="")],
+        )
+        jobs.sync_sheets(db_session)
+
+        lead = db_session.query(Lead).filter(Lead.sheet_row_id == 5).one()
+        assert lead.email_completo is None
+        assert lead.razon_validacion is None
+        assert lead.email_truncated is False
+
+    def test_sync_oversize_email_sets_truncated_flag(self, db_session, monkeypatch):
+        from app.sync import jobs
+        from app.sync.jobs import _EMAIL_MAX_BYTES
+        from app.models import Lead
+        monkeypatch.setattr(
+            jobs.sheets, "get_leads_rows",
+            lambda: [_sheet_row(sheet_row_id=7, email_completo="a" * (_EMAIL_MAX_BYTES + 1000))],
+        )
+        jobs.sync_sheets(db_session)
+
+        lead = db_session.query(Lead).filter(Lead.sheet_row_id == 7).one()
+        assert lead.email_truncated is True
+        assert len(lead.email_completo.encode("utf-8")) <= _EMAIL_MAX_BYTES
+
+
+# ---------------------------------------------------------------------------
+# Fase 8 (8.2) — GET /leads/{id} detail endpoint
+# ---------------------------------------------------------------------------
+
+class TestLeadDetailEndpoint:
+    """Tests for GET /leads/{id} (lead detail for the modal)."""
+
+    def _lead_id(self, email):
+        from tests.conftest import TestSessionLocal
+        from app.models import Lead
+        db = TestSessionLocal()
+        try:
+            return db.query(Lead).filter(Lead.remitente_email == email).one().id
+        finally:
+            db.close()
+
+    def test_detail_requires_auth(self, client, seed_leads):
+        """GET /leads/{id} without auth → 401."""
+        lead_id = self._lead_id("aprobado@example.com")
+        assert client.get(f"/leads/{lead_id}").status_code == 401
+
+    def test_detail_returns_200_with_full_shape(self, auth_client, seed_leads, seed_talent_products):
+        """GET /leads/{id} returns the full Lead shape + resolved talent_name."""
+        lead_id = self._lead_id("aprobado@example.com")
+        response = auth_client.get(f"/leads/{lead_id}")
+        assert response.status_code == 200
+        data = response.json()
+
+        required = {
+            "id", "sheet_row_id", "remitente_email", "remitente_nombre", "asunto",
+            "fecha_recepcion", "talent_id", "talent_name", "status_filtrado",
+            "status_display", "fuente", "score_calidad", "bloqueado",
+            "convertido_a_prospecto", "email_completo", "razon_validacion",
+            "categoria_detectada", "email_truncated",
+        }
+        assert required <= set(data.keys()), f"missing: {required - set(data.keys())}"
+        assert data["id"] == lead_id
+        assert data["talent_name"] == "Talento Uno"
+        assert data["status_display"] == "Aprobado"
+        assert isinstance(data["email_truncated"], bool)
+
+    def test_detail_404_for_missing_lead(self, auth_client):
+        """GET /leads/{id} for a nonexistent id → 404."""
+        response = auth_client.get("/leads/99999")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Lead not found"
+
+    def test_detail_null_email_body_returns_null_not_error(self, auth_client, seed_leads):
+        """A lead with NULL email_completo returns 200 with null fields (D7)."""
+        lead_id = self._lead_id("aprobado@example.com")  # seeded without email body
+        response = auth_client.get(f"/leads/{lead_id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["email_completo"] is None
+        assert data["razon_validacion"] is None
+        assert data["categoria_detectada"] is None
+        assert data["email_truncated"] is False
+
+    def test_detail_sin_talento_has_null_talent_name(self, auth_client, seed_leads):
+        """A lead with talent_id=None → talent_name is null (frontend shows 'Sin talento')."""
+        lead_id = self._lead_id("revision@example.com")
+        data = auth_client.get(f"/leads/{lead_id}").json()
+        assert data["talent_id"] is None
+        assert data["talent_name"] is None
+
+
+# ---------------------------------------------------------------------------
+# fix(fase-8) — sync resolves the 8 real informal Talento_Mencionado patterns
+# ---------------------------------------------------------------------------
+
+class TestSyncSmartTalentResolution:
+    """The 8 real Sheet patterns that produced 501 NULLs must now all resolve."""
+
+    def test_sync_resolves_all_informal_patterns_zero_nulls(self, db_session, monkeypatch):
+        from app.sync import jobs
+        from app.models import Lead, Talent
+
+        # Canonical talents (as stored in the live Talent table).
+        for name in [
+            "Navarretes Show", "Mariana Sanchez", "Mama mecanic", "Edgar Cardenas",
+            "Don Silverio y Don Wicho", "Ale Voale", "Deliberracion", "Dr Fitness",
+        ]:
+            db_session.add(Talent(name=name, active=True))
+        db_session.commit()
+
+        # The 8 informal forms observed in the Sheet for the NULL leads.
+        patterns = [
+            (2, "Navarretes show"),   # case   -> exact
+            (3, "Mariana"),           # prefix -> Mariana Sanchez
+            (4, "Mamamecanic"),       # nospace-> Mama mecanic
+            (5, "Edgar"),             # prefix -> Edgar Cardenas
+            (6, "Don Silverio"),      # prefix -> Don Silverio y Don Wicho
+            (7, "Ale"),               # prefix -> Ale Voale
+            (8, "Deliberración"),     # accent -> Deliberracion
+            (9, "Doc Fitness"),       # alias  -> Dr Fitness
+        ]
+        rows = [_sheet_row(sheet_row_id=rid, talento_mencionado=tm) for rid, tm in patterns]
+        monkeypatch.setattr(jobs.sheets, "get_leads_rows", lambda: rows)
+
+        jobs.sync_sheets(db_session)
+
+        total = db_session.query(Lead).count()
+        nulls = db_session.query(Lead).filter(Lead.talent_id.is_(None)).count()
+        assert total == 8
+        assert nulls == 0, "every informal pattern must resolve to a talent"

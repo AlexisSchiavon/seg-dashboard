@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import String, Boolean, Float, Integer, ForeignKey, DateTime, Date, UniqueConstraint, func
+from sqlalchemy import String, Text, Boolean, Float, Integer, ForeignKey, DateTime, Date, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -120,6 +120,19 @@ class Lead(Base):
     score_calidad: Mapped[int | None] = mapped_column(Integer, nullable=True)
     bloqueado: Mapped[bool] = mapped_column(Boolean, default=False)
     convertido_a_prospecto: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Fase 8 (8.1): full email body + classifier reason for the lead detail modal.
+    # email_completo is plain text, sanitized with bleach at sync write-time (D4/D6/D9).
+    # email_truncated marks bodies clipped at the 1 MB cap (D8). All nullable so old
+    # rows synced before Fase 8 remain valid (D7 provides UI fallbacks).
+    email_completo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    razon_validacion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # categoria_detectada: classifier category label (e.g. "Moda/Retail"). Exists in
+    # the live Sheet (Categoria_Detectada) — added to 8.1 once discovered via real sync.
+    categoria_detectada: Mapped[str | None] = mapped_column(String, nullable=True)
+    email_truncated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
 
     talent: Mapped["Talent | None"] = relationship("Talent", lazy="select")
 

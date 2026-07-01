@@ -8,6 +8,7 @@ dependencies = [
     "alembic>=1.18.4",
     "anthropic>=0.79,<1.0",
     "apscheduler>=3.11.2",
+    "bleach>=6.0.0",
     "fastapi[standard]>=0.136.3",
     "google-auth>=2.40,<3.0",
     "gspread>=6.1,<7.0",
