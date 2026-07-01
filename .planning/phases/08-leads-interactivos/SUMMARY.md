@@ -27,7 +27,7 @@ Fase 8 hace los leads **inspeccionables y navegables**, y de paso corrige un bug
 
 ---
 
-## Hallazgos
+## Hallazgos (6)
 
 | ID | Resumen | Estado |
 |---|---|---|
@@ -36,6 +36,7 @@ Fase 8 hace los leads **inspeccionables y navegables**, y de paso corrige un bug
 | H-08-03 / H-08-03b | `Email_Completo` trae `\n`; bold `*X*` no cruza saltos | Resuelto/aceptado en 8.3 |
 | H-08-04 | Mojibake unicode en algunos cuerpos | Diferido (n8n upstream) |
 | H-08-05 | 501 leads NULL por matching exacto | **RESUELTO** (`fix(fase-8)` `833b070`) |
+| H-08-06 | Proyección vacía en meses futuros (Trello `collection_date` vencidas) | Diagnóstico — operativo en Trello, no bug del dashboard |
 
 ---
 
@@ -47,6 +48,8 @@ Fase 8 hace los leads **inspeccionables y navegables**, y de paso corrige un bug
   `exact=477 · no_spaces=67 · prefix=264 · alias=12 · miss=0`
 - **Tests totales**: **237** (225 base + 12 nuevos: 11 unit de `resolve_talent_id_smart` + 1 integración 8-patrones→0-NULL; más 9 unit JS de `formatLeadEmail` vía Node)
 - **Migración**: `e1f2a3b4c5d6` (reversible, probada)
+
+> **Nota**: H-08-06 registrado post-cierre — hallazgo operativo de datos en Trello descubierto durante smoke test post-deploy productivo, no bloqueante.
 
 ### Commits de Fase 8 (en orden)
 
