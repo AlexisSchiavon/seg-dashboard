@@ -82,3 +82,36 @@ def test_pdf_sanity_size_and_content(db_session, seed_deals):
     assert talent.name in text
     assert "Junio 2026" in text  # period in the cover title
     assert "2026-07-01 12:00 UTC" in text  # injected generation stamp (footer/cover)
+
+
+def test_talent_pdf_is_talent_facing(db_session, seed_deals, seed_trello_cards):
+    """Fase 9.7c: the rendered PDF exposes only talent-appropriate content.
+
+    TA-internal fields (pipeline, TA commission, funnel, lost reasons) must NOT
+    appear; the talent's 70% framing, the account-status widget, and the
+    disclaimer must.
+    """
+    talent = db_session.get(Talent, seed_deals["deal_open"].talent_id)
+    start, end = periods_service.parse_period("month", "2026-06")
+    ctx = reports_service.build_report_context(
+        db_session, [talent], "2026-06", start, end, now=FIXED_NOW
+    )
+    html = reports_service.render_report_html(ctx)
+    pdf_bytes = weasyprint.HTML(string=html, base_url=str(PROJECT_ROOT)).write_pdf()
+
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+    # Section titles render uppercase (CSS text-transform) — match case-insensitively.
+    low = text.lower()
+
+    # Present (talent-facing)
+    assert "70%" in text                       # "Tu 70%" framing
+    assert "estado de tus cuentas" in low
+    assert "detalle de campañas firmadas del mes" in low
+    assert "talent agency gestiona el proceso de cobro" in low  # disclaimer
+
+    # Absent (TA-internal — removed in 9.7)
+    assert "pipeline" not in low
+    assert "comisión" not in low
+    assert "embudo" not in low
+    assert "oportunidades perdidas" not in low
