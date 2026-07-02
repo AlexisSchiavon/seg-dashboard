@@ -5,7 +5,6 @@ against seeded data. They do NOT require WeasyPrint (they assert on the assemble
 context and the rendered HTML string). The real-engine PDF smoke lives in
 tests/test_report_render.py.
 """
-from datetime import date
 
 import pytest
 from markupsafe import Markup
@@ -55,6 +54,20 @@ class TestBuildTalentReport:
         # charts are inlineable Markup SVGs
         assert isinstance(data["funnel_svg"], Markup)
         assert str(data["funnel_svg"]).lstrip().startswith("<svg")
+
+    def test_funnel_includes_trello_stages_h0901(self, db_session, seed_deals, seed_trello_cards):
+        """H-04 / H-09-01: the report funnel overlays the Trello-sourced stages
+        (En ejecución / Cobranza) via funnel_service.talent_funnel.
+
+        seed_trello_cards links card_ejecucion → deal_open (talent_a), so that
+        talent's 'En ejecución' stage must be populated (was always 0 pre-9.2).
+        """
+        talent = db_session.get(Talent, seed_deals["deal_open"].talent_id)
+        start, end = _period()
+        data = reports_service.build_talent_report(db_session, talent, start, end)
+
+        stages = {s["stage"]: s for s in data["funnel"]}
+        assert stages["En ejecución"]["count"] >= 1
 
 
 class TestBuildReportContext:

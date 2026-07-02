@@ -12,10 +12,7 @@ Test IDs match the Per-Task Verification Map in 05-VALIDATION.md:
   5-03-02 → test_download_report    (Wave 2 — 05-03)
   5-04-01 → test_reportes_tab_exists (Wave 3 stubs — 05-04)
 """
-import json
 from datetime import datetime
-
-import pytest
 
 from app.models import Deal, Report, Talent
 
@@ -96,97 +93,17 @@ class TestAvailableMonths:
         assert "" not in months
 
 
-class TestGenerateReportPayload:
-    """5-02-02 — REPORT-01: generate_report() uses only Python-computed figures.
-
-    Hard rule (05-CONTEXT.md, STATE.md): Claude narrates only; all numeric
-    figures must come from Python services (kpis, funnel, leads).
-    """
-
-    def test_payload_contains_python_figures(self, db_session, seed_deals,
-                                              mock_anthropic, mock_weasyprint):
-        """The payload passed to Claude contains only JSON-serializable Python scalars."""
-        from app.services import reports as reports_service
-
-        talent_id = seed_deals["deal_open"].talent_id
-        talent = db_session.get(Talent, talent_id)
-
-        payload = reports_service._build_payload(db_session, talent, "2026-05")
-        # Must be JSON-serializable (no ORM objects)
-        json_str = json.dumps(payload)
-        assert isinstance(json_str, str)
-        # Must contain expected top-level keys
-        assert "talent_name" in payload
-        assert "month" in payload
-        assert "kpis" in payload
-        assert "funnel" in payload
-
-    def test_payload_does_not_ask_claude_to_compute_numbers(self, db_session, seed_deals,
-                                                              mock_anthropic, mock_weasyprint):
-        """The payload includes pre-computed numbers; Claude should only narrate."""
-        from app.services import reports as reports_service
-
-        talent_id = seed_deals["deal_open"].talent_id
-        talent = db_session.get(Talent, talent_id)
-
-        payload = reports_service._build_payload(db_session, talent, "2026-05")
-        kpis = payload["kpis"]
-        # pipeline, cerrados_count, cerrados_valor, comision should all be Python numbers
-        assert isinstance(kpis.get("pipeline"), (int, float))
-        assert isinstance(kpis.get("cerrados_count"), (int, float))
-        assert isinstance(kpis.get("cerrados_valor"), (int, float))
-        assert isinstance(kpis.get("comision"), (int, float))
-
-    def test_payload_funnel_includes_trello_stages(self, db_session, seed_deals):
-        """H-04 / H-09-01: the PDF payload funnel must reuse funnel_service.talent_funnel,
-        which overlays the two Trello-sourced stages (En ejecución / Cobranza).
-
-        RED before the 9.2 refactor: the old inline query only counted open Pipedrive
-        deals, so 'En ejecución' was always 0 even with a linked TrelloCard.
-        GREEN after: the stage reflects the talent's card.
-        """
-        from datetime import date
-
-        from app.models import TrelloCard
-        from app.services import reports as reports_service
-
-        deal_open = seed_deals["deal_open"]  # talent_a, value 50000, open
-        talent = db_session.get(Talent, deal_open.talent_id)
-
-        card = TrelloCard(
-            trello_card_id="card-ejecucion-report",
-            name="Card ejecución reporte",
-            list_id="L",
-            list_name="Contrato",
-            list_state="ejecucion",
-            deal_id=deal_open.id,
-            collection_date=date(2026, 7, 1),
-        )
-        db_session.add(card)
-        db_session.commit()
-
-        payload = reports_service._build_payload(db_session, talent, "2026-05")
-        stages = {s["stage"]: s for s in payload["funnel"]}
-
-        # The refactor must delegate to talent_funnel, which overlays Trello stages.
-        assert stages["En ejecución"]["count"] == 1
-        assert stages["En ejecución"]["amount"] == pytest.approx(50000.0)
-        # All 6 canonical stages must still be present (invariant preserved).
-        from app.services import funnel as funnel_service
-
-        assert [s["stage"] for s in payload["funnel"]] == funnel_service.STAGES
-
-
 class TestPdfWrittenToDisk:
-    """5-02-03 — REPORT-01: PDF file is written to disk; path sanitized (T-path-traversal).
+    """5-02-03 / Fase 9: generate_report writes a PDF and returns metadata (no narrative).
 
-    File path must use str(talent.id) slug, not talent.name (avoids Unicode path issues).
-    Resolved path must stay within the reports/ directory.
+    File path must use str(talent.id) slug, not talent.name (T-path-traversal defense).
     """
 
-    def test_pdf_written_to_disk(self, db_session, seed_deals,
-                                  mock_anthropic, mock_weasyprint):
-        """generate_report writes a PDF and returns dict with file_size_bytes > 0."""
+    def test_pdf_written_to_disk(self, db_session, seed_deals, mock_weasyprint):
+        """generate_report writes a PDF and returns a dict with file_size_bytes > 0.
+
+        Fase 9 (D8): the result no longer carries a 'narrative' sub-dict.
+        """
         from app.services import reports as reports_service
 
         talent_id = seed_deals["deal_open"].talent_id
@@ -194,24 +111,18 @@ class TestPdfWrittenToDisk:
 
         assert isinstance(result, dict)
         assert result["file_size_bytes"] > 0
-        assert "narrative" in result
-        assert "resumen_ejecutivo" in result["narrative"]
-        assert "deals_destacados" in result["narrative"]
-        assert "recomendacion" in result["narrative"]
+        assert "narrative" not in result  # Claude narrative removed (D8)
 
-    def test_pdf_path_uses_talent_id_not_name(self, db_session, seed_deals,
-                                               mock_anthropic, mock_weasyprint):
+    def test_pdf_path_uses_talent_id_not_name(self, db_session, seed_deals, mock_weasyprint):
         """File path uses str(talent.id) as slug — numeric only, no path separators."""
         from app.services import reports as reports_service
 
         talent_id = seed_deals["deal_open"].talent_id
         result = reports_service.generate_report(db_session, talent_id, "2026-05")
 
-        # Path should be reports/{talent_id}/{month}.pdf
         file_path = result["file_path"]
         assert f"reports/{talent_id}/" in file_path
         assert file_path.endswith(".pdf")
-        # Talent name (Talento Uno) should NOT appear in path
         talent = db_session.get(Talent, talent_id)
         assert talent.name not in file_path
 
@@ -224,9 +135,8 @@ class TestGenerateEndpoint:
         response = client.post("/reports/generate", json={"talent_id": 1, "month": "2026-05"})
         assert response.status_code == 401
 
-    def test_generate_returns_200_with_auth(self, auth_client, seed_deals,
-                                             mock_anthropic, mock_weasyprint):
-        """Authenticated POST with valid talent_id + month returns 200."""
+    def test_generate_returns_200_with_auth(self, auth_client, seed_deals, mock_weasyprint):
+        """Authenticated POST with valid talent_id + month returns 200 (Fase 9: no narrative)."""
         talent_id = seed_deals["deal_open"].talent_id
         response = auth_client.post(
             "/reports/generate",
@@ -234,12 +144,11 @@ class TestGenerateEndpoint:
         )
         assert response.status_code == 200
         data = response.json()
-        assert "narrative" in data
-        assert "resumen_ejecutivo" in data["narrative"]
+        assert data["talent_id"] == talent_id
+        assert "narrative" not in data  # Claude narrative removed (D8)
 
-    def test_generate_response_has_required_fields(self, auth_client, seed_deals,
-                                                    mock_anthropic, mock_weasyprint):
-        """Response includes all ReportOut fields."""
+    def test_generate_response_has_required_fields(self, auth_client, seed_deals, mock_weasyprint):
+        """Response includes all ReportOut fields (no narrative — D8)."""
         talent_id = seed_deals["deal_open"].talent_id
         response = auth_client.post(
             "/reports/generate",
@@ -248,7 +157,7 @@ class TestGenerateEndpoint:
         assert response.status_code == 200
         data = response.json()
         required = {"id", "talent_id", "talent_name", "month",
-                    "generated_at", "file_size_bytes", "narrative"}
+                    "generated_at", "file_size_bytes"}
         for field in required:
             assert field in data, f"Missing field: {field}"
 
@@ -261,7 +170,7 @@ class TestGenerateEndpoint:
         )
         assert response.status_code == 422
 
-    def test_generate_unknown_talent_returns_404(self, auth_client, mock_anthropic, mock_weasyprint):
+    def test_generate_unknown_talent_returns_404(self, auth_client, mock_weasyprint):
         """Unknown talent_id returns 404."""
         response = auth_client.post(
             "/reports/generate",
@@ -285,7 +194,7 @@ class TestListReports:
         assert response.json() == []
 
     def test_list_reports_returns_generated_reports(self, auth_client, seed_deals,
-                                                     mock_anthropic, mock_weasyprint):
+                                                     mock_weasyprint):
         """After generating a report, GET /reports/ returns it with all required fields."""
         talent_id = seed_deals["deal_open"].talent_id
 
@@ -323,8 +232,7 @@ class TestDownloadReport:
         response = client.get("/reports/1/download")
         assert response.status_code == 401
 
-    def test_download_returns_pdf(self, auth_client, seed_deals,
-                                   mock_anthropic, mock_weasyprint):
+    def test_download_returns_pdf(self, auth_client, seed_deals, mock_weasyprint):
         """Generated report can be downloaded as application/pdf with Content-Disposition: attachment."""
         talent_id = seed_deals["deal_open"].talent_id
 
@@ -421,24 +329,28 @@ def _mk_won(db, talent_id, pid, value, won_dt, commission=0.0):
     return d
 
 
-def test_build_payload_filters_won_by_won_time(db_session):
-    """7.1/P2/D4: report 'cerrados' figures use won_time within the period."""
+def _detail_kpi(data, label):
+    """Pluck a detail KPI tile by label from a build_talent_report dict."""
+    return next(k for k in data["detail_kpis"] if k["label"] == label)
+
+
+def test_report_data_filters_won_by_won_time(db_session):
+    """7.1/P2/D4 (Fase 9): report 'Cerrados' figures use won_time within the period."""
     from app.services import reports as reports_service
 
     t = _mk_talent(db_session)
     _mk_won(db_session, t.id, 50001, 10000.0, _dt(2026, 6, 10), commission=7000.0)
     _mk_won(db_session, t.id, 50002, 90000.0, _dt(2026, 3, 10), commission=63000.0)  # outside June
 
-    payload = reports_service._build_payload(
-        db_session, t, "2026-06", _date(2026, 6, 1), _date(2026, 6, 30)
-    )
-    assert payload["kpis"]["cerrados_count"] == 1
-    assert payload["kpis"]["cerrados_valor"] == 10000.0
-    assert payload["kpis"]["comision"] == 7000.0
+    data = reports_service.build_talent_report(db_session, t, _date(2026, 6, 1), _date(2026, 6, 30))
+    cerrados = _detail_kpi(data, "Cerrados")
+    assert cerrados["count"] == 1
+    assert cerrados["value"] == 10000.0
+    assert _detail_kpi(data, "Comisión")["value"] == 7000.0
 
 
-def test_build_payload_pipeline_is_snapshot(db_session):
-    """7.1/P2/D4: open pipeline is NOT filtered by period in the report."""
+def test_report_data_pipeline_is_snapshot(db_session):
+    """7.1/P2/D4 (Fase 9): open pipeline is NOT filtered by period in the report."""
     from app.services import reports as reports_service
 
     t = _mk_talent(db_session)
@@ -450,13 +362,11 @@ def test_build_payload_pipeline_is_snapshot(db_session):
     db_session.commit()
 
     # June period — the March-created open deal must still appear in pipeline (snapshot)
-    payload = reports_service._build_payload(
-        db_session, t, "2026-06", _date(2026, 6, 1), _date(2026, 6, 30)
-    )
-    assert payload["kpis"]["pipeline"] == 55000.0
+    data = reports_service.build_talent_report(db_session, t, _date(2026, 6, 1), _date(2026, 6, 30))
+    assert _detail_kpi(data, "Pipeline")["value"] == 55000.0
 
 
-def test_generate_accepts_quarter_period(auth_client, db_session, mock_anthropic, mock_weasyprint):
+def test_generate_accepts_quarter_period(auth_client, db_session, mock_weasyprint):
     """7.1/D5: POST with period_type=quarter generates a report labelled by quarter."""
     t = _mk_talent(db_session)
     response = auth_client.post(
@@ -467,7 +377,7 @@ def test_generate_accepts_quarter_period(auth_client, db_session, mock_anthropic
     assert response.json()["month"] == "2026-Q2"
 
 
-def test_generate_month_backcompat_still_works(auth_client, db_session, mock_anthropic, mock_weasyprint):
+def test_generate_month_backcompat_still_works(auth_client, db_session, mock_weasyprint):
     """7.1/D8: legacy `month`-only body is treated as period_type=month."""
     t = _mk_talent(db_session)
     response = auth_client.post(
@@ -478,7 +388,7 @@ def test_generate_month_backcompat_still_works(auth_client, db_session, mock_ant
     assert response.json()["month"] == "2026-05"
 
 
-def test_generate_invalid_period_value_returns_400(auth_client, db_session, mock_anthropic, mock_weasyprint):
+def test_generate_invalid_period_value_returns_400(auth_client, db_session, mock_weasyprint):
     """7.1/D6: malformed period_value → 400 (not 422/500)."""
     t = _mk_talent(db_session)
     response = auth_client.post(

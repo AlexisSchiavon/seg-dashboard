@@ -21,8 +21,6 @@ from fastapi import status as http_status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from pydantic import ValidationError
-
 from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.models import Report, Talent
@@ -79,27 +77,20 @@ def generate_report(  # MUST be `def`, NOT `async def` — WeasyPrint is blockin
     body: ReportGenerate,
     db: Session = Depends(get_db),
 ):
-    """Generate an AI-narrated PDF report for a talent + period (month or quarter).
+    """Generate a data-driven PDF report for a talent + period (month or quarter).
 
-    Fase 7 period resolution (D8):
+    Fase 9 (D8): the report is 100% Python-computed — no Claude narrative.
+
+    Period resolution (D8 back-compat):
       - period_type + period_value take precedence when both are present.
       - Otherwise the legacy `month` field is treated as period_type="month".
       - If neither is provided → 422.
       - period_value is validated via periods.parse_period → 400 on bad input (D6).
 
-    Orchestration:
-      1. Validate talent exists (404 if not)
-      2. Build Python-computed payload (kpis/funnel/leads)
-      3. Call Claude for 3 narrative prose sections
-      4. Render HTML → PDF via WeasyPrint (blocking — runs in threadpool)
-      5. Upsert Report row in DB
-      6. Return ReportOut with narrative sections for in-page preview
-
     Errors:
       - 400 if period_value is malformed
       - 404 if talent not found (ValueError from service)
       - 422 if neither month nor period_type/period_value provided
-      - 502 if Claude returns non-JSON (ValueError with specific message)
     """
     # Resolve the period (D8 back-compat): period_type/period_value win over month.
     if body.period_type is not None and body.period_value is not None:
@@ -124,34 +115,20 @@ def generate_report(  # MUST be `def`, NOT `async def` — WeasyPrint is blockin
     try:
         result = reports_service.generate_report(db, body.talent_id, period_value, start, end)
     except ValueError as exc:
-        msg = str(exc)
-        if "non-JSON" in msg or "Claude returned" in msg:
-            raise HTTPException(
-                status_code=http_status.HTTP_502_BAD_GATEWAY,
-                detail="Error al generar narrativa",
-            ) from exc
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Talent not found",
         ) from exc
 
-    try:
-        return ReportOut(
-            id=result["id"],
-            talent_id=result["talent_id"],
-            talent_name=result["talent_name"],
-            month=result["month"],
-            generated_at=result["generated_at"],
-            file_path=result["file_path"],
-            file_size_bytes=result["file_size_bytes"],
-            narrative=result["narrative"],
-        )
-    except ValidationError as exc:
-        # WR-02: Claude returned valid JSON but with missing/wrong keys — surface as 502
-        raise HTTPException(
-            status_code=http_status.HTTP_502_BAD_GATEWAY,
-            detail="Error al generar narrativa",
-        ) from exc
+    return ReportOut(
+        id=result["id"],
+        talent_id=result["talent_id"],
+        talent_name=result["talent_name"],
+        month=result["month"],
+        generated_at=result["generated_at"],
+        file_path=result["file_path"],
+        file_size_bytes=result["file_size_bytes"],
+    )
 
 
 @router.get("/", response_model=list[ReportHistoryItem])

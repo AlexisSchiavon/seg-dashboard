@@ -28,16 +28,8 @@ class ReportGenerate(BaseModel):
     period_value: str | None = None
 
 
-class NarrativeSections(BaseModel):
-    """The 3 Claude-generated prose sections returned to the frontend."""
-
-    resumen_ejecutivo: str
-    deals_destacados: str
-    recomendacion: str
-
-
 class ReportOut(BaseModel):
-    """POST /reports/generate response — metadata + narrative for in-page preview."""
+    """POST /reports/generate response — report metadata (Fase 9: no narrative, D8)."""
 
     id: int
     talent_id: int
@@ -46,7 +38,6 @@ class ReportOut(BaseModel):
     generated_at: datetime
     file_path: str
     file_size_bytes: int
-    narrative: NarrativeSections  # returned to frontend for dark preview card
 
 
 class ReportHistoryItem(BaseModel):

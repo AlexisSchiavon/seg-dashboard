@@ -1,51 +1,40 @@
-"""Report generation service — orchestrates payload assembly, Claude narrative call,
-PDF rendering via WeasyPrint, and Report row upsert.
+"""Report generation service — assembles the data-driven PDF report (Fase 9).
 
-Design principles (05-CONTEXT.md / STATE.md hard rules):
-  - ALL numeric figures in the report come from Python services (kpis, funnel, leads).
-    Claude receives a pre-computed JSON payload and ONLY returns 3 prose narrative sections.
-  - Claude output is NEVER used for numbers in the PDF appendix or in the payload dict.
-  - This module is the ONLY place where the anthropic client and WeasyPrint are imported
-    so that conftest.py mock_anthropic and mock_weasyprint fixtures can patch them cleanly.
+Fase 9 (D8): the report is 100% Python-computed — there is NO Claude narrative.
+All figures come from the same services the "Por Talento" dashboard tab consumes
+(kpis, funnel, trello), rendered into Jinja templates + inline SVG charts and
+converted to PDF by WeasyPrint.
 
 Security (STRIDE threat register, 05-02-PLAN.md):
   T-path-traversal: _slug(talent) returns str(talent.id) — purely numeric, no separators.
   T-ssrf: _render_pdf passes the literal string "." as base_url to WeasyPrint — never a
     user-controlled value.
-  T-claude-numbers: All KPI/funnel figures in the PDF come from Python; Claude prose is
-    used only for the 3 narrative sections.
 """
-import json
 import os
 import re
 from datetime import date, datetime
 
-import anthropic
 from jinja2 import Environment, FileSystemLoader
-from sqlalchemy import desc, func
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models import Deal, Report, Talent
+from app.services import kpis as kpi_service
+from app.services import periods as periods_service
+from app.services import report_charts
+from app.services import trello_service
 
 # HTML is imported lazily inside _render_pdf() to avoid failing on macOS/CI environments
 # that lack Pango/Cairo system libs. monkeypatch fixtures patch this module-level name
 # (app.services.reports.HTML) so tests work without system libraries.
 HTML = None  # replaced by mock_weasyprint in tests; lazy-imported in _render_pdf
-from app.services import funnel as funnel_service
-from app.services import kpis as kpi_service
-from app.services import leads as leads_service
-from app.services import periods as periods_service
-from app.services import report_charts
-from app.services import trello_service
 
 _MONTHS_ES = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ]
 
-# Jinja2 environment — autoescape=True to HTML-escape all Jinja2 variables,
-# including Claude-generated prose (protects against XSS in any future web rendering).
+# Jinja2 environment — autoescape=True to HTML-escape all Jinja2 variables.
 _jinja_env = Environment(
     loader=FileSystemLoader("app/templates"),
     autoescape=True,
@@ -55,19 +44,6 @@ _jinja_env = Environment(
 #   |mxn_full -> "$1,234,567" full pesos with thousands separators
 _jinja_env.filters["mxn"] = report_charts._fmt_mxn
 _jinja_env.filters["mxn_full"] = lambda v: f"${float(v or 0):,.0f}"
-
-SYSTEM_PROMPT = (
-    "Eres un analista de inteligencia comercial para Santillán Entertainment Group, "
-    "una agencia de talentos/influencers en México. "
-    "El usuario te proporcionará un JSON con cifras ya calculadas por Python. "
-    "Debes usar ÚNICAMENTE los números del JSON proporcionado. "
-    "NUNCA inventes cifras, porcentajes ni fechas. "
-    "NUNCA calcules totales ni promedios por tu cuenta. "
-    "Responde ÚNICAMENTE con un JSON válido con exactamente tres claves: "
-    '"resumen_ejecutivo", "deals_destacados", "recomendacion". '
-    "Cada valor debe ser una cadena de texto en español con tu análisis narrativo. "
-    "No incluyas bloques de código ni marcadores markdown — solo el JSON plano."
-)
 
 
 def available_months(db: Session, talent_id: int) -> list[str]:
@@ -91,147 +67,6 @@ def available_months(db: Session, talent_id: int) -> list[str]:
             months.add(m)
 
     return sorted(months, reverse=True)
-
-
-def _build_payload(
-    db: Session,
-    talent: Talent,
-    period_value: str,
-    start: date | None = None,
-    end: date | None = None,
-) -> dict:
-    """Assemble the Python-computed figures dict to pass to Claude.
-
-    ALL numeric values come from direct DB queries. Fase 7 (P2/D4) changes the
-    semantics from the previous "everything filtered by add_time month" behavior:
-
-      - CLOSED metrics are scoped to the period: cerrados_count/valor and comisión
-        filter by Deal.won_time (the correct signing date — see brief, not add_time).
-      - ACTIVE/SNAPSHOT metrics are NOT period-filtered: open pipeline, the funnel,
-        and the top open-deal highlights are the current live state ("estado vivo"
-        per D4 — Luis asks "what did we sign in the period?", not "how big was my
-        pipeline in the period?").
-
-    period_value is the label ("YYYY-MM" or "YYYY-QN") stored in payload["month"]
-    and used for the filename/Report row. start/end are the inclusive period bounds;
-    when omitted they are derived from period_value (month vs quarter inferred from
-    the presence of "Q") so direct callers can still pass just a month string.
-
-    Leads (from Google Sheets) have no deal date and are reported all-time.
-    No ORM instances are placed in the returned dict — it must be JSON-serializable.
-    """
-    if start is None or end is None:
-        period_type = "quarter" if "Q" in period_value else "month"
-        start, end = periods_service.parse_period(period_type, period_value)
-
-    # Pipeline — open deals, all-time SNAPSHOT (D4: active pipeline is not period-scoped).
-    pipeline_val = (
-        db.query(func.coalesce(func.sum(Deal.value), 0.0))
-        .filter(
-            Deal.talent_id == talent.id,
-            Deal.status == "open",
-        )
-        .scalar()
-    ) or 0.0
-
-    # Cerrados/Comisión — won deals scoped to the period by won_time (P2/D4).
-    # 7.4: reuse deals_won_in_period (canonical won-in-range query) — no duplication.
-    won = kpi_service.deals_won_in_period(db, start.isoformat(), end.isoformat(), talent.id)
-    cerrados_count = won["count"]
-    cerrados_valor = won["total_value"]
-    comision = won["total_commission"]
-
-    # Funnel stages — per-talent, all-time SNAPSHOT (D4: active state).
-    # H-04/H-09-01 (Fase 9.2): reuse the shared funnel_service.talent_funnel helper
-    # instead of re-implementing the per-talent funnel inline. This also overlays the
-    # two Trello-sourced stages (En ejecución / Cobranza), making the PDF consistent
-    # with the "Por Talento" dashboard tab, which already uses the same helper.
-    funnel_stages = funnel_service.talent_funnel(db, talent.id)
-
-    # Top 3 open deals by value — all-time SNAPSHOT (D4: active pipeline highlights).
-    top_deals_rows = (
-        db.query(Deal.title, Deal.value, Deal.stage_name)
-        .filter(
-            Deal.talent_id == talent.id,
-            Deal.status == "open",
-        )
-        .order_by(desc(Deal.value))
-        .limit(3)
-        .all()
-    )
-    top_deals = [
-        {"title": row[0], "value": float(row[1]), "stage_name": row[2]}
-        for row in top_deals_rows
-    ]
-
-    # Global leads counts — all-time (leads have no deal add_time equivalent)
-    leads_summary = leads_service.leads_summary(db)
-    leads_totales = leads_summary["leads_totales"]
-    leads_calificados = leads_summary["calificados"]
-
-    # Per-talent leads count — all-time
-    leads_by_talent = leads_service.leads_by_talent(db)
-    talent_leads = next(
-        (row for row in leads_by_talent if row.get("talent_id") == talent.id),
-        {"total": 0, "calificados": 0},
-    )
-
-    return {
-        "talent_name": talent.name,
-        "month": period_value,
-        "kpis": {
-            "pipeline": float(pipeline_val),
-            "cerrados_count": int(cerrados_count) if cerrados_count is not None else 0,
-            "cerrados_valor": float(cerrados_valor),
-            "comision": float(comision),
-        },
-        "funnel": funnel_stages,
-        "top_deals": top_deals,
-        "leads_totales": int(leads_totales),
-        "leads_calificados": int(leads_calificados),
-        "talent_leads_totales": int(talent_leads.get("total", 0)),
-        "talent_leads_calificados": int(talent_leads.get("calificados", 0)),
-    }
-
-
-def _call_claude(payload: dict) -> dict:
-    """Call claude-sonnet-4-6 and parse the 3-section JSON response.
-
-    Returns a dict with exactly 3 keys: resumen_ejecutivo, deals_destacados, recomendacion.
-    Strips markdown code fences if present (RESEARCH.md Pitfall 2).
-    Raises ValueError("Claude returned non-JSON") on parse failure.
-    """
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1500,
-        system=SYSTEM_PROMPT,
-        messages=[
-            {
-                "role": "user",
-                "content": f"Genera el reporte:\n{json.dumps(payload, ensure_ascii=False)}",
-            }
-        ],
-    )
-
-    # Guard: ensure Claude returned at least one text block (WR-01 defense)
-    if not response.content or response.content[0].type != "text":
-        raise ValueError("Claude returned non-JSON")
-    raw_text = response.content[0].text.strip()
-
-    # Strip markdown fences if Claude wraps the JSON (Pitfall 2)
-    if raw_text.startswith("```"):
-        # Remove leading fence (```json or ```)
-        raw_text = re.sub(r"^```[a-z]*\n?", "", raw_text)
-        # Remove trailing fence
-        raw_text = re.sub(r"\n?```$", "", raw_text.rstrip())
-
-    try:
-        parsed = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
-        raise ValueError("Claude returned non-JSON") from exc
-
-    return parsed
 
 
 def _slug(talent: Talent) -> str:
@@ -280,17 +115,15 @@ def generate_report(
     start: date | None = None,
     end: date | None = None,
 ) -> dict:
-    """Orchestrate: build payload → call Claude → render PDF → upsert Report row.
+    """Generate a single-talent data-driven PDF (Fase 9 — no Claude) and upsert its row.
 
-    Fase 7: period_value is the period label ("YYYY-MM" or "YYYY-QN"). It is used
-    as the report identifier (filename, Report.month column, upsert key). start/end
-    are the inclusive period bounds for the won_time-scoped figures; when omitted
-    they are derived from period_value (month vs quarter inferred from "Q"), so
-    legacy positional callers passing just a month string keep working.
+    period_value is the period label ("YYYY-MM" or "YYYY-QN"), used as the report
+    identifier (filename, Report.month, upsert key). start/end are the inclusive
+    period bounds for the won_time-scoped figures; when omitted they are derived
+    from period_value (month vs quarter inferred from "Q").
 
-    Returns a dict matching the ReportOut schema shape, including a 'narrative' sub-dict.
+    Returns a dict matching the ReportOut schema shape (no narrative — D8).
     Raises ValueError(f"Talent {talent_id} not found") if the talent doesn't exist.
-    Raises ValueError("Claude returned non-JSON") if Claude's response cannot be parsed.
     """
     talent = db.get(Talent, talent_id)
     if talent is None:
@@ -300,25 +133,14 @@ def generate_report(
         period_type = "quarter" if "Q" in period_value else "month"
         start, end = periods_service.parse_period(period_type, period_value)
 
-    # 1. Build Python-computed payload
-    payload = _build_payload(db, talent, period_value, start, end)
-
-    # 2. Call Claude for 3 narrative prose sections
-    narrative = _call_claude(payload)
-
-    # 3. Render HTML → PDF
-    template = _jinja_env.get_template("reports/template.html")
-    html_str = template.render(
-        talent_name=talent.name,
-        month=period_value,
-        narrative=narrative,
-        data=payload,
-    )
+    # Assemble the full document context (cover + one talent page) and render it.
+    ctx = build_report_context(db, [talent], period_value, start, end)
+    html_str = render_report_html(ctx)
     file_path = f"reports/{_slug(talent)}/{period_value}.pdf"
     file_size_bytes = _render_pdf(html_str, file_path)
 
-    # 4. Upsert Report row (upsert semantics: overwrite if same talent_id+period exists).
-    # The `month` column stores the period label (now also "YYYY-QN" for quarters).
+    # Upsert Report row (overwrite if same talent_id+period exists). The `month`
+    # column stores the period label (also "YYYY-QN" for quarters).
     existing = (
         db.query(Report)
         .filter(Report.talent_id == talent_id, Report.month == period_value)
@@ -351,7 +173,6 @@ def generate_report(
         "generated_at": report.generated_at,
         "file_path": report.file_path,
         "file_size_bytes": report.file_size_bytes,
-        "narrative": narrative,
     }
 
 
