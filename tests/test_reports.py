@@ -14,6 +14,8 @@ Test IDs match the Per-Task Verification Map in 05-VALIDATION.md:
 """
 from datetime import datetime
 
+import pytest
+
 from app.models import Deal, Report, Talent
 
 
@@ -93,38 +95,72 @@ class TestAvailableMonths:
         assert "" not in months
 
 
-class TestPdfWrittenToDisk:
-    """5-02-03 / Fase 9: generate_report writes a PDF and returns metadata (no narrative).
+class TestGenerateReportService:
+    """Fase 9.5: generate_report_pdf renders PDF bytes in memory and upserts a
+    metadata-only Report row (no PDF on disk, no narrative)."""
 
-    File path must use str(talent.id) slug, not talent.name (T-path-traversal defense).
-    """
-
-    def test_pdf_written_to_disk(self, db_session, seed_deals, mock_weasyprint):
-        """generate_report writes a PDF and returns a dict with file_size_bytes > 0.
-
-        Fase 9 (D8): the result no longer carries a 'narrative' sub-dict.
-        """
+    def test_returns_pdf_bytes_and_persists_metadata(self, db_session, seed_deals, mock_weasyprint):
+        """Single-talent generation returns bytes + upserts a row with talent_ids/hash."""
+        from app.models import Report
         from app.services import reports as reports_service
 
         talent_id = seed_deals["deal_open"].talent_id
-        result = reports_service.generate_report(db_session, talent_id, "2026-05")
+        result = reports_service.generate_report_pdf(db_session, [talent_id], "2026-05")
 
-        assert isinstance(result, dict)
-        assert result["file_size_bytes"] > 0
-        assert "narrative" not in result  # Claude narrative removed (D8)
+        assert result["pdf_bytes"].startswith(b"%PDF")
+        assert result["file_size_bytes"] == len(result["pdf_bytes"])
+        assert result["talent_ids"] == str(talent_id)
+        assert result["is_consolidated"] is False
+        assert "narrative" not in result  # Claude removed (D8)
 
-    def test_pdf_path_uses_talent_id_not_name(self, db_session, seed_deals, mock_weasyprint):
-        """File path uses str(talent.id) as slug — numeric only, no path separators."""
+        row = db_session.get(Report, result["report_id"])
+        assert row.talent_id == talent_id
+        assert row.talent_ids == str(talent_id)
+        assert row.content_hash and len(row.content_hash) == 64  # sha256 hex
+        assert row.file_path is None  # no disk persistence
+
+    def test_filename_uses_talent_slug(self, db_session, seed_deals, mock_weasyprint):
+        """Individual filename is reporte-<slug>-<period>.pdf (accent-free)."""
+        from app.services import reports as reports_service
+
+        talent = db_session.get(Talent, seed_deals["deal_open"].talent_id)
+        result = reports_service.generate_report_pdf(db_session, [talent.id], "2026-05")
+        expected = f"reporte-{reports_service.filename_slug(talent.name)}-2026-05.pdf"
+        assert result["filename"] == expected
+
+    def test_consolidated_all_persists_null_talent_id(self, db_session, seed_deals, mock_weasyprint):
+        """'all' → talent_id NULL, talent_ids='all', consolidated filename."""
+        from app.models import Report
+        from app.services import reports as reports_service
+
+        result = reports_service.generate_report_pdf(db_session, "all", "2026-05")
+
+        assert result["is_consolidated"] is True
+        assert result["talent_ids"] == "all"
+        assert result["filename"] == "reporte-consolidado-2026-05.pdf"
+        row = db_session.get(Report, result["report_id"])
+        assert row.talent_id is None
+        assert row.talent_ids == "all"
+
+    def test_unknown_talent_raises(self, db_session, mock_weasyprint):
+        """A bad talent id raises ValueError (mapped to 404 at the endpoint)."""
+        from app.services import reports as reports_service
+
+        with pytest.raises(ValueError):
+            reports_service.generate_report_pdf(db_session, [999999], "2026-05")
+
+    def test_regenerate_reproduces_pdf(self, db_session, seed_deals, mock_weasyprint):
+        """Download path: regenerate_report_pdf rebuilds the PDF from the row."""
+        from app.models import Report
         from app.services import reports as reports_service
 
         talent_id = seed_deals["deal_open"].talent_id
-        result = reports_service.generate_report(db_session, talent_id, "2026-05")
+        result = reports_service.generate_report_pdf(db_session, [talent_id], "2026-05")
+        row = db_session.get(Report, result["report_id"])
 
-        file_path = result["file_path"]
-        assert f"reports/{talent_id}/" in file_path
-        assert file_path.endswith(".pdf")
-        talent = db_session.get(Talent, talent_id)
-        assert talent.name not in file_path
+        pdf_bytes, filename = reports_service.regenerate_report_pdf(db_session, row)
+        assert pdf_bytes.startswith(b"%PDF")
+        assert filename == result["filename"]
 
 
 class TestGenerateEndpoint:
@@ -135,31 +171,42 @@ class TestGenerateEndpoint:
         response = client.post("/reports/generate", json={"talent_id": 1, "month": "2026-05"})
         assert response.status_code == 401
 
-    def test_generate_returns_200_with_auth(self, auth_client, seed_deals, mock_weasyprint):
-        """Authenticated POST with valid talent_id + month returns 200 (Fase 9: no narrative)."""
+    def test_generate_returns_pdf_stream(self, auth_client, seed_deals, mock_weasyprint):
+        """Fase 9.5: POST streams the PDF (application/pdf attachment), not JSON."""
         talent_id = seed_deals["deal_open"].talent_id
         response = auth_client.post(
             "/reports/generate",
             json={"talent_id": talent_id, "month": "2026-05"},
         )
         assert response.status_code == 200
-        data = response.json()
-        assert data["talent_id"] == talent_id
-        assert "narrative" not in data  # Claude narrative removed (D8)
+        assert response.headers["content-type"] == "application/pdf"
+        assert "attachment" in response.headers.get("content-disposition", "")
+        assert response.content.startswith(b"%PDF")
 
-    def test_generate_response_has_required_fields(self, auth_client, seed_deals, mock_weasyprint):
-        """Response includes all ReportOut fields (no narrative — D8)."""
+    def test_generate_talent_ids_list(self, auth_client, seed_deals, mock_weasyprint):
+        """Fase 9.5: talent_ids as a list works (single-element list here)."""
         talent_id = seed_deals["deal_open"].talent_id
         response = auth_client.post(
             "/reports/generate",
-            json={"talent_id": talent_id, "month": "2026-05"},
+            json={"talent_ids": [talent_id], "month": "2026-05"},
         )
         assert response.status_code == 200
-        data = response.json()
-        required = {"id", "talent_id", "talent_name", "month",
-                    "generated_at", "file_size_bytes"}
-        for field in required:
-            assert field in data, f"Missing field: {field}"
+        assert response.headers["content-type"] == "application/pdf"
+
+    def test_generate_all_consolidated(self, auth_client, seed_deals, mock_weasyprint):
+        """Fase 9.5: talent_ids='all' streams the consolidated PDF."""
+        response = auth_client.post(
+            "/reports/generate",
+            json={"talent_ids": "all", "period_type": "month", "period_value": "2026-05"},
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        assert "consolidado" in response.headers.get("content-disposition", "")
+
+    def test_generate_no_target_returns_422(self, auth_client, seed_deals, mock_weasyprint):
+        """Neither talent_ids nor talent_id provided → 422."""
+        response = auth_client.post("/reports/generate", json={"month": "2026-05"})
+        assert response.status_code == 422
 
     def test_generate_invalid_month_returns_422(self, auth_client, seed_deals):
         """Invalid month format (not YYYY-MM) returns 422 validation error."""
@@ -232,49 +279,55 @@ class TestDownloadReport:
         response = client.get("/reports/1/download")
         assert response.status_code == 401
 
-    def test_download_returns_pdf(self, auth_client, seed_deals, mock_weasyprint):
-        """Generated report can be downloaded as application/pdf with Content-Disposition: attachment."""
+    def test_download_regenerates_pdf(self, auth_client, seed_deals, mock_weasyprint):
+        """Fase 9.5: download regenerates the PDF from the stored row (no disk file).
+
+        The generate endpoint now streams the PDF (no JSON body), so the report id
+        is fetched from the history list.
+        """
         talent_id = seed_deals["deal_open"].talent_id
 
-        # Generate a report first so the file exists on disk (via mock_weasyprint)
         gen_response = auth_client.post(
             "/reports/generate",
             json={"talent_id": talent_id, "month": "2026-05"},
         )
         assert gen_response.status_code == 200
-        report_id = gen_response.json()["id"]
 
-        # Download the PDF
+        report_id = auth_client.get("/reports/").json()[0]["id"]
+
         response = auth_client.get(f"/reports/{report_id}/download")
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/pdf"
         content_disp = response.headers.get("content-disposition", "")
         assert "attachment" in content_disp
         assert ".pdf" in content_disp
+        assert response.content.startswith(b"%PDF")
 
     def test_download_404_for_missing_report(self, auth_client):
         """GET /reports/999999/download returns 404 when no Report row exists."""
         response = auth_client.get("/reports/999999/download")
         assert response.status_code == 404
 
-    def test_download_missing_file(self, auth_client, db_session, seed_deals):
-        """Report row pointing at a nonexistent file path returns 404 (T-stale-path defense)."""
+    def test_download_legacy_row_regenerates_via_fk(self, auth_client, db_session,
+                                                     seed_deals, mock_weasyprint):
+        """A legacy row (talent_ids NULL, only talent_id set) regenerates via the FK fallback."""
         talent_id = seed_deals["deal_open"].talent_id
 
-        # Insert a Report row with a file_path that does not exist on disk
-        stale_report = Report(
+        legacy_report = Report(
             talent_id=talent_id,
-            month="2020-01",
-            file_path="/nonexistent/path/that/does/not/exist.pdf",
+            talent_ids=None,  # pre-9.5 row
+            month="2026-05",
+            file_path=None,
             file_size_bytes=1234,
             generated_at=datetime.utcnow(),
         )
-        db_session.add(stale_report)
+        db_session.add(legacy_report)
         db_session.commit()
-        db_session.refresh(stale_report)
+        db_session.refresh(legacy_report)
 
-        response = auth_client.get(f"/reports/{stale_report.id}/download")
-        assert response.status_code == 404
+        response = auth_client.get(f"/reports/{legacy_report.id}/download")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
 
 
 class TestReportesTabExists:
@@ -367,25 +420,30 @@ def test_report_data_pipeline_is_snapshot(db_session):
 
 
 def test_generate_accepts_quarter_period(auth_client, db_session, mock_weasyprint):
-    """7.1/D5: POST with period_type=quarter generates a report labelled by quarter."""
+    """7.1/D5: POST with period_type=quarter streams a report labelled by quarter.
+
+    Fase 9.5: the response is a PDF stream; the period appears in the filename.
+    """
     t = _mk_talent(db_session)
     response = auth_client.post(
         "/reports/generate",
         json={"talent_id": t.id, "period_type": "quarter", "period_value": "2026-Q2"},
     )
     assert response.status_code == 200
-    assert response.json()["month"] == "2026-Q2"
+    assert response.headers["content-type"] == "application/pdf"
+    assert "2026-Q2" in response.headers.get("content-disposition", "")
 
 
 def test_generate_month_backcompat_still_works(auth_client, db_session, mock_weasyprint):
-    """7.1/D8: legacy `month`-only body is treated as period_type=month."""
+    """7.1/D8: legacy `month`-only body is treated as period_type=month (streamed)."""
     t = _mk_talent(db_session)
     response = auth_client.post(
         "/reports/generate",
         json={"talent_id": t.id, "month": "2026-05"},
     )
     assert response.status_code == 200
-    assert response.json()["month"] == "2026-05"
+    assert response.headers["content-type"] == "application/pdf"
+    assert "2026-05" in response.headers.get("content-disposition", "")
 
 
 def test_generate_invalid_period_value_returns_400(auth_client, db_session, mock_weasyprint):

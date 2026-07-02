@@ -144,11 +144,21 @@ class Report(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    talent_id: Mapped[int] = mapped_column(ForeignKey("talents.id"), index=True)
-    month: Mapped[str] = mapped_column(String, index=True)  # "YYYY-MM"
+    # Fase 9.5: nullable for consolidated reports (talent_ids="all" / multi), which
+    # have no single owning talent. Single-talent reports still set this.
+    talent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("talents.id"), index=True, nullable=True
+    )
+    month: Mapped[str] = mapped_column(String, index=True)  # "YYYY-MM" / "YYYY-QN"
     generated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    file_path: Mapped[str] = mapped_column(String)  # reports/{talent_id}/{YYYY-MM}.pdf
+    # Fase 9.5: PDFs are no longer persisted to disk — they are regenerated
+    # on demand from this row's metadata. file_path is kept nullable for history.
+    file_path: Mapped[str | None] = mapped_column(String, nullable=True)
     file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    # Fase 9.5 metadata: the regenerate key ("all" or "10" or "10,11,12") and the
+    # sha256 of the last-rendered PDF bytes (audit / change detection).
+    talent_ids: Mapped[str | None] = mapped_column(String, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
     talent: Mapped["Talent"] = relationship("Talent", lazy="select")
 

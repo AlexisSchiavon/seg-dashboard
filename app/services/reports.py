@@ -10,7 +10,7 @@ Security (STRIDE threat register, 05-02-PLAN.md):
   T-ssrf: _render_pdf passes the literal string "." as base_url to WeasyPrint — never a
     user-controlled value.
 """
-import os
+import hashlib
 import re
 from datetime import date, datetime
 
@@ -69,117 +69,176 @@ def available_months(db: Session, talent_id: int) -> list[str]:
     return sorted(months, reverse=True)
 
 
-def _slug(talent: Talent) -> str:
-    """Return a filesystem-safe slug for the talent.
+def _render_pdf_bytes(html_str: str) -> bytes:
+    """Render HTML to an in-memory PDF via WeasyPrint (Fase 9.5 — no disk file).
 
-    Uses str(talent.id) — purely numeric, no path separators, no Unicode issues.
-    Defends T-path-traversal: numeric IDs cannot contain '../' or special characters.
-    """
-    return str(talent.id)
-
-
-def _render_pdf(html_str: str, output_path: str) -> int:
-    """Render HTML to PDF via WeasyPrint. Returns file size in bytes.
-
-    Uses atomic write: writes to a .tmp file then os.replace() to the final path
-    (RESEARCH.md Pitfall 4 — prevents a corrupt/partial file being visible in the DB).
-
-    base_url is the literal string "." — NEVER a user-controlled value (T-ssrf defense).
+    base_url is the literal string "." — NEVER a user-controlled value (T-ssrf
+    defense). "." resolves relative asset URLs (the Inter @font-face) against the
+    process CWD, which is the project root both locally and in the container.
 
     HTML is resolved via the module-level name `HTML` (patched to a mock in tests,
-    or lazy-imported from weasyprint in production to avoid import-time failures
-    on systems without Pango/Cairo system libs).
+    or lazy-imported from weasyprint in production to avoid import-time failures on
+    systems without Pango/Cairo system libs).
     """
     global HTML  # noqa: PLW0603
     if HTML is None:
         from weasyprint import HTML as _HTML  # lazy import — only when actually rendering
         HTML = _HTML
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    tmp_path = output_path + ".tmp"
-    try:
-        HTML(string=html_str, base_url=".").write_pdf(tmp_path)
-        os.replace(tmp_path, output_path)
-    except Exception:
-        # WR-03: clean up the .tmp file so it does not linger on disk when WeasyPrint fails
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        raise
-    return os.path.getsize(output_path)
+    return HTML(string=html_str, base_url=".").write_pdf()
 
 
-def generate_report(
+def _resolve_talents(db: Session, talent_ids: "list[int] | str") -> list[Talent]:
+    """Resolve the report target into an ordered list of Talent rows.
+
+    talent_ids is either the literal "all" (every active talent, name-sorted) or a
+    list of talent ids. Raises ValueError(f"Talent {id} not found") on a bad id.
+    """
+    if talent_ids == "all":
+        return (
+            db.query(Talent)
+            .filter(Talent.active.is_(True))
+            .order_by(Talent.name)
+            .all()
+        )
+    talents: list[Talent] = []
+    for tid in talent_ids:
+        talent = db.get(Talent, tid)
+        if talent is None:
+            raise ValueError(f"Talent {tid} not found")
+        talents.append(talent)
+    return talents
+
+
+def _talent_ids_label(talent_ids: "list[int] | str", talents: list[Talent]) -> str:
+    """The stored regenerate key: "all" or a comma-joined list of talent ids."""
+    if talent_ids == "all":
+        return "all"
+    return ",".join(str(t.id) for t in talents)
+
+
+def generate_report_pdf(
     db: Session,
-    talent_id: int,
+    talent_ids: "list[int] | str",
     period_value: str,
     start: date | None = None,
     end: date | None = None,
 ) -> dict:
-    """Generate a single-talent data-driven PDF (Fase 9 — no Claude) and upsert its row.
+    """Render the report PDF in memory and upsert its metadata row (Fase 9.5).
 
-    period_value is the period label ("YYYY-MM" or "YYYY-QN"), used as the report
-    identifier (filename, Report.month, upsert key). start/end are the inclusive
-    period bounds for the won_time-scoped figures; when omitted they are derived
-    from period_value (month vs quarter inferred from "Q").
+    talent_ids: "all" (consolidated over every active talent) or a list of ids
+    (single or multi). period_value is the period label ("YYYY-MM" / "YYYY-QN").
 
-    Returns a dict matching the ReportOut schema shape (no narrative — D8).
-    Raises ValueError(f"Talent {talent_id} not found") if the talent doesn't exist.
+    The PDF is NOT written to disk — it is returned as bytes for streaming and can
+    be regenerated later from the stored row (regenerate_report_pdf). The row keeps
+    only metadata: talent_ids label, single talent_id (None when consolidated),
+    month, byte size, and the content sha256.
+
+    Returns {report_id, filename, pdf_bytes, content_hash, file_size_bytes,
+             talent_ids, talent_id, month, is_consolidated}.
+    Raises ValueError if a talent id is unknown or the target resolves to empty.
     """
-    talent = db.get(Talent, talent_id)
-    if talent is None:
-        raise ValueError(f"Talent {talent_id} not found")
+    talents = _resolve_talents(db, talent_ids)
+    if not talents:
+        raise ValueError("No talents to report")
 
     if start is None or end is None:
         period_type = "quarter" if "Q" in period_value else "month"
         start, end = periods_service.parse_period(period_type, period_value)
 
-    # Assemble the full document context (cover + one talent page) and render it.
-    ctx = build_report_context(db, [talent], period_value, start, end)
-    html_str = render_report_html(ctx)
-    file_path = f"reports/{_slug(talent)}/{period_value}.pdf"
-    file_size_bytes = _render_pdf(html_str, file_path)
+    ctx = build_report_context(db, talents, period_value, start, end)
+    pdf_bytes = _render_pdf_bytes(render_report_html(ctx))
+    content_hash = hashlib.sha256(pdf_bytes).hexdigest()
+    file_size_bytes = len(pdf_bytes)
 
-    # Upsert Report row (overwrite if same talent_id+period exists). The `month`
-    # column stores the period label (also "YYYY-QN" for quarters).
-    existing = (
-        db.query(Report)
-        .filter(Report.talent_id == talent_id, Report.month == period_value)
-        .first()
-    )
+    ids_label = _talent_ids_label(talent_ids, talents)
+    is_consolidated = ctx["is_consolidated"]
+    # Single owning talent only when exactly one target talent (keeps the FK/history
+    # link); consolidated reports store talent_id = None.
+    single_talent_id = talents[0].id if (talent_ids != "all" and len(talents) == 1) else None
+
+    if is_consolidated:
+        filename = f"reporte-consolidado-{period_value}.pdf"
+    else:
+        filename = f"reporte-{filename_slug(talents[0].name)}-{period_value}.pdf"
+
+    # Upsert overwrites in place. Single-talent rows are keyed on (talent_id, month)
+    # — the table's unique constraint — so a legacy row (talent_ids NULL) is reused
+    # instead of colliding. Consolidated rows (talent_id NULL) key on (talent_ids,
+    # month), since SQLite treats NULL talent_id as distinct.
+    if single_talent_id is not None:
+        existing = (
+            db.query(Report)
+            .filter(Report.talent_id == single_talent_id, Report.month == period_value)
+            .first()
+        )
+    else:
+        existing = (
+            db.query(Report)
+            .filter(Report.talent_ids == ids_label, Report.month == period_value)
+            .first()
+        )
     if existing is not None:
-        existing.file_path = file_path
+        existing.talent_id = single_talent_id
+        existing.file_path = None
         existing.file_size_bytes = file_size_bytes
+        existing.content_hash = content_hash
         existing.generated_at = datetime.utcnow()
-        db.commit()
-        db.refresh(existing)
         report = existing
     else:
         report = Report(
-            talent_id=talent_id,
+            talent_id=single_talent_id,
+            talent_ids=ids_label,
             month=period_value,
-            file_path=file_path,
+            file_path=None,
             file_size_bytes=file_size_bytes,
+            content_hash=content_hash,
             generated_at=datetime.utcnow(),
         )
         db.add(report)
-        db.commit()
-        db.refresh(report)
+    db.commit()
+    db.refresh(report)
 
     return {
-        "id": report.id,
-        "talent_id": report.talent_id,
-        "talent_name": talent.name,
-        "month": report.month,
-        "generated_at": report.generated_at,
-        "file_path": report.file_path,
-        "file_size_bytes": report.file_size_bytes,
+        "report_id": report.id,
+        "filename": filename,
+        "pdf_bytes": pdf_bytes,
+        "content_hash": content_hash,
+        "file_size_bytes": file_size_bytes,
+        "talent_ids": ids_label,
+        "talent_id": single_talent_id,
+        "month": period_value,
+        "is_consolidated": is_consolidated,
     }
+
+
+def regenerate_report_pdf(db: Session, report: Report) -> tuple[bytes, str]:
+    """Re-render a stored report's PDF on demand (Fase 9.5 — no disk persistence).
+
+    Reconstructs the target from the row's talent_ids label and period (month),
+    re-renders, and returns (pdf_bytes, filename). Raises ValueError if a talent
+    referenced by the row no longer exists.
+    """
+    label = report.talent_ids
+    if label == "all":
+        talent_ids: "list[int] | str" = "all"
+    elif label:
+        talent_ids = [int(x) for x in label.split(",") if x]
+    elif report.talent_id is not None:
+        # Legacy row created before talent_ids existed — fall back to the FK.
+        talent_ids = [report.talent_id]
+    else:
+        raise ValueError("Report row has no talent target to regenerate")
+
+    result = generate_report_pdf(db, talent_ids, report.month)
+    return result["pdf_bytes"], result["filename"]
 
 
 def list_reports(db: Session) -> list[dict]:
     """Return all Report rows ordered by generated_at desc, with talent_name resolved.
 
-    Each entry matches the ReportHistoryItem schema shape.
+    Consolidated rows (talent_id is None) are labelled "Consolidado". Each entry
+    matches the ReportHistoryItem schema shape.
     """
     reports = (
         db.query(Report)
@@ -189,8 +248,11 @@ def list_reports(db: Session) -> list[dict]:
 
     result = []
     for report in reports:
-        talent = db.get(Talent, report.talent_id)
-        talent_name = talent.name if talent is not None else "Sin talento"
+        if report.talent_id is None:
+            talent_name = "Consolidado"
+        else:
+            talent = db.get(Talent, report.talent_id)
+            talent_name = talent.name if talent is not None else "Sin talento"
         result.append(
             {
                 "id": report.id,

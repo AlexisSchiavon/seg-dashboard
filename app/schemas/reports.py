@@ -5,6 +5,7 @@ all responses are built from service-layer dicts, not ORM rows directly.
 (Same convention as app/schemas/leads.py per 03-PATTERNS.md.)
 """
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -12,17 +13,24 @@ from pydantic import BaseModel, Field
 class ReportGenerate(BaseModel):
     """POST /reports/generate request body.
 
-    Fase 7 (D8): the report can be scoped to a month or a quarter.
-    - period_type/period_value are the Fase-7 way ("month"/"quarter" + "YYYY-MM"
-      / "YYYY-QN"). When both are present they take precedence.
-    - `month` is the legacy parameter, now optional and DEPRECATED. A month-only
-      body is treated as period_type="month", period_value=<month>.
+    Fase 9.5: the report can target one talent, several, or all of them.
+    - talent_ids is the Fase-9.5 way: a list of ids, or the literal "all"
+      (consolidated report over every active talent).
+    - talent_id is the legacy singular field, kept for back-compat; treated as
+      talent_ids=[talent_id] when talent_ids is omitted.
+
+    Fase 7 (D8): the period can be a month or a quarter.
+    - period_type/period_value take precedence when both are present.
+    - `month` is the legacy period parameter, treated as period_type="month".
     The router validates period_value via periods.parse_period (400 on bad input).
     """
 
-    talent_id: int
-    # DEPRECATED (D8): kept for back-compat. Strict YYYY-MM regex still rejects
-    # malformed months (e.g. 2026-00, 2026-13) at the schema boundary (422).
+    # Fase 9.5 target — list of talent ids or the literal "all".
+    talent_ids: list[int] | Literal["all"] | None = None
+    # DEPRECATED back-compat singular target (was required pre-9.5).
+    talent_id: int | None = None
+    # DEPRECATED (D8): legacy month. Strict YYYY-MM regex rejects malformed months
+    # (e.g. 2026-00, 2026-13) at the schema boundary (422).
     month: str | None = Field(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     period_type: str | None = None
     period_value: str | None = None
@@ -41,10 +49,10 @@ class ReportOut(BaseModel):
 
 
 class ReportHistoryItem(BaseModel):
-    """GET /reports/ list item."""
+    """GET /reports/ list item. talent_id is None for consolidated reports."""
 
     id: int
-    talent_id: int
+    talent_id: int | None
     talent_name: str
     month: str
     generated_at: datetime
