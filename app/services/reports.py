@@ -367,12 +367,16 @@ def build_report_context(
     period_value: str,
     start: date,
     end: date,
+    now: datetime | None = None,
 ) -> dict:
     """Build the full document context (cover + one page per talent).
 
     Single talent -> cover shows that talent's name and headline KPIs.
     Multiple talents ('all') -> cover title is 'Reporte consolidado' and the
     headline KPIs are summed across talents (D2/D7).
+
+    `now` overrides the generation timestamp — used by the golden-file test to
+    render a deterministic cover (D10).
     """
     talent_reports = [build_talent_report(db, t, start, end) for t in talents]
 
@@ -385,7 +389,7 @@ def build_report_context(
         title = talents[0].name if talents else "Reporte"
         cover_kpis = talent_reports[0]["headline_kpis"] if talent_reports else []
 
-    now = datetime.utcnow()
+    now = now or datetime.utcnow()
     return {
         "title": title,
         "is_consolidated": is_consolidated,
