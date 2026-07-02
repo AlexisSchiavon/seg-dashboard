@@ -40,7 +40,7 @@ from app.services import periods as periods_service
 # Jinja2 environment — autoescape=True to HTML-escape all Jinja2 variables,
 # including Claude-generated prose (protects against XSS in any future web rendering).
 _jinja_env = Environment(
-    loader=FileSystemLoader("templates"),
+    loader=FileSystemLoader("app/templates"),
     autoescape=True,
 )
 
