@@ -198,6 +198,61 @@ def projection_bar_chart_svg(projection: list[dict], width: int = 300) -> Markup
     return Markup("".join(parts))
 
 
+def talent_projection_svg(projection70: list[dict], width: int = 680) -> Markup:
+    """Fase 9.7 — single-value monthly bars for the talent's 'Estimado a cobrar'.
+
+    `projection70` is a list of {month, estimado70, is_current, has_data}. Each
+    month is one green bar (the talent's 70% still to be collected). Months with
+    no data render a dashed baseline + 'Sin cobros programados'. No internal
+    breakdown by list_state is exposed (talent audience).
+    """
+    height = 200
+    top_pad = 22
+    bottom_pad = 30
+    plot_h = height - top_pad - bottom_pad
+    n = max(len(projection70), 1)
+    gap = 14
+    col_w = (width - gap * (n - 1)) / n
+    max_val = max((m.get("estimado70") or 0 for m in projection70), default=0) or 1.0
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="{height}" '
+        f'viewBox="0 0 {width} {height}" preserveAspectRatio="xMinYMin meet" '
+        f'font-family="Inter, sans-serif">'
+    ]
+    base_y = top_pad + plot_h
+    for i, m in enumerate(projection70):
+        x = i * (col_w + gap)
+        cx = x + col_w / 2
+        val = m.get("estimado70") or 0
+        month = escape(str(m.get("month", "")))
+        if val <= 0:
+            parts.append(
+                f'<rect x="{x:.1f}" y="{base_y - 5:.1f}" width="{col_w:.1f}" height="5" '
+                f'rx="2" fill="none" stroke="{TEXT3}" stroke-dasharray="3 2" opacity="0.5"/>'
+            )
+            parts.append(
+                f'<text x="{cx:.1f}" y="{base_y - 12:.1f}" text-anchor="middle" '
+                f'font-size="9" fill="{TEXT3}">Sin cobros</text>'
+            )
+        else:
+            bar_h = plot_h * (val / max_val)
+            parts.append(
+                f'<rect x="{x:.1f}" y="{base_y - bar_h:.1f}" width="{col_w:.1f}" '
+                f'height="{bar_h:.1f}" rx="4" fill="{GREEN}"/>'
+            )
+            parts.append(
+                f'<text x="{cx:.1f}" y="{base_y - bar_h - 6:.1f}" text-anchor="middle" '
+                f'font-size="11" font-weight="700" fill="{GREEN_T}">{_fmt_mxn(val)}</text>'
+            )
+        parts.append(
+            f'<text x="{cx:.1f}" y="{base_y + 16:.1f}" text-anchor="middle" '
+            f'font-size="10" font-weight="600" fill="{TEXT2}">{month}</text>'
+        )
+    parts.append("</svg>")
+    return Markup("".join(parts))
+
+
 def lost_donut_svg(lost_summary: list[dict], size: int = 92) -> Markup:
     """Donut (ring) of lost opportunities by reason, matching renderLostOpportunities().
 

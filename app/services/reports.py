@@ -12,17 +12,16 @@ Security (STRIDE threat register, 05-02-PLAN.md):
 """
 import hashlib
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.models import Deal, Report, Talent
+from app.models import Deal, Report, Talent, TrelloCard
 from app.services import kpis as kpi_service
 from app.services import periods as periods_service
 from app.services import report_charts
-from app.services import trello_service
 
 # HTML is imported lazily inside _render_pdf() to avoid failing on macOS/CI environments
 # that lack Pango/Cairo system libs. monkeypatch fixtures patch this module-level name
@@ -44,6 +43,12 @@ _jinja_env = Environment(
 #   |mxn_full -> "$1,234,567" full pesos with thousands separators
 _jinja_env.filters["mxn"] = report_charts._fmt_mxn
 _jinja_env.filters["mxn_full"] = lambda v: f"${float(v or 0):,.0f}"
+# |mxn_headline -> compact "$1.67M" for >= 1M (avoids wrapping in the firmadas
+# sublabel), full "$557,900" otherwise. Used only on "Valor total en tu 70%".
+_jinja_env.filters["mxn_headline"] = lambda v: (
+    f"${float(v or 0) / 1_000_000:.2f}M" if float(v or 0) >= 1_000_000
+    else f"${float(v or 0):,.0f}"
+)
 
 
 def available_months(db: Session, talent_id: int) -> list[str]:
@@ -309,55 +314,121 @@ def _format_won_date(iso_str: str | None) -> str:
     return f"{d.day} {_MONTHS_ES[d.month - 1][:3].lower()} {d.year}"
 
 
-def build_talent_report(db: Session, talent: Talent, start: date, end: date) -> dict:
-    """Assemble one talent's full widget dataset + pre-rendered SVG charts.
+def _signed_deal_estado(card: "TrelloCard | None", start: date, end: date) -> tuple[str, str]:
+    """Badge (css class, label) for a signed deal, aligned to the KPI semantics (P3).
 
-    Data sources (identical to app/routers/dashboard.py get_talent_detail):
-      - kpi_service.flujo_dinero_kpis  -> 3 headline tiles (firmadas/cobrado/pendiente)
-      - kpi_service.talent_detail      -> Pipeline/Cerrados/Comisión, funnel, lost_summary
-      - trello_service.income_projection / payment_calendar / deals_for_talent
-      - kpi_service.deals_won_in_period -> detailed "deals firmados en el periodo" list
+    'Cobrado' is shown ONLY when the card is 'cerrado' AND its collection_date is
+    within the report month — matching the "Cobrado este mes" KPI. A deal collected
+    in a different month reads 'En ejecución', not 'Cobrado', so the table total no
+    longer contradicts the headline KPI.
     """
-    flujo = kpi_service.flujo_dinero_kpis(db, talent.id, start=start, end=end)
-    detail = kpi_service.talent_detail(db, talent.id, start=start, end=end)
-    projection = trello_service.income_projection(db, talent.id) or []
-    calendar = trello_service.payment_calendar(db, talent.id) or []
-    active_deals = trello_service.deals_for_talent(db, talent.id) or []
-    won = kpi_service.deals_won_in_period(db, start.isoformat(), end.isoformat(), talent.id)
+    if card is None:
+        return "firmado", "Firmado"
+    if card.list_state == "cerrado":
+        if card.collection_date and start <= card.collection_date <= end:
+            return "cobrado", "Cobrado"
+        return "ejecucion", "En ejecución"  # collected in a different month
+    if card.list_state == "cobranza":
+        return "cobranza", "Por cobrar"
+    return "ejecucion", "En ejecución"
 
-    # Top 3 active campaigns by amount (exclude lost), mirrors renderTopCampaigns.
-    top_deals = sorted(
-        (d for d in active_deals if d.get("list_state") != "perdido"),
-        key=lambda d: d.get("amount") or 0.0,
-        reverse=True,
-    )[:3]
 
-    signed = [
-        {
-            "title": d["title"],
-            "date": _format_won_date(d.get("won_time")),
-            "value": d["value"],
-            "talent_name": d.get("talent_name", talent.name),
-        }
-        for d in won["deals"]
+def _talent_projection_70(db: Session, talent: Talent) -> list[dict]:
+    """Forward-only 4-month projection of the talent's 70% still to be collected (P4).
+
+    Same universe as account_status 'proximos_meses' — ejecucion/cobranza cards
+    whose resolved collection_date is today or later — bucketed by month. This keeps
+    the projection bars consistent with the "por cobrar próximos meses" tile (a card
+    due earlier this month is overdue, not projected).
+    """
+    import calendar
+
+    from app.services.trello_service import _sliding_window_months, resolve_collection_date
+
+    today = date.today()
+    window = _sliding_window_months(today)
+    labels = [f"{calendar.month_abbr[d.month]} {d.year}" for d in window]
+    sums = {lbl: 0.0 for lbl in labels}
+
+    rows = (
+        db.query(TrelloCard, Deal)
+        .join(Deal, TrelloCard.deal_id == Deal.id)
+        .filter(Deal.talent_id == talent.id)
+        .all()
+    )
+    for card, deal in rows:
+        if card.list_state not in ("ejecucion", "cobranza"):
+            continue
+        resolved = card.collection_date or resolve_collection_date(None, deal)
+        if resolved < today:
+            continue  # overdue, not projected (P4 — align with proximos_meses)
+        lbl = f"{calendar.month_abbr[resolved.month]} {resolved.year}"
+        if lbl in sums:
+            sums[lbl] += kpi_service._talent_70(deal)
+
+    return [
+        {"month": lbl, "estimado70": sums[lbl], "is_current": i == 0,
+         "has_data": sums[lbl] > 0}
+        for i, lbl in enumerate(labels)
     ]
+
+
+def build_talent_report(db: Session, talent: Talent, start: date, end: date) -> dict:
+    """Assemble one talent's TALENT-FACING dataset (Fase 9.7, audience = talent).
+
+    Only talent-appropriate figures — all money in the talent's 70% share. No
+    pipeline, TA commission, funnel, prospectos/calificados, lost donut, or the
+    payment-calendar placeholder (those are TA-internal and were removed).
+
+    Data sources:
+      - kpi_service.compute_talent_facing_kpis -> Row 1 (firmadas/cobrado/por cobrar, 70%)
+      - kpi_service.account_status_breakdown -> Row 2 "Estado de tus cuentas" (70%)
+      - won deals in period + Trello card    -> Row 3 detail table (70% + estado)
+      - _talent_projection_70                -> page-2 projection (70%, forward-only)
+    """
+    talent_kpis = kpi_service.compute_talent_facing_kpis(db, talent.id, start, end)
+    account_status = kpi_service.account_status_breakdown(db, talent.id)
+
+    # Row 3 — campañas firmadas del mes, newest first, con su 70% y estado (badge).
+    start_dt = datetime(start.year, start.month, start.day)
+    end_excl = datetime(end.year, end.month, end.day) + timedelta(days=1)
+    won_rows = (
+        db.query(Deal)
+        .filter(
+            Deal.talent_id == talent.id,
+            Deal.status == "won",
+            Deal.won_time.isnot(None),
+            Deal.won_time >= start_dt,
+            Deal.won_time < end_excl,
+        )
+        .order_by(Deal.won_time.desc())
+        .all()
+    )
+    signed = []
+    for d in won_rows:
+        card = db.query(TrelloCard).filter(TrelloCard.deal_id == d.id).first()
+        cls, label = _signed_deal_estado(card, start, end)
+        signed.append({
+            "title": d.title,
+            "date": _format_won_date(d.won_time.isoformat() if d.won_time else None),
+            "value70": kpi_service._talent_70(d),
+            "estado_cls": cls,
+            "estado_label": label,
+        })
+    signed_total_70 = sum(s["value70"] for s in signed)
+
+    projection70 = _talent_projection_70(db, talent)
 
     return {
         "talent_name": talent.name,
         "slug": filename_slug(talent.name),
-        "headline_kpis": flujo["kpis"],
-        "detail_kpis": detail["kpis"],
-        "funnel": detail["funnel"],
-        "lost_summary": detail["lost_summary"],
-        "projection": projection,
-        "calendar": calendar,
-        "top_deals": top_deals,
-        "signed_deals": signed,
-        "signed_total": won["total_value"],
-        # Pre-rendered SVG charts (D5) — markupsafe.Markup, inlined verbatim by Jinja.
-        "funnel_svg": report_charts.funnel_chart_svg(detail["funnel"]),
-        "projection_svg": report_charts.projection_bar_chart_svg(projection),
-        "donut_svg": report_charts.lost_donut_svg(detail["lost_summary"]),
+        "talent_kpis": talent_kpis,               # Row 1 (70%)
+        "account_status": account_status,         # Row 2 (70%)
+        "signed_deals": signed,                   # Row 3 detail
+        "signed_count": len(signed),
+        "signed_total_70": signed_total_70,
+        "projection70": projection70,             # page 2
+        "projection70_svg": report_charts.talent_projection_svg(projection70),
     }
 
 
@@ -381,21 +452,19 @@ def build_report_context(
     talent_reports = [build_talent_report(db, t, start, end) for t in talents]
 
     is_consolidated = len(talents) > 1
-    if is_consolidated:
-        title = "Reporte consolidado"
-        # Sum each headline KPI across talents, preserving label/variant/count.
-        cover_kpis = _aggregate_headline_kpis(talent_reports)
-    else:
-        title = talents[0].name if talents else "Reporte"
-        cover_kpis = talent_reports[0]["headline_kpis"] if talent_reports else []
+    title = "Reporte consolidado" if is_consolidated else (
+        talents[0].name if talents else "Reporte"
+    )
 
     now = now or datetime.utcnow()
     return {
+        # Fase 9.7 (P1): the cover is branding-only — no sensitive KPIs (those are
+        # 100%/all-time; the talent-facing 70% figures live on the talent pages).
         "title": title,
         "is_consolidated": is_consolidated,
+        "talent_count": len(talents),
         "period_label": _period_label(period_value),
         "period_value": period_value,
-        "cover_kpis": cover_kpis,
         "talents": talent_reports,
         "generated_at": now.strftime("%Y-%m-%d %H:%M"),
         "generated_stamp": now.strftime("%Y-%m-%d %H:%M UTC"),
@@ -405,28 +474,3 @@ def build_report_context(
 def render_report_html(ctx: dict) -> str:
     """Render the full multi-page report HTML (cover + one page per talent)."""
     return _jinja_env.get_template("reports/base.html").render(ctx=ctx)
-
-
-def _aggregate_headline_kpis(talent_reports: list[dict]) -> list[dict]:
-    """Sum the 3 headline KPI tiles across talents for the consolidated cover."""
-    if not talent_reports:
-        return []
-    template = talent_reports[0]["headline_kpis"]
-    agg = []
-    for idx, tile in enumerate(template):
-        total_value = sum(tr["headline_kpis"][idx]["value"] for tr in talent_reports)
-        counts = [tr["headline_kpis"][idx].get("count") for tr in talent_reports]
-        total_count = (
-            sum(c for c in counts if c is not None)
-            if any(c is not None for c in counts)
-            else None
-        )
-        agg.append(
-            {
-                "label": tile["label"],
-                "variant": tile["variant"],
-                "value": float(total_value),
-                "count": total_count,
-            }
-        )
-    return agg

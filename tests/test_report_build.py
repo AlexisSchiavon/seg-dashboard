@@ -6,7 +6,6 @@ context and the rendered HTML string). The real-engine PDF smoke lives in
 tests/test_report_render.py.
 """
 
-import pytest
 from markupsafe import Markup
 
 from app.models import Talent
@@ -33,41 +32,34 @@ class TestSlugAndLabels:
 
 
 class TestBuildTalentReport:
-    def test_returns_all_widget_keys(self, db_session, seed_deals, seed_trello_cards):
+    def test_returns_talent_facing_keys(self, db_session, seed_deals, seed_trello_cards):
+        """Fase 9.7: the talent dataset carries only talent-appropriate keys."""
         talent = db_session.get(Talent, seed_deals["deal_open"].talent_id)
         start, end = _period()
         data = reports_service.build_talent_report(db_session, talent, start, end)
 
         for key in (
-            "talent_name", "slug", "headline_kpis", "detail_kpis", "funnel",
-            "lost_summary", "projection", "calendar", "top_deals",
-            "signed_deals", "signed_total", "funnel_svg", "projection_svg", "donut_svg",
+            "talent_name", "slug", "talent_kpis", "account_status",
+            "signed_deals", "signed_count", "signed_total_70",
+            "projection70", "projection70_svg",
         ):
             assert key in data
 
-        # 3 headline tiles (firmadas/cobrado/pendiente), 3 snapshot tiles
-        assert [t["label"] for t in data["headline_kpis"]] == [
-            "Campañas firmadas", "Cobrado", "Pendiente por cobrar",
-        ]
-        # funnel has all 6 canonical stages
-        assert len(data["funnel"]) == 6
-        # charts are inlineable Markup SVGs
-        assert isinstance(data["funnel_svg"], Markup)
-        assert str(data["funnel_svg"]).lstrip().startswith("<svg")
+        # TA-internal fields must NOT leak into the talent dataset (D-9.7). Note
+        # headline_kpis is gone too (P1): the cover no longer shows KPIs.
+        for gone in ("headline_kpis", "detail_kpis", "funnel", "lost_summary",
+                     "top_deals", "funnel_svg", "donut_svg", "projection_svg"):
+            assert gone not in data
 
-    def test_funnel_includes_trello_stages_h0901(self, db_session, seed_deals, seed_trello_cards):
-        """H-04 / H-09-01: the report funnel overlays the Trello-sourced stages
-        (En ejecución / Cobranza) via funnel_service.talent_funnel.
-
-        seed_trello_cards links card_ejecucion → deal_open (talent_a), so that
-        talent's 'En ejecución' stage must be populated (was always 0 pre-9.2).
-        """
-        talent = db_session.get(Talent, seed_deals["deal_open"].talent_id)
-        start, end = _period()
-        data = reports_service.build_talent_report(db_session, talent, start, end)
-
-        stages = {s["stage"]: s for s in data["funnel"]}
-        assert stages["En ejecución"]["count"] >= 1
+        # Talent KPIs are the 70% headline numbers
+        assert set(data["talent_kpis"]) == {
+            "firmadas_count", "firmadas_70", "cobrado_70", "por_cobrar_70",
+        }
+        # Account-status buckets present
+        assert set(data["account_status"]) == {"proximos_meses", "retraso", "cobrado_ano"}
+        # Projection chart is inlineable Markup SVG
+        assert isinstance(data["projection70_svg"], Markup)
+        assert str(data["projection70_svg"]).lstrip().startswith("<svg")
 
 
 class TestBuildReportContext:
@@ -81,8 +73,10 @@ class TestBuildReportContext:
         assert ctx["period_label"] == "Junio 2026"
         assert len(ctx["talents"]) == 1
         assert "UTC" in ctx["generated_stamp"]
+        # P1: the cover carries no KPI data
+        assert "cover_kpis" not in ctx
 
-    def test_consolidated_context_aggregates_kpis(self, db_session, seed_deals, seed_trello_cards):
+    def test_consolidated_context_is_branding_only(self, db_session, seed_deals, seed_trello_cards):
         talents = db_session.query(Talent).filter(Talent.active.is_(True)).all()
         assert len(talents) >= 2  # sanity: seed provides multiple talents
         start, end = _period()
@@ -90,11 +84,10 @@ class TestBuildReportContext:
 
         assert ctx["is_consolidated"] is True
         assert ctx["title"] == "Reporte consolidado"
+        assert ctx["talent_count"] == len(talents)
         assert len(ctx["talents"]) == len(talents)
-        # aggregated headline value == sum of per-talent headline values
-        agg_firmadas = ctx["cover_kpis"][0]["value"]
-        per_talent_sum = sum(t["headline_kpis"][0]["value"] for t in ctx["talents"])
-        assert agg_firmadas == pytest.approx(per_talent_sum)
+        # P1: no aggregated sensitive KPIs on the cover
+        assert "cover_kpis" not in ctx
 
 
 class TestRenderHtml:
@@ -108,10 +101,16 @@ class TestRenderHtml:
 
         assert talent.name in html
         assert "Junio 2026" in html
-        # section titles from the widgets
-        assert "Embudo del talento" in html
-        assert "Deals firmados en el periodo" in html
-        assert "Top campañas firmadas" in html
+        # talent-facing section titles
+        assert "Estado de tus cuentas" in html
+        assert "Detalle de campañas firmadas del mes" in html
+        assert "Proyección de tus próximos ingresos" in html
+        assert "Talent Agency gestiona el proceso de cobro" in html  # disclaimer
+        # TA-internal widgets removed (D-9.7)
+        assert "Embudo del talento" not in html
+        assert "Pipeline" not in html
+        assert "Comisión" not in html
+        assert "Oportunidades perdidas" not in html
         # SVG charts inlined (not escaped)
         assert "<svg" in html
         # no unrendered Jinja tokens leaked into the output

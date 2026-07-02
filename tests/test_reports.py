@@ -382,13 +382,12 @@ def _mk_won(db, talent_id, pid, value, won_dt, commission=0.0):
     return d
 
 
-def _detail_kpi(data, label):
-    """Pluck a detail KPI tile by label from a build_talent_report dict."""
-    return next(k for k in data["detail_kpis"] if k["label"] == label)
+def test_report_data_firmadas_uses_won_time(db_session):
+    """Fase 9.7: talent-facing 'firmadas' (70%) counts only won_time within the period.
 
-
-def test_report_data_filters_won_by_won_time(db_session):
-    """7.1/P2/D4 (Fase 9): report 'Cerrados' figures use won_time within the period."""
+    (Pipeline / Cerrados / Comisión are no longer in the talent report — that
+    logic is covered by test_kpis; the won_time window is re-checked here.)
+    """
     from app.services import reports as reports_service
 
     t = _mk_talent(db_session)
@@ -396,27 +395,8 @@ def test_report_data_filters_won_by_won_time(db_session):
     _mk_won(db_session, t.id, 50002, 90000.0, _dt(2026, 3, 10), commission=63000.0)  # outside June
 
     data = reports_service.build_talent_report(db_session, t, _date(2026, 6, 1), _date(2026, 6, 30))
-    cerrados = _detail_kpi(data, "Cerrados")
-    assert cerrados["count"] == 1
-    assert cerrados["value"] == 10000.0
-    assert _detail_kpi(data, "Comisión")["value"] == 7000.0
-
-
-def test_report_data_pipeline_is_snapshot(db_session):
-    """7.1/P2/D4 (Fase 9): open pipeline is NOT filtered by period in the report."""
-    from app.services import reports as reports_service
-
-    t = _mk_talent(db_session)
-    db_session.add(_Deal(
-        pipedrive_id=50101, title="Abierto", value=55000.0, currency="MXN",
-        stage_id=2, stage_name="Negociación", status="open", talent_id=t.id,
-        update_time="2026-03-01T00:00:00", add_time="2026-03-01T00:00:00",
-    ))
-    db_session.commit()
-
-    # June period — the March-created open deal must still appear in pipeline (snapshot)
-    data = reports_service.build_talent_report(db_session, t, _date(2026, 6, 1), _date(2026, 6, 30))
-    assert _detail_kpi(data, "Pipeline")["value"] == 55000.0
+    assert data["talent_kpis"]["firmadas_count"] == 1
+    assert data["talent_kpis"]["firmadas_70"] == 7000.0  # only the June deal's 70%
 
 
 def test_generate_accepts_quarter_period(auth_client, db_session, mock_weasyprint):

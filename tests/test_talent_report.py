@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Deal, Talent, TrelloCard
 from app.services import kpis as kpi_service
+from app.services import reports as reports_service
 
 
 def _talent(db: Session, name="Tal Prueba") -> Talent:
@@ -110,3 +111,50 @@ class TestAccountStatusBreakdown:
         res = kpi_service.account_status_breakdown(db_session, t.id)
         assert res["retraso"]["count"] == 1                 # only the valid one
         assert res["retraso"]["value70"] == 7000.0          # 10000*0.70, garbage excluded
+
+
+class TestSignedDealBadge:
+    """P3: 'Cobrado' badge only when the card is cerrado AND collected in the month."""
+
+    def test_cobrado_only_when_collected_in_report_month(self, db_session):
+        t = _talent(db_session)
+        # Firmado en junio + cerrado cobrado EN junio -> "Cobrado"
+        d1 = _deal(db_session, t.id, 8001, 100000.0, won_time=datetime(2026, 6, 10))
+        _card(db_session, "c1", "cerrado", d1.id, date(2026, 6, 20))
+        # Firmado en junio + cerrado cobrado en AGOSTO -> "En ejecución" (no este mes)
+        d2 = _deal(db_session, t.id, 8002, 50000.0, won_time=datetime(2026, 6, 11))
+        _card(db_session, "c2", "cerrado", d2.id, date(2026, 8, 1))
+        # Firmado en junio SIN card -> "Firmado"
+        _deal(db_session, t.id, 8003, 20000.0, won_time=datetime(2026, 6, 12))
+
+        data = reports_service.build_talent_report(db_session, t, date(2026, 6, 1), date(2026, 6, 30))
+        badges = {s["title"]: s["estado_label"] for s in data["signed_deals"]}
+        assert badges["Deal 8001"] == "Cobrado"
+        assert badges["Deal 8002"] == "En ejecución"
+        assert badges["Deal 8003"] == "Firmado"
+
+
+class TestTalentProjection:
+    """P4: projection is forward-only (>= today), excludes cerrado, and stays
+    consistent with account_status 'proximos_meses'."""
+
+    def test_projection_excludes_overdue_and_collected(self, db_session):
+        t = _talent(db_session)
+        # Future ejecucion, IN-window (August) -> counted
+        d_fut = _deal(db_session, t.id, 8101, 100000.0)
+        _card(db_session, "pf", "ejecucion", d_fut.id, date(2026, 8, 1))
+        # Overdue cobranza (March) -> excluded
+        d_late = _deal(db_session, t.id, 8102, 500000.0)
+        _card(db_session, "pl", "cobranza", d_late.id, date(2026, 3, 1))
+        # Cerrado, future -> excluded (already collected, not a projection)
+        d_col = _deal(db_session, t.id, 8103, 300000.0)
+        _card(db_session, "pc", "cerrado", d_col.id, date(2026, 8, 1))
+
+        data = reports_service.build_talent_report(db_session, t, date(2026, 6, 1), date(2026, 6, 30))
+        total = sum(m["estimado70"] for m in data["projection70"])
+        assert total == 70000.0  # only the future ejecucion card (100000*0.70)
+
+        # Consistency (P4): with all future cards in-window, projection total ==
+        # the "por cobrar próximos meses" tile.
+        prox = kpi_service.account_status_breakdown(db_session, t.id)["proximos_meses"]["value70"]
+        assert total == prox

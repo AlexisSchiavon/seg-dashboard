@@ -1,4 +1,5 @@
-{# Portada rica (D7): brand badge, título, periodo, 3 KPI headline tiles, pie. #}
+{# Portada — branding only (Fase 9.7 / P1): sin KPIs sensibles.
+   TA badge + nombre + periodo + pie. Los números 70% viven en las páginas del talento. #}
 <div class="cover">
   <div class="cover-brand">
     <div class="brand-badge">TA</div>
@@ -9,14 +10,8 @@
   <div class="cover-period">{{ ctx.period_label }}</div>
 
   {% if ctx.is_consolidated %}
-    <div class="section-title">Resumen de {{ ctx.talents | length }} talentos</div>
+    <div class="section-title">Resumen de {{ ctx.talent_count }} talentos</div>
   {% endif %}
-
-  <div class="cover-kpis">
-    {% for tile in ctx.cover_kpis %}
-      {% include "reports/widgets/kpi_tile.html" %}
-    {% endfor %}
-  </div>
 
   <div class="cover-foot">
     Santillán Entertainment Group · Inteligencia comercial · Generado {{ ctx.generated_stamp }}
