@@ -36,6 +36,13 @@ from app.services import funnel as funnel_service
 from app.services import kpis as kpi_service
 from app.services import leads as leads_service
 from app.services import periods as periods_service
+from app.services import report_charts
+from app.services import trello_service
+
+_MONTHS_ES = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+]
 
 # Jinja2 environment — autoescape=True to HTML-escape all Jinja2 variables,
 # including Claude-generated prose (protects against XSS in any future web rendering).
@@ -43,6 +50,11 @@ _jinja_env = Environment(
     loader=FileSystemLoader("app/templates"),
     autoescape=True,
 )
+# Currency filters shared by the report templates.
+#   |mxn      -> compact "$1.2M" / "$50K" / "$0"  (matches dashboard formatMXN)
+#   |mxn_full -> "$1,234,567" full pesos with thousands separators
+_jinja_env.filters["mxn"] = report_charts._fmt_mxn
+_jinja_env.filters["mxn_full"] = lambda v: f"${float(v or 0):,.0f}"
 
 SYSTEM_PROMPT = (
     "Eres un analista de inteligencia comercial para Santillán Entertainment Group, "
@@ -370,3 +382,164 @@ def list_reports(db: Session) -> list[dict]:
         )
 
     return result
+
+
+# =============================================================================
+# Fase 9.4 — Redesigned data-driven report (no Claude narrative, D8).
+# These assembly helpers reuse the SAME services the "Por Talento" dashboard tab
+# consumes, so the PDF is a 1:1 data match (D1). They do NOT touch the DB.
+# =============================================================================
+
+
+def filename_slug(name: str) -> str:
+    """Filesystem/URL-safe slug: lowercase, accents stripped, hyphen-separated.
+
+    'Emicánico Pérez' -> 'emicanico-perez'. Empty/garbage collapses to 'talento'.
+    """
+    import unicodedata
+
+    normalized = unicodedata.normalize("NFKD", name or "")
+    ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_only).strip("-").lower()
+    return slug or "talento"
+
+
+def _period_label(period_value: str) -> str:
+    """'2026-06' -> 'Junio 2026'; '2026-Q2' -> 'Q2 2026'; passthrough otherwise."""
+    m = re.fullmatch(r"(\d{4})-(0[1-9]|1[0-2])", period_value or "")
+    if m:
+        return f"{_MONTHS_ES[int(m.group(2)) - 1]} {m.group(1)}"
+    q = re.fullmatch(r"(\d{4})-Q([1-4])", period_value or "")
+    if q:
+        return f"Q{q.group(2)} {q.group(1)}"
+    return period_value or ""
+
+
+def _format_won_date(iso_str: str | None) -> str:
+    """ISO 'YYYY-MM-DDThh:mm:ss' -> 'D mmm YYYY' in Spanish (e.g. '15 jun 2026')."""
+    if not iso_str:
+        return "—"
+    try:
+        d = datetime.fromisoformat(iso_str.replace("Z", "").split("T")[0])
+    except ValueError:
+        return "—"
+    return f"{d.day} {_MONTHS_ES[d.month - 1][:3].lower()} {d.year}"
+
+
+def build_talent_report(db: Session, talent: Talent, start: date, end: date) -> dict:
+    """Assemble one talent's full widget dataset + pre-rendered SVG charts.
+
+    Data sources (identical to app/routers/dashboard.py get_talent_detail):
+      - kpi_service.flujo_dinero_kpis  -> 3 headline tiles (firmadas/cobrado/pendiente)
+      - kpi_service.talent_detail      -> Pipeline/Cerrados/Comisión, funnel, lost_summary
+      - trello_service.income_projection / payment_calendar / deals_for_talent
+      - kpi_service.deals_won_in_period -> detailed "deals firmados en el periodo" list
+    """
+    flujo = kpi_service.flujo_dinero_kpis(db, talent.id, start=start, end=end)
+    detail = kpi_service.talent_detail(db, talent.id, start=start, end=end)
+    projection = trello_service.income_projection(db, talent.id) or []
+    calendar = trello_service.payment_calendar(db, talent.id) or []
+    active_deals = trello_service.deals_for_talent(db, talent.id) or []
+    won = kpi_service.deals_won_in_period(db, start.isoformat(), end.isoformat(), talent.id)
+
+    # Top 3 active campaigns by amount (exclude lost), mirrors renderTopCampaigns.
+    top_deals = sorted(
+        (d for d in active_deals if d.get("list_state") != "perdido"),
+        key=lambda d: d.get("amount") or 0.0,
+        reverse=True,
+    )[:3]
+
+    signed = [
+        {
+            "title": d["title"],
+            "date": _format_won_date(d.get("won_time")),
+            "value": d["value"],
+            "talent_name": d.get("talent_name", talent.name),
+        }
+        for d in won["deals"]
+    ]
+
+    return {
+        "talent_name": talent.name,
+        "slug": filename_slug(talent.name),
+        "headline_kpis": flujo["kpis"],
+        "detail_kpis": detail["kpis"],
+        "funnel": detail["funnel"],
+        "lost_summary": detail["lost_summary"],
+        "projection": projection,
+        "calendar": calendar,
+        "top_deals": top_deals,
+        "signed_deals": signed,
+        "signed_total": won["total_value"],
+        # Pre-rendered SVG charts (D5) — markupsafe.Markup, inlined verbatim by Jinja.
+        "funnel_svg": report_charts.funnel_chart_svg(detail["funnel"]),
+        "projection_svg": report_charts.projection_bar_chart_svg(projection),
+        "donut_svg": report_charts.lost_donut_svg(detail["lost_summary"]),
+    }
+
+
+def build_report_context(
+    db: Session,
+    talents: list[Talent],
+    period_value: str,
+    start: date,
+    end: date,
+) -> dict:
+    """Build the full document context (cover + one page per talent).
+
+    Single talent -> cover shows that talent's name and headline KPIs.
+    Multiple talents ('all') -> cover title is 'Reporte consolidado' and the
+    headline KPIs are summed across talents (D2/D7).
+    """
+    talent_reports = [build_talent_report(db, t, start, end) for t in talents]
+
+    is_consolidated = len(talents) > 1
+    if is_consolidated:
+        title = "Reporte consolidado"
+        # Sum each headline KPI across talents, preserving label/variant/count.
+        cover_kpis = _aggregate_headline_kpis(talent_reports)
+    else:
+        title = talents[0].name if talents else "Reporte"
+        cover_kpis = talent_reports[0]["headline_kpis"] if talent_reports else []
+
+    now = datetime.utcnow()
+    return {
+        "title": title,
+        "is_consolidated": is_consolidated,
+        "period_label": _period_label(period_value),
+        "period_value": period_value,
+        "cover_kpis": cover_kpis,
+        "talents": talent_reports,
+        "generated_at": now.strftime("%Y-%m-%d %H:%M"),
+        "generated_stamp": now.strftime("%Y-%m-%d %H:%M UTC"),
+    }
+
+
+def render_report_html(ctx: dict) -> str:
+    """Render the full multi-page report HTML (cover + one page per talent)."""
+    return _jinja_env.get_template("reports/base.html").render(ctx=ctx)
+
+
+def _aggregate_headline_kpis(talent_reports: list[dict]) -> list[dict]:
+    """Sum the 3 headline KPI tiles across talents for the consolidated cover."""
+    if not talent_reports:
+        return []
+    template = talent_reports[0]["headline_kpis"]
+    agg = []
+    for idx, tile in enumerate(template):
+        total_value = sum(tr["headline_kpis"][idx]["value"] for tr in talent_reports)
+        counts = [tr["headline_kpis"][idx].get("count") for tr in talent_reports]
+        total_count = (
+            sum(c for c in counts if c is not None)
+            if any(c is not None for c in counts)
+            else None
+        )
+        agg.append(
+            {
+                "label": tile["label"],
+                "variant": tile["variant"],
+                "value": float(total_value),
+                "count": total_count,
+            }
+        )
+    return agg

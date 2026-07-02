@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Reporte — {{ ctx.title }} — {{ ctx.period_label }}</title>
+  <style>{% include "reports/report.css" %}</style>
+  <style>
+    /* Dynamic page footer (D7): timestamp + "página X de Y".
+       Injected here (not report.css) because the timestamp is per-render. */
+    @page {
+      @bottom-left {
+        content: "Generado por SEG Dashboard · {{ ctx.generated_stamp }}";
+        font-family: 'Inter', sans-serif;
+        font-size: 8px;
+        color: #8a8980;
+      }
+      @bottom-right {
+        content: "página " counter(page) " de " counter(pages);
+        font-family: 'Inter', sans-serif;
+        font-size: 8px;
+        color: #8a8980;
+      }
+    }
+  </style>
+</head>
+<body>
+  {% include "reports/cover.html" %}
+  {% for t in ctx.talents %}
+    {% include "reports/talent_page.html" %}
+  {% endfor %}
+</body>
+</html>

@@ -1,0 +1,24 @@
+{# Portada rica (D7): brand badge, título, periodo, 3 KPI headline tiles, pie. #}
+<div class="cover">
+  <div class="cover-brand">
+    <div class="brand-badge">TA</div>
+    <div class="brand-word">Talent Agency</div>
+  </div>
+
+  <div class="cover-title">{{ ctx.title }}</div>
+  <div class="cover-period">{{ ctx.period_label }}</div>
+
+  {% if ctx.is_consolidated %}
+    <div class="section-title">Resumen de {{ ctx.talents | length }} talentos</div>
+  {% endif %}
+
+  <div class="cover-kpis">
+    {% for tile in ctx.cover_kpis %}
+      {% include "reports/widgets/kpi_tile.html" %}
+    {% endfor %}
+  </div>
+
+  <div class="cover-foot">
+    Santillán Entertainment Group · Inteligencia comercial · Generado {{ ctx.generated_stamp }}
+  </div>
+</div>

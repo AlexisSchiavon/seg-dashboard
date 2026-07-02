@@ -1,0 +1,77 @@
+{# One talent page (D7). Expects `t` (a build_talent_report dict) and `ctx`.
+   Every talent starts on a fresh page after the cover. #}
+{% set total_funnel = t.funnel | sum(attribute='count') %}
+{% set calificados = t.funnel[2:] | sum(attribute='count') %}
+{% set pct_cal = ((calificados / total_funnel * 100) | round | int) if total_funnel > 0 else 0 %}
+
+<section class="page-break">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:14px;">
+    <div style="font-size:26px;font-weight:800;letter-spacing:-0.3px;flex:1;min-width:0;">{{ t.talent_name }}</div>
+    <div style="font-size:13px;color:var(--text2);font-weight:600;flex-shrink:0;white-space:nowrap;">{{ ctx.period_label }}</div>
+  </div>
+
+  {# 3 headline KPIs (firmadas / cobrado / pendiente) #}
+  <div style="display:flex;gap:12px;margin-bottom:12px;">
+    {% for tile in t.headline_kpis %}{% include "reports/widgets/kpi_tile.html" %}{% endfor %}
+  </div>
+
+  {# Snapshot KPIs (Pipeline / Cerrados / Comisión) #}
+  <div style="display:flex;gap:12px;margin-bottom:14px;">
+    {% for tile in t.detail_kpis %}{% include "reports/widgets/kpi_tile.html" %}{% endfor %}
+  </div>
+
+  <div class="grid-2">
+    <div class="widget">
+      <div class="section-title">Proyección de ingresos</div>
+      {% if t.projection %}
+        {{ t.projection_svg }}
+      {% else %}
+        <div class="empty-note">Proyección disponible tras próxima sincronización</div>
+      {% endif %}
+    </div>
+    <div class="widget">
+      <div class="section-title">Embudo del talento</div>
+      <div class="funnel-header">
+        <div class="fh-stat"><div class="fh-val">{{ total_funnel }}</div><div class="fh-label">Prospectos</div></div>
+        <div class="fh-stat"><div class="fh-val" style="color:var(--greenT);">{{ calificados }}</div><div class="fh-label">Calificados</div></div>
+        <div class="fh-stat"><div class="fh-val" style="color:var(--accent);">{{ pct_cal }}%</div><div class="fh-label">% Calificación</div></div>
+      </div>
+      {{ t.funnel_svg }}
+    </div>
+  </div>
+
+  <div class="widget">
+    <div class="section-title">Calendario de cobranza</div>
+    {% include "reports/widgets/collection_calendar.html" with context %}
+  </div>
+
+  <div class="widget">
+    <div class="section-title">Top campañas firmadas</div>
+    {% set deals = t.top_deals %}
+    {% include "reports/widgets/top_deals.html" with context %}
+  </div>
+
+  <div class="widget">
+    <div class="section-title">Oportunidades perdidas</div>
+    {% if t.lost_summary %}
+      <div class="donut-wrap">
+        {{ t.donut_svg }}
+        <div class="donut-legend">
+          {% set lost_total = t.lost_summary | sum(attribute='count') %}
+          {% set palette = ['#e8520a','#6b54d6','#1a9e6e','#c97c14','#2472c8','#8a8980'] %}
+          {% for row in t.lost_summary %}
+            <div class="donut-legend-row">
+              <div class="donut-dot" style="background:{{ palette[loop.index0 % 6] }};"></div>
+              <div class="donut-reason">{{ row.reason }} — {{ ((row.count / lost_total * 100) | round | int) if lost_total else 0 }}%</div>
+              <div class="donut-count">{{ row.count }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <div class="empty-note">Sin oportunidades perdidas este periodo</div>
+    {% endif %}
+  </div>
+
+  {% include "reports/deals_detail.html" with context %}
+</section>

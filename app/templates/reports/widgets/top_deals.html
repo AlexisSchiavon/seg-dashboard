@@ -1,0 +1,39 @@
+{# Top-3 campañas medal cards. Expects `deals`: list of {title, amount, list_state}. #}
+{% set medals = [
+  {'cls': 'rank-1', 'num': '1', 'color': '#f0a93a', 'bg': 'rgba(240,169,58,0.18)'},
+  {'cls': 'rank-2', 'num': '2', 'color': '#b0afa6', 'bg': 'rgba(156,155,146,0.18)'},
+  {'cls': 'rank-3', 'num': '3', 'color': '#c97c14', 'bg': 'rgba(201,124,20,0.18)'}
+] %}
+{% set badges = {
+  'ejecucion': ('ejecucion', 'En ejecución'),
+  'cobranza': ('cobranza', 'En cobranza'),
+  'cerrado': ('cobrado', 'Cobrado'),
+  'perdido': ('perdido', 'Perdido')
+} %}
+{% if deals %}
+<div class="medal-cards">
+  {% for deal in deals %}
+    {% set m = medals[loop.index0] %}
+    {% set badge = badges.get(deal.list_state, ('ejecucion', 'En ejecución')) %}
+    <div class="medal-card {{ m.cls }}">
+      <div class="medal-top">
+        <div class="medal-badge-round" style="background:{{ m.bg }};color:{{ m.color }};">{{ m.num }}</div>
+        <div class="medal-brand-name">{{ deal.title or 'Sin título' }}</div>
+      </div>
+      <span class="sbadge {{ badge[0] }}">{{ badge[1] }}</span>
+      <div class="medal-amounts">
+        <div class="medal-amt-col">
+          <div class="medal-amt-label">Venta total</div>
+          <div class="medal-amt-val">{{ deal.amount | mxn }}</div>
+        </div>
+        <div class="medal-amt-col">
+          <div class="medal-amt-label">Talento (70%)</div>
+          <div class="medal-amt-val">{{ (deal.amount * 0.70) | mxn }}</div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-note">Sin campañas con monto registrado</div>
+{% endif %}

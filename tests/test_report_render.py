@@ -80,3 +80,28 @@ def test_smoke_pdf_embeds_inter_font():
     assert all("Inter" in fn for fn in fontnames), (
         f"Inter not embedded — got fallback fonts: {fontnames}"
     )
+
+
+def test_full_report_renders_multipage_pdf(db_session, seed_deals, seed_trello_cards):
+    """End-to-end: build_report_context → render_report_html → real WeasyPrint PDF.
+
+    Verifies the redesigned report produces a multi-page PDF (cover + talent page)
+    whose extracted text carries the talent name and the period label.
+    """
+    from app.models import Talent
+    from app.services import periods as periods_service
+    from app.services import reports as reports_service
+
+    talent = db_session.get(Talent, seed_deals["deal_open"].talent_id)
+    start, end = periods_service.parse_period("month", "2026-06")
+    ctx = reports_service.build_report_context(db_session, [talent], "2026-06", start, end)
+    html = reports_service.render_report_html(ctx)
+
+    pdf_bytes = weasyprint.HTML(string=html, base_url=str(PROJECT_ROOT)).write_pdf()
+    assert pdf_bytes[:5] == b"%PDF-"
+
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        assert len(pdf.pages) >= 2  # cover + at least one talent page
+        text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+    assert talent.name in text
+    assert "Junio 2026" in text
