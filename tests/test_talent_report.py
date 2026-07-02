@@ -1,0 +1,112 @@
+"""Fase 9.7a — Tests for the talent-facing KPI helpers.
+
+compute_talent_facing_kpis and account_status_breakdown apply the talent's 70%
+share (Deal.commission_amount, which equals value*0.70) and expose only
+talent-appropriate figures — no pipeline/commission/funnel internals.
+"""
+from datetime import date, datetime
+
+from sqlalchemy.orm import Session
+
+from app.models import Deal, Talent, TrelloCard
+from app.services import kpis as kpi_service
+
+
+def _talent(db: Session, name="Tal Prueba") -> Talent:
+    t = Talent(name=name, active=True)
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    return t
+
+
+def _deal(db, talent_id, pid, value, *, status="won", won_time=None,
+          add_time="2026-05-01T00:00:00", commission=None):
+    d = Deal(
+        pipedrive_id=pid, title=f"Deal {pid}", value=value, currency="MXN",
+        stage_id=4, stage_name="Contrato", status=status, talent_id=talent_id,
+        commission_amount=commission if commission is not None else value * 0.70,
+        is_sin_cotizar=False, update_time="2026-06-01T00:00:00",
+        add_time=add_time, won_time=won_time,
+    )
+    db.add(d)
+    db.commit()
+    db.refresh(d)
+    return d
+
+
+def _card(db, cid, list_state, deal_id, collection_date):
+    c = TrelloCard(
+        trello_card_id=cid, name=cid, list_id="L", list_name="L",
+        list_state=list_state, deal_id=deal_id, collection_date=collection_date,
+    )
+    db.add(c)
+    db.commit()
+    return c
+
+
+class TestComputeTalentFacingKpis:
+    def test_firmadas_cobrado_porcobrar_in_70pct(self, db_session):
+        t = _talent(db_session)
+        # Firmado en junio: value 100k -> 70% = 70,000
+        _deal(db_session, t.id, 9001, 100000.0, won_time=datetime(2026, 6, 10))
+        # Cobrado en junio: cerrado card, deal value 50k -> 70% = 35,000
+        d2 = _deal(db_session, t.id, 9002, 50000.0, won_time=datetime(2026, 6, 12))
+        _card(db_session, "c-cerr", "cerrado", d2.id, date(2026, 6, 20))
+
+        res = kpi_service.compute_talent_facing_kpis(
+            db_session, t.id, date(2026, 6, 1), date(2026, 6, 30)
+        )
+        assert res["firmadas_count"] == 2
+        assert res["firmadas_70"] == 105000.0        # (100k+50k)*0.70
+        assert res["cobrado_70"] == 35000.0          # only the cerrado card
+        assert res["por_cobrar_70"] == 70000.0       # 105000 - 35000
+
+    def test_por_cobrar_floored_at_zero(self, db_session):
+        t = _talent(db_session)
+        # Nothing firmed in period, but a cobro happened -> por_cobrar must floor to 0
+        d = _deal(db_session, t.id, 9101, 40000.0, won_time=datetime(2026, 5, 1))
+        _card(db_session, "c-x", "cerrado", d.id, date(2026, 6, 5))
+        res = kpi_service.compute_talent_facing_kpis(
+            db_session, t.id, date(2026, 6, 1), date(2026, 6, 30)
+        )
+        assert res["firmadas_70"] == 0.0
+        assert res["cobrado_70"] == 28000.0
+        assert res["por_cobrar_70"] == 0.0
+
+
+class TestAccountStatusBreakdown:
+    def test_buckets_split_future_overdue_collected(self, db_session):
+        t = _talent(db_session)
+        today = date.today()
+        # Próximos: ejecucion, collection in the future
+        d_fut = _deal(db_session, t.id, 9201, 100000.0)
+        _card(db_session, "c-fut", "ejecucion", d_fut.id, date(today.year, 12, 1))
+        # Retraso: cobranza, collection in the past (valid, after add_time)
+        d_late = _deal(db_session, t.id, 9202, 50000.0, add_time="2026-01-01T00:00:00")
+        _card(db_session, "c-late", "cobranza", d_late.id, date(2026, 3, 1))
+        # Cobrado año: cerrado, collection this year
+        d_col = _deal(db_session, t.id, 9203, 30000.0)
+        _card(db_session, "c-col", "cerrado", d_col.id, date(today.year, 2, 1))
+
+        res = kpi_service.account_status_breakdown(db_session, t.id)
+        assert res["proximos_meses"]["count"] == 1
+        assert res["proximos_meses"]["value70"] == 70000.0
+        assert res["retraso"]["count"] == 1
+        assert res["retraso"]["value70"] == 35000.0
+        assert res["cobrado_ano"]["value70"] == 21000.0
+
+    def test_retraso_excludes_impossible_dates(self, db_session):
+        """A card whose collection_date precedes the deal's add_time is data garbage
+        (D-9.7: sanitize overdue) and must NOT count toward retraso."""
+        t = _talent(db_session)
+        # Impossible: collection Dec-2025 but deal added Jun-2026
+        d_bad = _deal(db_session, t.id, 9301, 500000.0, add_time="2026-06-26T00:00:00")
+        _card(db_session, "c-bad", "cobranza", d_bad.id, date(2025, 12, 22))
+        # A valid overdue card so the bucket isn't trivially empty
+        d_ok = _deal(db_session, t.id, 9302, 10000.0, add_time="2026-01-01T00:00:00")
+        _card(db_session, "c-ok", "cobranza", d_ok.id, date(2026, 3, 1))
+
+        res = kpi_service.account_status_breakdown(db_session, t.id)
+        assert res["retraso"]["count"] == 1                 # only the valid one
+        assert res["retraso"]["value70"] == 7000.0          # 10000*0.70, garbage excluded
