@@ -25,14 +25,22 @@ CONTRATO_LIST_ID = "69312ac640ae158381706ff8"
 
 # Maps Trello list IDs (from the verified live board 69312a9d5523703a1ce1a413)
 # to their canonical state values used in TrelloCard.list_state.
-# "Otros pendientes" (6996256c42ccdae7f69e4814) is intentionally ABSENT —
-# cards in that list are ignored by the sync job.
+#
+# Fase 9.8a (mapeo corregido — verificado con Alexis contra el board real):
+#   - "Enviar encuesta" es un estado POST-COBRO (encuesta de satisfacción tras
+#     cobrar), NO cobranza pendiente → 'cerrado'. Antes estaba mal como 'cobranza'
+#     e inflaba la "cobranza vencida".
+#   - "Otros pendientes" es basura administrativa (vuelos, devoluciones, etc.),
+#     fuera del flujo comercial → 'omitido'. El estado 'omitido' se EXCLUYE de
+#     todos los KPIs, proyecciones, cobranza vencida y widgets.
+#   - Solo "Cobrar" (= 'cobranza') representa cobro genuinamente pendiente.
 LIST_STATE_MAP: dict[str, str] = {
     "69312ac640ae158381706ff8": "ejecucion",   # Contrato
     "69312acb534b0e80508bf4e5": "ejecucion",   # Firmar contrato todos
     "69312ad08fe346b82da12e1d": "ejecucion",   # Enviar factura
     "69312ad63829ef3ac9967d1a": "cobranza",    # Cobrar
-    "69312adeac51905b84f53c35": "cobranza",    # Enviar encuesta
+    "69312adeac51905b84f53c35": "cerrado",     # Enviar encuesta (post-cobro, 9.8a)
+    "6996256c42ccdae7f69e4814": "omitido",     # Otros pendientes (excluido de todo)
     "69d8336e46709e935f4307fe": "cerrado",     # Finalizados
 }
 

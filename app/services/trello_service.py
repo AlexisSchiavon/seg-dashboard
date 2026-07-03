@@ -278,6 +278,11 @@ def deals_for_talent(db: Session, talent_id: int) -> list[dict[str, Any]]:
     )
     linked_deal_ids: set[int] = set()
     for card, deal in linked:
+        # Fase 9.8a: 'omitido' cards (Trello "Otros pendientes") are administrative
+        # garbage, excluded from all talent-facing lists and aggregates.
+        if card.list_state == "omitido":
+            linked_deal_ids.add(deal.id)  # still mark linked so it's not re-added below
+            continue
         linked_deal_ids.add(deal.id)
         rows.append({
             "title": deal.title,

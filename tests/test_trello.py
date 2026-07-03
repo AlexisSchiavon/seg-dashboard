@@ -1,9 +1,9 @@
 """Tests for the Trello integration (Phase 4).
 
 Test Map:
-  - test_sync_trello_upserts_cards: sync_trello() upserts cards from 6 lists (Wave 2)
-  - test_sync_trello_ignores_otros_pendientes: cards in "Otros pendientes" NOT synced (Wave 2)
-  - test_list_state_mapping: LIST_STATE_MAP maps 6 list IDs to correct states (Wave 0 — GREEN)
+  - test_sync_trello_upserts_cards: sync_trello() upserts cards from 7 lists (Wave 2)
+  - test_sync_trello_marks_otros_pendientes_omitido: "Otros pendientes" → 'omitido' (9.8a)
+  - test_list_state_mapping: LIST_STATE_MAP maps 7 list IDs to correct states (9.8a)
   - test_collection_date_from_due: collection_date derived from Trello card due date (Wave 2)
   - test_collection_date_fallback: fallback to add_time + 2 months when no due (Wave 2)
   - test_auto_create_card_for_won_deal: won deals with no card get one created (Wave 3)
@@ -23,10 +23,12 @@ import pytest
 
 
 def test_list_state_mapping():
-    """LIST_STATE_MAP maps all 6 active list IDs to the correct states.
+    """LIST_STATE_MAP maps all 7 board list IDs to the corrected states (Fase 9.8a).
 
-    Verified against live board 69312a9d5523703a1ce1a413 on 2026-06-14.
-    "Otros pendientes" (6996256c42ccdae7f69e4814) must NOT appear in the map.
+    Verified against live board 69312a9d5523703a1ce1a413.
+      - "Enviar encuesta" is POST-collection → 'cerrado' (was wrongly 'cobranza').
+      - "Otros pendientes" is admin garbage → 'omitido' (excluded from all calcs).
+      - Only "Cobrar" (= 'cobranza') is genuinely pending collection.
     """
     from app.integrations.trello import LIST_STATE_MAP
 
@@ -35,22 +37,18 @@ def test_list_state_mapping():
         "69312acb534b0e80508bf4e5": "ejecucion",   # Firmar contrato todos
         "69312ad08fe346b82da12e1d": "ejecucion",   # Enviar factura
         "69312ad63829ef3ac9967d1a": "cobranza",    # Cobrar
-        "69312adeac51905b84f53c35": "cobranza",    # Enviar encuesta
+        "69312adeac51905b84f53c35": "cerrado",     # Enviar encuesta (post-cobro)
+        "6996256c42ccdae7f69e4814": "omitido",     # Otros pendientes (excluido)
         "69d8336e46709e935f4307fe": "cerrado",     # Finalizados
     }
 
-    assert len(LIST_STATE_MAP) == 6, f"Expected 6 entries, got {len(LIST_STATE_MAP)}"
+    assert len(LIST_STATE_MAP) == 7, f"Expected 7 entries, got {len(LIST_STATE_MAP)}"
 
     for list_id, expected_state in expected.items():
         assert list_id in LIST_STATE_MAP, f"Missing list_id: {list_id}"
         assert LIST_STATE_MAP[list_id] == expected_state, (
             f"list_id={list_id}: expected {expected_state!r}, got {LIST_STATE_MAP[list_id]!r}"
         )
-
-    # Otros pendientes must be absent
-    assert "6996256c42ccdae7f69e4814" not in LIST_STATE_MAP, (
-        "Otros pendientes list ID must NOT be in LIST_STATE_MAP"
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -59,11 +57,12 @@ def test_list_state_mapping():
 
 
 def test_sync_trello_upserts_cards(db_session, mock_trello_transport, seed_deals):
-    """sync_trello() fetches cards from all 6 lists and upserts TrelloCard rows.
+    """sync_trello() fetches cards from all 7 lists and upserts TrelloCard rows.
 
     Arrange: seed_deals provides Deal rows; mock_trello_transport serves card lists.
     Act: call sync_trello(db_session).
-    Assert: TrelloCard rows exist for all non-ignored lists; upsert is idempotent.
+    Assert: TrelloCard rows exist for every mapped list (including 'omitido');
+    upsert is idempotent.
     """
     import httpx
 
@@ -90,7 +89,9 @@ def test_sync_trello_upserts_cards(db_session, mock_trello_transport, seed_deals
     assert log.status == "success", f"Expected success, got {log.status}: {log.error_message}"
 
     cards = db_session.query(TrelloCard).all()
-    assert len(cards) == 3, f"Expected 3 cards (ejecucion+cobranza+cerrado), got {len(cards)}"
+    assert len(cards) == 4, (
+        f"Expected 4 cards (ejecucion+cobranza+cerrado+omitido), got {len(cards)}"
+    )
 
     # Idempotency: second run must not insert new rows
     trello_mod._client = mock_client
@@ -101,15 +102,20 @@ def test_sync_trello_upserts_cards(db_session, mock_trello_transport, seed_deals
 
     assert log2.status == "success"
     cards_after = db_session.query(TrelloCard).all()
-    assert len(cards_after) == 3, "Second run must not create duplicate rows"
+    assert len(cards_after) == 4, "Second run must not create duplicate rows"
 
 
-def test_sync_trello_ignores_otros_pendientes(db_session, mock_trello_transport, seed_deals):
-    """Cards in 'Otros pendientes' (list_id 6996256c42ccdae7f69e4814) are not synced.
+def test_sync_trello_marks_otros_pendientes_omitido(db_session, mock_trello_transport, seed_deals):
+    """Cards in 'Otros pendientes' (list_id 6996256c42ccdae7f69e4814) sync as 'omitido'.
 
-    Arrange: mock_trello_transport includes Otros pendientes cards.
+    Fase 9.8a decision: these cards ARE synced (for visibility) but tagged with
+    list_state='omitido', which every KPI/projection/collection calc excludes via
+    whitelist. This test locks in the sync-time tagging; exclusion from aggregates
+    is covered by the service-layer tests.
+
+    Arrange: mock_trello_transport includes an Otros pendientes card.
     Act: call sync_trello(db_session).
-    Assert: no TrelloCard row has list_id == '6996256c42ccdae7f69e4814'.
+    Assert: the card exists with list_state='omitido' and list_name='Otros pendientes'.
     """
     import httpx
 
@@ -134,13 +140,16 @@ def test_sync_trello_ignores_otros_pendientes(db_session, mock_trello_transport,
 
     assert log.status == "success"
 
-    # No card with the Otros pendientes list_id should exist
     otros_cards = (
         db_session.query(TrelloCard)
         .filter(TrelloCard.list_id == "6996256c42ccdae7f69e4814")
         .all()
     )
-    assert len(otros_cards) == 0, f"Otros pendientes cards must not be synced: {otros_cards}"
+    assert len(otros_cards) == 1, f"Expected 1 Otros pendientes card synced, got {len(otros_cards)}"
+    assert otros_cards[0].list_state == "omitido", (
+        f"Otros pendientes must map to 'omitido', got {otros_cards[0].list_state!r}"
+    )
+    assert otros_cards[0].list_name == "Otros pendientes"
 
 
 def test_collection_date_from_due(db_session, mock_trello_transport, seed_deals):

@@ -4,7 +4,7 @@ compute_talent_facing_kpis and account_status_breakdown apply the talent's 70%
 share (Deal.commission_amount, which equals value*0.70) and expose only
 talent-appropriate figures — no pipeline/commission/funnel internals.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -111,6 +111,52 @@ class TestAccountStatusBreakdown:
         res = kpi_service.account_status_breakdown(db_session, t.id)
         assert res["retraso"]["count"] == 1                 # only the valid one
         assert res["retraso"]["value70"] == 7000.0          # 10000*0.70, garbage excluded
+
+    def test_retraso_excludes_ejecucion_past_due(self, db_session):
+        """9.8b: an 'ejecucion' card past its date is stalled execution, NOT overdue
+        collection. Only 'cobranza' (Trello "Cobrar") cards count toward retraso."""
+        t = _talent(db_session)
+        past = date.today() - timedelta(days=30)
+        d = _deal(db_session, t.id, 9401, 200000.0, add_time="2024-01-01T00:00:00")
+        _card(db_session, "c-ej", "ejecucion", d.id, past)
+        res = kpi_service.account_status_breakdown(db_session, t.id)
+        assert res["retraso"]["count"] == 0
+        assert res["retraso"]["value70"] == 0.0
+
+    def test_retraso_excludes_beyond_180_days(self, db_session):
+        """9.8b: cobranza cards overdue by more than 180 days are stale / likely
+        already collected and are excluded from retraso."""
+        t = _talent(db_session)
+        old = date.today() - timedelta(days=200)
+        d = _deal(db_session, t.id, 9402, 90000.0, add_time="2024-01-01T00:00:00")
+        _card(db_session, "c-old", "cobranza", d.id, old)
+        res = kpi_service.account_status_breakdown(db_session, t.id)
+        assert res["retraso"]["count"] == 0
+        assert res["retraso"]["value70"] == 0.0
+
+    def test_retraso_excludes_zero_value(self, db_session):
+        """9.8b: a cobranza card whose deal has value 0 has nothing to collect."""
+        t = _talent(db_session)
+        past = date.today() - timedelta(days=30)
+        d = _deal(db_session, t.id, 9403, 0.0, add_time="2024-01-01T00:00:00")
+        _card(db_session, "c-zero", "cobranza", d.id, past)
+        res = kpi_service.account_status_breakdown(db_session, t.id)
+        assert res["retraso"]["count"] == 0
+
+    def test_retraso_excludes_non_won_deals(self, db_session):
+        """9.8f: cards on lost (uncollectable) or open (unsigned) deals must not
+        count toward retraso — only won deals do."""
+        t = _talent(db_session)
+        past = date.today() - timedelta(days=30)
+        dw = _deal(db_session, t.id, 9501, 100000.0, add_time="2024-01-01T00:00:00")
+        _card(db_session, "c-won", "cobranza", dw.id, past)
+        dl = _deal(db_session, t.id, 9502, 500000.0, status="lost", add_time="2024-01-01T00:00:00")
+        _card(db_session, "c-lost", "cobranza", dl.id, past)
+        do = _deal(db_session, t.id, 9503, 800000.0, status="open", add_time="2024-01-01T00:00:00")
+        _card(db_session, "c-open", "cobranza", do.id, past)
+        res = kpi_service.account_status_breakdown(db_session, t.id)
+        assert res["retraso"]["count"] == 1                # only the won card
+        assert res["retraso"]["value70"] == 70000.0        # 100000*0.70
 
 
 class TestSignedDealBadge:

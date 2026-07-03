@@ -601,6 +601,7 @@ _LIST_NAMES: dict[str, str] = {
     "69312ad08fe346b82da12e1d": "Enviar factura",
     "69312ad63829ef3ac9967d1a": "Cobrar",
     "69312adeac51905b84f53c35": "Enviar encuesta",
+    "6996256c42ccdae7f69e4814": "Otros pendientes",
     "69d8336e46709e935f4307fe": "Finalizados",
 }
 
