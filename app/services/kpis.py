@@ -501,9 +501,12 @@ def account_status_breakdown(
 
       - proximos_meses: ejecucion/cobranza cards whose resolved collection_date is
         today or later (money still to come, any future month).
-      - retraso: ejecucion/cobranza cards whose resolved collection_date is in the
-        past. D-9.7 sanitisation: cards with an explicit collection_date EARLIER
-        than the deal's add_time (impossible dates) are EXCLUDED as data garbage.
+      - retraso: ONLY 'cobranza' (Trello "Cobrar") cards whose collection_date is in
+        the past (9.8b — execution-stage cards past their fallback date are stalled
+        execution, NOT overdue collection, so they no longer inflate this bucket).
+        Sanitisation: a card is EXCLUDED from retraso if deal.value <= 0, if its
+        collection_date is older than 180 days (stale / likely already collected), or
+        if collection_date is earlier than the deal's add_time (impossible date).
       - cobrado_ano: 'cerrado' cards with collection_date in the given calendar
         year (defaults to the current year).
 
@@ -527,15 +530,21 @@ def account_status_breakdown(
     retraso = {"count": 0, "value70": 0.0}
     cobrado_ano = {"count": 0, "value70": 0.0}
 
+    cutoff_180 = today - timedelta(days=180)
     for card, deal in rows:
         share = _talent_70(deal)
         if card.list_state in ("ejecucion", "cobranza"):
             resolved = card.collection_date or resolve_collection_date(None, deal)
             if resolved >= today:
+                # Forward pipeline — execution + collection still to come.
                 proximos["count"] += 1
                 proximos["value70"] += share
-            else:
-                # Sanitise: skip impossible dates (collection before the deal existed).
+            elif card.list_state == "cobranza":
+                # Overdue = ONLY the "Cobrar" column past its date (9.8b). Execution
+                # cards past their fallback date are stalled execution, not overdue
+                # collection, so they are deliberately NOT counted here.
+                if (deal.value or 0) <= 0:
+                    continue  # no real amount to collect
                 add_dt = None
                 if deal.add_time:
                     try:
@@ -543,7 +552,9 @@ def account_status_breakdown(
                     except ValueError:
                         add_dt = None
                 if card.collection_date and add_dt and card.collection_date < add_dt:
-                    continue  # data garbage — excluded from retraso (D-9.7)
+                    continue  # impossible date — data garbage (D-9.7)
+                if resolved < cutoff_180:
+                    continue  # older than 180 days — stale / likely already collected
                 retraso["count"] += 1
                 retraso["value70"] += share
         elif card.list_state == "cerrado":
