@@ -91,8 +91,9 @@ async function loadReportTalents() {
 
   const talents = await res.json();
 
-  // Reset to placeholder
-  select.innerHTML = `<option value="">Selecciona un talento</option>`;
+  // Reset to placeholder + "Todos los talentos" (Fase 9.6 — consolidado)
+  select.innerHTML = `<option value="">Selecciona un talento</option>`
+    + `<option value="all">Todos los talentos</option>`;
 
   (talents || []).forEach((t) => {
     const opt = document.createElement("option");
@@ -172,30 +173,43 @@ function setReportPeriodType(type, e) {
 // generateReport — POST /reports/generate
 // ============================================================
 
+// Original button markup (icon + label) restored after generation.
+const BTN_GENERATE_HTML = `
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+  </svg>
+  Generar reporte`;
+
 /**
- * Trigger report generation with spinner, skeleton preview, then render narrative.
- * Called by onclick of #btn-generate.
- * API: POST /reports/generate {talent_id, month} → ReportOut
+ * Fase 9.6 — generate the PDF and download it directly (fetch → blob).
+ * POST /reports/generate now streams the PDF (no JSON), so we read the blob and
+ * trigger a browser download using the server's Content-Disposition filename.
+ * Talent value "all" → consolidated report ({talent_ids:"all"}).
  */
 async function generateReport() {
   const talentSelect = document.getElementById("report-talent");
   const monthSelect = document.getElementById("report-month");
   const btnGenerate = document.getElementById("btn-generate");
-  const btnDownload = document.getElementById("btn-download");
-  const previewCard = document.getElementById("pdf-preview-card");
-  const previewTitle = document.getElementById("pdf-preview-title");
-  const previewSub = document.getElementById("pdf-preview-sub");
-  const pdfBody = document.getElementById("pdf-body");
+  const hint = document.getElementById("report-hint");
 
-  const talentId = talentSelect ? parseInt(talentSelect.value, 10) : null;
+  const talentVal = talentSelect ? talentSelect.value : "";
   const periodValue = monthSelect ? monthSelect.value : "";
-
-  if (!talentId || !periodValue) {
+  if (!talentVal || !periodValue) {
     showToast("Selecciona un talento y un periodo antes de generar");
     return;
   }
 
-  // Estado 3 — Generando
+  const target = talentVal === "all" ? "all" : [parseInt(talentVal, 10)];
+  const body = { talent_ids: target, period_type: _reportPeriodType, period_value: periodValue };
+
+  // Loader — spinner in the button + a hint line (consolidado puede tardar).
+  if (!document.getElementById("spin-keyframes")) {
+    const style = document.createElement("style");
+    style.id = "spin-keyframes";
+    style.textContent = `@keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }`;
+    document.head.appendChild(style);
+  }
   if (btnGenerate) {
     btnGenerate.disabled = true;
     btnGenerate.innerHTML = `
@@ -206,110 +220,52 @@ async function generateReport() {
       </svg>
       Generando...`;
   }
-
-  // Add spin keyframes if not already present
-  if (!document.getElementById("spin-keyframes")) {
-    const style = document.createElement("style");
-    style.id = "spin-keyframes";
-    style.textContent = `@keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }`;
-    document.head.appendChild(style);
-  }
-
-  // Show skeleton in pdf-body
-  if (previewCard) previewCard.style.display = "";
-  if (pdfBody) {
-    pdfBody.innerHTML = `
-      <div style="padding:0;">
-        <div class="pdf-skeleton" style="width:60%;margin-bottom:16px;"></div>
-        <div class="pdf-skeleton" style="width:100%;margin-bottom:4px;"></div>
-        <div class="pdf-skeleton" style="width:90%;margin-bottom:4px;"></div>
-        <div class="pdf-skeleton" style="width:80%;margin-bottom:20px;"></div>
-        <div class="pdf-skeleton" style="width:55%;margin-bottom:12px;"></div>
-        <div class="pdf-skeleton" style="width:100%;margin-bottom:4px;"></div>
-        <div class="pdf-skeleton" style="width:85%;margin-bottom:20px;"></div>
-        <div class="pdf-skeleton" style="width:60%;margin-bottom:12px;"></div>
-        <div class="pdf-skeleton" style="width:100%;margin-bottom:4px;"></div>
-        <div class="pdf-skeleton" style="width:70%;"></div>
-      </div>
-    `;
+  if (hint) {
+    hint.style.display = "";
+    hint.textContent = talentVal === "all"
+      ? "Generando reporte consolidado, esto puede tomar unos segundos…"
+      : "Generando reporte…";
   }
 
   try {
     const res = await apiFetch("/reports/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ talent_id: talentId, period_type: _reportPeriodType, period_value: periodValue }),
+      body: JSON.stringify(body),
     });
-
     if (!res) return; // 401 redirected
 
     if (!res.ok) {
-      // Estado 6 — Error
-      if (pdfBody) pdfBody.innerHTML = "";
-      if (previewCard) previewCard.style.display = "none";
-      showToast("Error al generar el reporte. Intenta de nuevo.");
+      let detail = "Error al generar el reporte. Intenta de nuevo.";
+      try { const j = await res.json(); if (j && j.detail) detail = j.detail; } catch (e) { /* non-JSON */ }
+      showToast(detail);
       return;
     }
 
-    const data = await res.json();
-    _currentReportId = data.id;
+    // Stream → blob → trigger download with the server-provided filename.
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") || "";
+    const match = cd.match(/filename="?([^"]+)"?/);
+    const filename = match ? match[1] : "reporte.pdf";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
 
-    // Estado 4 — Reporte generado
-    // Populate preview header
-    if (previewTitle) {
-      const kind = data.month && data.month.includes("Q") ? "trimestral" : "mensual";
-      previewTitle.textContent = `Reporte ${kind} · ${data.talent_name}`;
-    }
-    if (previewSub) {
-      previewSub.textContent = `${formatReportPeriod(data.month)} · Generado con IA`;
-    }
-
-    // Render 3 narrative blocks — ALL Claude text escaped via escHtml (T-xss)
-    if (pdfBody) {
-      const narrative = data.narrative || {};
-      pdfBody.innerHTML = `
-        <div class="pdf-block">
-          <div class="pdf-block-title">Resumen ejecutivo</div>
-          <div class="pdf-text">${escHtml(narrative.resumen_ejecutivo || "")}</div>
-        </div>
-        <div class="pdf-block">
-          <div class="pdf-block-title">Deals destacados</div>
-          <div class="pdf-text">${escHtml(narrative.deals_destacados || "")}</div>
-        </div>
-        <div class="pdf-block" style="margin-bottom:0;">
-          <div class="pdf-block-title">Recomendación</div>
-          <div class="pdf-text">${escHtml(narrative.recomendacion || "")}</div>
-        </div>
-      `;
-    }
-
-    // Enable download button and wire to current report
-    if (btnDownload) {
-      btnDownload.disabled = false;
-      btnDownload.onclick = () => downloadReport(data.id);
-    }
-
-    showToast("Reporte generado correctamente");
+    showToast("Reporte descargado");
     loadReportHistory();
-
   } catch (err) {
-    // Estado 6 — Error inesperado
-    if (pdfBody) pdfBody.innerHTML = "";
-    if (previewCard) previewCard.style.display = "none";
     showToast("Error al generar el reporte. Intenta de nuevo.");
   } finally {
-    // Reactivar botón con texto original
     if (btnGenerate) {
       btnGenerate.disabled = false;
-      btnGenerate.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-          <path d="M2 17l10 5 10-5"/>
-          <path d="M2 12l10 5 10-5"/>
-        </svg>
-        Generar reporte con IA`;
+      btnGenerate.innerHTML = BTN_GENERATE_HTML;
     }
+    if (hint) hint.style.display = "none";
   }
 }
 

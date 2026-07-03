@@ -1,0 +1,331 @@
+/* =============================================================
+   SEG Talent Intelligence Dashboard — PDF Report base stylesheet
+   Fase 9.3 — Setup base: design tokens, @page A4, Inter @font-face.
+
+   Design tokens mirror frontend/css/styles.css :root so the PDF is a
+   1:1 visual match of the "Por Talento" dashboard tab (D1, dark mode / D6).
+
+   WeasyPrint notes:
+     - Inter Variable is embedded via @font-face. The url() resolves against
+       the document base_url, which reports._render_pdf sets to the project
+       root, so "app/static/fonts/Inter.woff2" is valid both locally
+       (uvicorn CWD = repo root) and in Docker (WORKDIR /app).
+     - No CSS grid auto-fit, no backdrop-filter, no position:sticky —
+       unsupported by WeasyPrint; layouts use flexbox/tables instead.
+   ============================================================= */
+
+/* Inter Variable is one physical file; WeasyPrint (<70) rejects a
+   `font-weight: 100 900` range descriptor, so we register discrete weights
+   (regular + bold) against the same woff2 and let the variable axis resolve. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  src: url('app/static/fonts/Inter.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  src: url('app/static/fonts/Inter.woff2') format('woff2');
+}
+
+:root {
+  /* Backgrounds (dark mode) */
+  --bg:#0c0c0e; --bg2:#111114; --bg3:#18181c; --bg4:#1f1f24; --bg5:#26262c;
+  /* Borders */
+  --border:rgba(255,255,255,0.06); --borderM:rgba(255,255,255,0.11); --borderH:rgba(255,255,255,0.18);
+  /* Text */
+  --text:#eeede6; --text2:#8a8980; --text3:#4e4e4a;
+  /* Accent + semantic palette */
+  --accent:#e8520a; --accentD:rgba(232,82,10,0.12); --accentB:rgba(232,82,10,0.25);
+  --green:#1a9e6e; --greenD:rgba(26,158,110,0.12); --greenT:#3dcf96;
+  --amber:#c97c14; --amberD:rgba(201,124,20,0.12); --amberT:#f0a93a;
+  --blue:#2472c8; --blueD:rgba(36,114,200,0.12); --blueT:#6aabf0;
+  --purple:#6b54d6; --purpleD:rgba(107,84,214,0.12); --purpleT:#a594f0;
+  --red:#c43232; --redD:rgba(196,50,50,0.12); --redT:#f07070;
+  /* Radii */
+  --r:10px; --rL:14px; --rXL:18px;
+}
+
+/* A4 portrait, 15mm margins (D11) */
+@page {
+  size: A4 portrait;
+  margin: 15mm;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  font-family: 'Inter', 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: 'cv05' 1;   /* Inter: single-story lowercase l, matches dashboard */
+}
+
+/* Shared surface primitive — mirrors .card in the dashboard */
+.card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--rL);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+/* =============================================================
+   Report layout primitives
+   ============================================================= */
+
+/* Each talent (and the cover) is a full page. */
+.page-break { break-before: page; }
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+.section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 700;
+  color: var(--text2);
+  margin-bottom: 10px;
+}
+
+.grid-2 { display: flex; gap: 12px; break-inside: avoid; }
+.grid-2 > * { flex: 1; min-width: 0; }
+
+/* ---- Cover ---------------------------------------------------- */
+.cover {
+  /* Fill (most of) the A4 content box so the block can be centred vertically.
+     A4 content height = 297mm - 2*15mm margin = 267mm; stay under it to avoid
+     spilling a blank second page. */
+  min-height: 250mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.cover-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 48px;
+}
+.brand-badge {
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  letter-spacing: 0.5px;
+}
+.brand-word {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--text2);
+  text-transform: uppercase;
+}
+.cover-title {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+}
+.cover-period {
+  font-size: 18px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 40px;
+}
+.cover-kpis { display: flex; gap: 12px; }
+.cover-foot {
+  margin-top: 28px;
+  font-size: 9px;
+  color: var(--text3);
+  letter-spacing: 0.3px;
+}
+
+/* ---- KPI tiles (mirror .kpi-t) ------------------------------- */
+.kpi-t {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--rL);
+  padding: 14px 12px;
+}
+.kpi-t.blue   { border-left-color: var(--blue); }
+.kpi-t.green  { border-left-color: var(--green); }
+.kpi-t.accent { border-left-color: var(--accent); }
+.kpi-t.amber  { border-left-color: var(--amber); }
+.kpi-t.purple { border-left-color: var(--purple); }
+.kpi-t-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  margin-bottom: 6px;
+}
+.kpi-t.blue   .kpi-t-label { color: var(--blueT); }
+.kpi-t.green  .kpi-t-label { color: var(--greenT); }
+.kpi-t.accent .kpi-t-label { color: var(--accent); }
+.kpi-t.amber  .kpi-t-label { color: var(--amberT); }
+.kpi-t.purple .kpi-t-label { color: var(--purpleT); }
+.kpi-t-val {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.kpi-t-sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
+.kpi-t-amount {
+  font-size: 12px;
+  color: var(--text2);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Widget card ---------------------------------------------- */
+.widget {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--rL);
+  padding: 14px;
+  margin-bottom: 12px;
+  break-inside: avoid;   /* keep each widget's header with its content across pages */
+}
+
+/* ---- Funnel header (3 stats) --------------------------------- */
+.funnel-header { display: flex; gap: 8px; margin-bottom: 12px; }
+.fh-stat {
+  flex: 1;
+  background: var(--bg4);
+  border-radius: var(--r);
+  padding: 8px 10px;
+  text-align: center;
+}
+.fh-val { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.fh-label { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; margin-top: 2px; }
+
+/* ---- Payment calendar timeline (mirror .timeline) ------------ */
+.timeline { display: flex; align-items: flex-start; }
+.tl-node { display: flex; flex-direction: column; align-items: center; flex: 1; min-width: 0; }
+.tl-dot {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+  border: 2px solid;
+  margin-bottom: 6px;
+}
+.tl-month { font-size: 11px; font-weight: 600; color: var(--text2); }
+.tl-amount { font-size: 11px; color: var(--greenT); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+/* ---- Top campaigns medal cards ------------------------------- */
+.medal-cards { display: flex; gap: 10px; }
+.medal-card {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--rL);
+  padding: 12px;
+  min-width: 0;
+}
+.medal-card.rank-1 { border-color: rgba(240,169,58,0.28); }
+.medal-card.rank-2 { border-color: rgba(156,155,146,0.25); }
+.medal-card.rank-3 { border-color: rgba(201,124,20,0.22); }
+.medal-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; min-width: 0; }
+.medal-badge-round {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+}
+.medal-brand-name {
+  font-size: 11px; font-weight: 600;
+  min-width: 0; flex: 1;
+  line-height: 1.25;
+  overflow-wrap: break-word;   /* wrap long campaign names instead of clipping */
+}
+.sbadge {
+  display: inline-block;
+  font-size: 9px; font-weight: 600;
+  padding: 2px 7px; border-radius: 20px;
+  margin-bottom: 8px;
+}
+.sbadge.ejecucion { background: rgba(14,165,176,0.12); color: #40d4de; }
+.sbadge.cobranza  { background: rgba(13,122,85,0.15);  color: #34d399; }
+.sbadge.cobrado   { background: var(--greenD);          color: var(--greenT); }
+.sbadge.perdido   { background: var(--redD);            color: var(--redT); }
+.medal-amounts { display: flex; gap: 10px; }
+.medal-amt-col { flex: 1; }
+.medal-amt-label { font-size: 8px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 2px; }
+.medal-amt-val { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---- Lost donut ---------------------------------------------- */
+.donut-wrap { display: flex; align-items: center; gap: 14px; }
+.donut-legend { flex: 1; min-width: 0; }
+.donut-legend-row { display: flex; align-items: center; gap: 7px; font-size: 11px; margin-bottom: 5px; }
+.donut-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.donut-reason { color: var(--text2); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.donut-count { color: var(--text3); font-variant-numeric: tabular-nums; }
+
+/* ---- Estado de tus cuentas (3 mini-tiles) -------------------- */
+.acct-tiles { display: flex; gap: 10px; }
+.acct-tile {
+  flex: 1; min-width: 0;
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--r);
+  padding: 12px;
+}
+.acct-tile.green { border-left-color: var(--green); }
+.acct-tile.amber { border-left-color: var(--amber); }
+.acct-tile.gray  { border-left-color: var(--text3); }
+.acct-label { font-size: 10px; font-weight: 700; color: var(--text2); margin-bottom: 6px; }
+.acct-tile.green .acct-label { color: var(--greenT); }
+.acct-tile.amber .acct-label { color: var(--amberT); }
+.acct-val { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.acct-sub { font-size: 9px; color: var(--text3); margin-top: 4px; line-height: 1.3; }
+
+/* ---- Talent-facing estado badges (signed-deals table) -------- */
+.tbadge {
+  display: inline-block;
+  font-size: 9px; font-weight: 600;
+  padding: 2px 8px; border-radius: 20px;
+}
+.tbadge.ejecucion { background: rgba(36,114,200,0.14);  color: var(--blueT); }   /* En ejecución = azul */
+.tbadge.cobranza  { background: var(--amberD);           color: var(--amberT); }  /* Por cobrar = ámbar */
+.tbadge.cobrado   { background: var(--greenD);           color: var(--greenT); }  /* Cobrado = verde */
+.tbadge.firmado   { background: var(--bg5);              color: var(--text2); }    /* Firmado = gris */
+
+/* ---- Disclaimer (talent audience, page 2) -------------------- */
+.disclaimer {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text3);
+}
+
+/* ---- Signed deals table -------------------------------------- */
+.deals-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.deals-table th {
+  text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text3); font-weight: 700; padding: 6px 8px; border-bottom: 1px solid var(--borderM);
+}
+.deals-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); color: var(--text); }
+.deals-table td.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--greenT); }
+.deals-table tr:last-child td { border-bottom: none; }
+.empty-note { font-size: 12px; color: var(--text3); padding: 8px 0; text-align: center; }

@@ -437,3 +437,123 @@ def flujo_dinero_kpis(
             },
         ]
     }
+
+
+# =============================================================================
+# Fase 9.7 — Talent-facing figures (audience = talent, not TA-internal).
+# All amounts are the talent's 70% share (Deal.commission_amount, verified to
+# equal value*0.70). These helpers expose ONLY talent-appropriate numbers —
+# never pipeline, TA commission, or funnel internals.
+# =============================================================================
+
+
+def _talent_70(deal: Deal) -> float:
+    """The talent's 70% share for a deal: commission_amount, or value*0.70 fallback."""
+    if deal.commission_amount is not None:
+        return float(deal.commission_amount)
+    return float(deal.value or 0.0) * 0.70
+
+
+def compute_talent_facing_kpis(
+    db: Session, talent_id: int, start: date, end: date
+) -> dict:
+    """The 3 talent-facing headline KPIs for the period, all in the talent's 70%.
+
+      - firmadas: count of won deals (won_time in period) + their 70% value.
+      - cobrado:  70% of deals whose 'cerrado' card collection_date is in the period.
+      - por_cobrar: max(0, firmadas_70 - cobrado_70)  (D-9.7: month-scoped).
+
+    Returns {firmadas_count, firmadas_70, cobrado_70, por_cobrar_70}.
+    """
+    from app.models import TrelloCard
+
+    # Firmadas — won in period. 70% = total_commission (sum of commission_amount).
+    won = deals_won_in_period(db, start.isoformat(), end.isoformat(), talent_id)
+    firmadas_count = won["count"]
+    firmadas_70 = float(won["total_commission"])
+
+    # Cobrado — cerrado cards whose collection_date falls in the period, 70% share.
+    cobrado_70 = (
+        db.query(func.coalesce(func.sum(Deal.commission_amount), 0.0))
+        .join(TrelloCard, TrelloCard.deal_id == Deal.id)
+        .filter(
+            Deal.talent_id == talent_id,
+            TrelloCard.list_state == "cerrado",
+            TrelloCard.collection_date >= start,
+            TrelloCard.collection_date <= end,
+        )
+        .scalar()
+    ) or 0.0
+    cobrado_70 = float(cobrado_70)
+
+    return {
+        "firmadas_count": int(firmadas_count),
+        "firmadas_70": firmadas_70,
+        "cobrado_70": cobrado_70,
+        "por_cobrar_70": max(0.0, firmadas_70 - cobrado_70),
+    }
+
+
+def account_status_breakdown(
+    db: Session, talent_id: int, year: int | None = None
+) -> dict:
+    """The 'Estado de tus cuentas' widget buckets, all in the talent's 70%.
+
+      - proximos_meses: ejecucion/cobranza cards whose resolved collection_date is
+        today or later (money still to come, any future month).
+      - retraso: ejecucion/cobranza cards whose resolved collection_date is in the
+        past. D-9.7 sanitisation: cards with an explicit collection_date EARLIER
+        than the deal's add_time (impossible dates) are EXCLUDED as data garbage.
+      - cobrado_ano: 'cerrado' cards with collection_date in the given calendar
+        year (defaults to the current year).
+
+    Returns {proximos_meses:{count,value70}, retraso:{count,value70},
+             cobrado_ano:{count,value70}}.
+    """
+    from app.models import TrelloCard
+    from app.services.trello_service import resolve_collection_date
+
+    today = date.today()
+    year = year or today.year
+
+    rows = (
+        db.query(TrelloCard, Deal)
+        .join(Deal, TrelloCard.deal_id == Deal.id)
+        .filter(Deal.talent_id == talent_id)
+        .all()
+    )
+
+    proximos = {"count": 0, "value70": 0.0}
+    retraso = {"count": 0, "value70": 0.0}
+    cobrado_ano = {"count": 0, "value70": 0.0}
+
+    for card, deal in rows:
+        share = _talent_70(deal)
+        if card.list_state in ("ejecucion", "cobranza"):
+            resolved = card.collection_date or resolve_collection_date(None, deal)
+            if resolved >= today:
+                proximos["count"] += 1
+                proximos["value70"] += share
+            else:
+                # Sanitise: skip impossible dates (collection before the deal existed).
+                add_dt = None
+                if deal.add_time:
+                    try:
+                        add_dt = date.fromisoformat(deal.add_time[:10])
+                    except ValueError:
+                        add_dt = None
+                if card.collection_date and add_dt and card.collection_date < add_dt:
+                    continue  # data garbage — excluded from retraso (D-9.7)
+                retraso["count"] += 1
+                retraso["value70"] += share
+        elif card.list_state == "cerrado":
+            cd = card.collection_date
+            if cd is not None and cd.year == year:
+                cobrado_ano["count"] += 1
+                cobrado_ano["value70"] += share
+
+    return {
+        "proximos_meses": proximos,
+        "retraso": retraso,
+        "cobrado_ano": cobrado_ano,
+    }

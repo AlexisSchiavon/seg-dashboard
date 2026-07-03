@@ -10,25 +10,32 @@ Security notes:
     (T-unauth-dl defense from STRIDE register).
   - generate_report endpoint is declared `def` (NOT `async def`) — WeasyPrint
     is blocking I/O; FastAPI runs it in a threadpool (RESEARCH.md Pitfall 3).
-  - download_report: os.path.exists check returns 404 instead of leaking a
-    500 stack trace when DB row points at a missing file (T-stale-path defense).
+  - Fase 9.5: /generate streams the PDF directly; /{id}/download regenerates the
+    PDF on demand from the stored row (no PDF is persisted to disk).
 """
-import os
-from urllib.parse import quote
+import io
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-
-from pydantic import ValidationError
 
 from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.models import Report, Talent
-from app.schemas.reports import ReportGenerate, ReportHistoryItem, ReportOut
+from app.schemas.reports import ReportGenerate, ReportHistoryItem
 from app.services import periods as periods_service
 from app.services import reports as reports_service
+
+
+def _pdf_streaming_response(pdf_bytes: bytes, filename: str) -> StreamingResponse:
+    """Stream PDF bytes as an attachment. `filename` is ASCII-safe (accent-stripped
+    slug), so a plain Content-Disposition filename is sufficient."""
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 router = APIRouter(
     prefix="/reports",
@@ -74,33 +81,43 @@ def get_available_quarters(db: Session = Depends(get_db)):
     return periods_service.available_quarters(db)
 
 
-@router.post("/generate", response_model=ReportOut)
+@router.post("/generate")
 def generate_report(  # MUST be `def`, NOT `async def` — WeasyPrint is blocking I/O
     body: ReportGenerate,
     db: Session = Depends(get_db),
 ):
-    """Generate an AI-narrated PDF report for a talent + period (month or quarter).
+    """Generate a data-driven PDF report and stream it back (Fase 9.5).
 
-    Fase 7 period resolution (D8):
+    Target resolution (Fase 9.5 back-compat):
+      - `talent_ids` (list of ids, or "all") takes precedence.
+      - Otherwise the legacy singular `talent_id` is treated as [talent_id].
+      - If neither is provided → 422.
+
+    Period resolution (D8 back-compat):
       - period_type + period_value take precedence when both are present.
       - Otherwise the legacy `month` field is treated as period_type="month".
       - If neither is provided → 422.
       - period_value is validated via periods.parse_period → 400 on bad input (D6).
 
-    Orchestration:
-      1. Validate talent exists (404 if not)
-      2. Build Python-computed payload (kpis/funnel/leads)
-      3. Call Claude for 3 narrative prose sections
-      4. Render HTML → PDF via WeasyPrint (blocking — runs in threadpool)
-      5. Upsert Report row in DB
-      6. Return ReportOut with narrative sections for in-page preview
+    Returns a StreamingResponse of the PDF (application/pdf, attachment). The
+    report metadata row is upserted so it can be regenerated later from history.
 
     Errors:
       - 400 if period_value is malformed
-      - 404 if talent not found (ValueError from service)
-      - 422 if neither month nor period_type/period_value provided
-      - 502 if Claude returns non-JSON (ValueError with specific message)
+      - 404 if a talent id is unknown
+      - 422 if no target or no period is provided
     """
+    # Resolve the target (Fase 9.5 back-compat): talent_ids wins over talent_id.
+    if body.talent_ids is not None:
+        talent_ids = body.talent_ids
+    elif body.talent_id is not None:
+        talent_ids = [body.talent_id]
+    else:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Provide either 'talent_ids' or 'talent_id'",
+        )
+
     # Resolve the period (D8 back-compat): period_type/period_value win over month.
     if body.period_type is not None and body.period_value is not None:
         period_type, period_value = body.period_type, body.period_value
@@ -122,36 +139,14 @@ def generate_report(  # MUST be `def`, NOT `async def` — WeasyPrint is blockin
         ) from exc
 
     try:
-        result = reports_service.generate_report(db, body.talent_id, period_value, start, end)
+        result = reports_service.generate_report_pdf(db, talent_ids, period_value, start, end)
     except ValueError as exc:
-        msg = str(exc)
-        if "non-JSON" in msg or "Claude returned" in msg:
-            raise HTTPException(
-                status_code=http_status.HTTP_502_BAD_GATEWAY,
-                detail="Error al generar narrativa",
-            ) from exc
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
-            detail="Talent not found",
+            detail=str(exc),
         ) from exc
 
-    try:
-        return ReportOut(
-            id=result["id"],
-            talent_id=result["talent_id"],
-            talent_name=result["talent_name"],
-            month=result["month"],
-            generated_at=result["generated_at"],
-            file_path=result["file_path"],
-            file_size_bytes=result["file_size_bytes"],
-            narrative=result["narrative"],
-        )
-    except ValidationError as exc:
-        # WR-02: Claude returned valid JSON but with missing/wrong keys — surface as 502
-        raise HTTPException(
-            status_code=http_status.HTTP_502_BAD_GATEWAY,
-            detail="Error al generar narrativa",
-        ) from exc
+    return _pdf_streaming_response(result["pdf_bytes"], result["filename"])
 
 
 @router.get("/", response_model=list[ReportHistoryItem])
@@ -166,13 +161,14 @@ def list_reports(db: Session = Depends(get_db)):
 
 @router.get("/{report_id}/download")
 def download_report(report_id: int, db: Session = Depends(get_db)):
-    """Stream the PDF file for a given report as an attachment download.
+    """Re-render a stored report's PDF on demand and stream it (Fase 9.5).
 
-    Auth-protected at router level (T-unauth-dl).
+    PDFs are no longer persisted to disk — the report is regenerated from the
+    row's metadata (talent_ids + period). Auth-protected at router level.
 
     Errors:
-      - 404 if Report row not found in DB
-      - 404 if Report row exists but PDF file is missing on disk (T-stale-path defense)
+      - 404 if the Report row does not exist
+      - 404 if a talent referenced by the row no longer exists
     """
     report = db.get(Report, report_id)
     if report is None:
@@ -181,32 +177,12 @@ def download_report(report_id: int, db: Session = Depends(get_db)):
             detail="Report not found",
         )
 
-    if not os.path.exists(report.file_path):
+    try:
+        pdf_bytes, filename = reports_service.regenerate_report_pdf(db, report)
+    except ValueError as exc:
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
-            detail="PDF file not found on disk",
-        )
+            detail=str(exc),
+        ) from exc
 
-    talent = db.get(Talent, report.talent_id)
-    talent_name = talent.name if talent is not None else "Sin-talento"
-    # Replace spaces with hyphens for a clean filename
-    safe_name = talent_name.replace(" ", "-")
-
-    # CR-02: RFC 5987 / RFC 6266 compliant Content-Disposition.
-    # filename= is an ASCII fallback (month only) for old clients.
-    # filename*= uses UTF-8 percent-encoding for non-ASCII talent names
-    # (e.g. "María-López-2026-05.pdf") so Safari/Firefox preserve the full name.
-    filename_ascii = f"reporte-{report.month}.pdf"
-    filename_utf8 = f"reporte-{safe_name}-{report.month}.pdf"
-    encoded = quote(filename_utf8, safe="-.")
-
-    return FileResponse(
-        path=report.file_path,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="{filename_ascii}"; '
-                f"filename*=UTF-8''{encoded}"
-            )
-        },
-    )
+    return _pdf_streaming_response(pdf_bytes, filename)

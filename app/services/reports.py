@@ -1,60 +1,53 @@
-"""Report generation service — orchestrates payload assembly, Claude narrative call,
-PDF rendering via WeasyPrint, and Report row upsert.
+"""Report generation service — assembles the data-driven PDF report (Fase 9).
 
-Design principles (05-CONTEXT.md / STATE.md hard rules):
-  - ALL numeric figures in the report come from Python services (kpis, funnel, leads).
-    Claude receives a pre-computed JSON payload and ONLY returns 3 prose narrative sections.
-  - Claude output is NEVER used for numbers in the PDF appendix or in the payload dict.
-  - This module is the ONLY place where the anthropic client and WeasyPrint are imported
-    so that conftest.py mock_anthropic and mock_weasyprint fixtures can patch them cleanly.
+Fase 9 (D8): the report is 100% Python-computed — there is NO Claude narrative.
+All figures come from the same services the "Por Talento" dashboard tab consumes
+(kpis, funnel, trello), rendered into Jinja templates + inline SVG charts and
+converted to PDF by WeasyPrint.
 
 Security (STRIDE threat register, 05-02-PLAN.md):
   T-path-traversal: _slug(talent) returns str(talent.id) — purely numeric, no separators.
   T-ssrf: _render_pdf passes the literal string "." as base_url to WeasyPrint — never a
     user-controlled value.
-  T-claude-numbers: All KPI/funnel figures in the PDF come from Python; Claude prose is
-    used only for the 3 narrative sections.
 """
-import json
-import os
+import hashlib
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
-import anthropic
 from jinja2 import Environment, FileSystemLoader
-from sqlalchemy import desc, func
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.config import settings
-from app.models import Deal, Report, Talent
+from app.models import Deal, Report, Talent, TrelloCard
+from app.services import kpis as kpi_service
+from app.services import periods as periods_service
+from app.services import report_charts
 
 # HTML is imported lazily inside _render_pdf() to avoid failing on macOS/CI environments
 # that lack Pango/Cairo system libs. monkeypatch fixtures patch this module-level name
 # (app.services.reports.HTML) so tests work without system libraries.
 HTML = None  # replaced by mock_weasyprint in tests; lazy-imported in _render_pdf
-from app.services import funnel as funnel_service
-from app.services import kpis as kpi_service
-from app.services import leads as leads_service
-from app.services import periods as periods_service
 
-# Jinja2 environment — autoescape=True to HTML-escape all Jinja2 variables,
-# including Claude-generated prose (protects against XSS in any future web rendering).
+_MONTHS_ES = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+]
+
+# Jinja2 environment — autoescape=True to HTML-escape all Jinja2 variables.
 _jinja_env = Environment(
-    loader=FileSystemLoader("templates"),
+    loader=FileSystemLoader("app/templates"),
     autoescape=True,
 )
-
-SYSTEM_PROMPT = (
-    "Eres un analista de inteligencia comercial para Santillán Entertainment Group, "
-    "una agencia de talentos/influencers en México. "
-    "El usuario te proporcionará un JSON con cifras ya calculadas por Python. "
-    "Debes usar ÚNICAMENTE los números del JSON proporcionado. "
-    "NUNCA inventes cifras, porcentajes ni fechas. "
-    "NUNCA calcules totales ni promedios por tu cuenta. "
-    "Responde ÚNICAMENTE con un JSON válido con exactamente tres claves: "
-    '"resumen_ejecutivo", "deals_destacados", "recomendacion". '
-    "Cada valor debe ser una cadena de texto en español con tu análisis narrativo. "
-    "No incluyas bloques de código ni marcadores markdown — solo el JSON plano."
+# Currency filters shared by the report templates.
+#   |mxn      -> compact "$1.2M" / "$50K" / "$0"  (matches dashboard formatMXN)
+#   |mxn_full -> "$1,234,567" full pesos with thousands separators
+_jinja_env.filters["mxn"] = report_charts._fmt_mxn
+_jinja_env.filters["mxn_full"] = lambda v: f"${float(v or 0):,.0f}"
+# |mxn_headline -> compact "$1.67M" for >= 1M (avoids wrapping in the firmadas
+# sublabel), full "$557,900" otherwise. Used only on "Valor total en tu 70%".
+_jinja_env.filters["mxn_headline"] = lambda v: (
+    f"${float(v or 0) / 1_000_000:.2f}M" if float(v or 0) >= 1_000_000
+    else f"${float(v or 0):,.0f}"
 )
 
 
@@ -81,291 +74,176 @@ def available_months(db: Session, talent_id: int) -> list[str]:
     return sorted(months, reverse=True)
 
 
-def _build_payload(
-    db: Session,
-    talent: Talent,
-    period_value: str,
-    start: date | None = None,
-    end: date | None = None,
-) -> dict:
-    """Assemble the Python-computed figures dict to pass to Claude.
+def _render_pdf_bytes(html_str: str) -> bytes:
+    """Render HTML to an in-memory PDF via WeasyPrint (Fase 9.5 — no disk file).
 
-    ALL numeric values come from direct DB queries. Fase 7 (P2/D4) changes the
-    semantics from the previous "everything filtered by add_time month" behavior:
-
-      - CLOSED metrics are scoped to the period: cerrados_count/valor and comisión
-        filter by Deal.won_time (the correct signing date — see brief, not add_time).
-      - ACTIVE/SNAPSHOT metrics are NOT period-filtered: open pipeline, the funnel,
-        and the top open-deal highlights are the current live state ("estado vivo"
-        per D4 — Luis asks "what did we sign in the period?", not "how big was my
-        pipeline in the period?").
-
-    period_value is the label ("YYYY-MM" or "YYYY-QN") stored in payload["month"]
-    and used for the filename/Report row. start/end are the inclusive period bounds;
-    when omitted they are derived from period_value (month vs quarter inferred from
-    the presence of "Q") so direct callers can still pass just a month string.
-
-    Leads (from Google Sheets) have no deal date and are reported all-time.
-    No ORM instances are placed in the returned dict — it must be JSON-serializable.
-    """
-    if start is None or end is None:
-        period_type = "quarter" if "Q" in period_value else "month"
-        start, end = periods_service.parse_period(period_type, period_value)
-
-    # Pipeline — open deals, all-time SNAPSHOT (D4: active pipeline is not period-scoped).
-    pipeline_val = (
-        db.query(func.coalesce(func.sum(Deal.value), 0.0))
-        .filter(
-            Deal.talent_id == talent.id,
-            Deal.status == "open",
-        )
-        .scalar()
-    ) or 0.0
-
-    # Cerrados/Comisión — won deals scoped to the period by won_time (P2/D4).
-    # 7.4: reuse deals_won_in_period (canonical won-in-range query) — no duplication.
-    won = kpi_service.deals_won_in_period(db, start.isoformat(), end.isoformat(), talent.id)
-    cerrados_count = won["count"]
-    cerrados_valor = won["total_value"]
-    comision = won["total_commission"]
-
-    # Funnel stages — per-talent, open deals, all-time SNAPSHOT (D4: active state).
-    funnel_rows = (
-        db.query(
-            Deal.stage_name,
-            func.count(Deal.id),
-            func.coalesce(func.sum(Deal.value), 0.0),
-        )
-        .filter(
-            Deal.status == "open",
-            Deal.talent_id == talent.id,
-        )
-        .group_by(Deal.stage_name)
-        .all()
-    )
-    stage_map: dict[str, tuple[int, float]] = {
-        row[0]: (row[1], float(row[2])) for row in funnel_rows
-    }
-    funnel_stages = [
-        {
-            "stage": stage,
-            "count": int(stage_map.get(stage, (0, 0.0))[0]),
-            "amount": float(stage_map.get(stage, (0, 0.0))[1]),
-        }
-        for stage in funnel_service.STAGES
-    ]
-
-    # Top 3 open deals by value — all-time SNAPSHOT (D4: active pipeline highlights).
-    top_deals_rows = (
-        db.query(Deal.title, Deal.value, Deal.stage_name)
-        .filter(
-            Deal.talent_id == talent.id,
-            Deal.status == "open",
-        )
-        .order_by(desc(Deal.value))
-        .limit(3)
-        .all()
-    )
-    top_deals = [
-        {"title": row[0], "value": float(row[1]), "stage_name": row[2]}
-        for row in top_deals_rows
-    ]
-
-    # Global leads counts — all-time (leads have no deal add_time equivalent)
-    leads_summary = leads_service.leads_summary(db)
-    leads_totales = leads_summary["leads_totales"]
-    leads_calificados = leads_summary["calificados"]
-
-    # Per-talent leads count — all-time
-    leads_by_talent = leads_service.leads_by_talent(db)
-    talent_leads = next(
-        (row for row in leads_by_talent if row.get("talent_id") == talent.id),
-        {"total": 0, "calificados": 0},
-    )
-
-    return {
-        "talent_name": talent.name,
-        "month": period_value,
-        "kpis": {
-            "pipeline": float(pipeline_val),
-            "cerrados_count": int(cerrados_count) if cerrados_count is not None else 0,
-            "cerrados_valor": float(cerrados_valor),
-            "comision": float(comision),
-        },
-        "funnel": funnel_stages,
-        "top_deals": top_deals,
-        "leads_totales": int(leads_totales),
-        "leads_calificados": int(leads_calificados),
-        "talent_leads_totales": int(talent_leads.get("total", 0)),
-        "talent_leads_calificados": int(talent_leads.get("calificados", 0)),
-    }
-
-
-def _call_claude(payload: dict) -> dict:
-    """Call claude-sonnet-4-6 and parse the 3-section JSON response.
-
-    Returns a dict with exactly 3 keys: resumen_ejecutivo, deals_destacados, recomendacion.
-    Strips markdown code fences if present (RESEARCH.md Pitfall 2).
-    Raises ValueError("Claude returned non-JSON") on parse failure.
-    """
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1500,
-        system=SYSTEM_PROMPT,
-        messages=[
-            {
-                "role": "user",
-                "content": f"Genera el reporte:\n{json.dumps(payload, ensure_ascii=False)}",
-            }
-        ],
-    )
-
-    # Guard: ensure Claude returned at least one text block (WR-01 defense)
-    if not response.content or response.content[0].type != "text":
-        raise ValueError("Claude returned non-JSON")
-    raw_text = response.content[0].text.strip()
-
-    # Strip markdown fences if Claude wraps the JSON (Pitfall 2)
-    if raw_text.startswith("```"):
-        # Remove leading fence (```json or ```)
-        raw_text = re.sub(r"^```[a-z]*\n?", "", raw_text)
-        # Remove trailing fence
-        raw_text = re.sub(r"\n?```$", "", raw_text.rstrip())
-
-    try:
-        parsed = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
-        raise ValueError("Claude returned non-JSON") from exc
-
-    return parsed
-
-
-def _slug(talent: Talent) -> str:
-    """Return a filesystem-safe slug for the talent.
-
-    Uses str(talent.id) — purely numeric, no path separators, no Unicode issues.
-    Defends T-path-traversal: numeric IDs cannot contain '../' or special characters.
-    """
-    return str(talent.id)
-
-
-def _render_pdf(html_str: str, output_path: str) -> int:
-    """Render HTML to PDF via WeasyPrint. Returns file size in bytes.
-
-    Uses atomic write: writes to a .tmp file then os.replace() to the final path
-    (RESEARCH.md Pitfall 4 — prevents a corrupt/partial file being visible in the DB).
-
-    base_url is the literal string "." — NEVER a user-controlled value (T-ssrf defense).
+    base_url is the literal string "." — NEVER a user-controlled value (T-ssrf
+    defense). "." resolves relative asset URLs (the Inter @font-face) against the
+    process CWD, which is the project root both locally and in the container.
 
     HTML is resolved via the module-level name `HTML` (patched to a mock in tests,
-    or lazy-imported from weasyprint in production to avoid import-time failures
-    on systems without Pango/Cairo system libs).
+    or lazy-imported from weasyprint in production to avoid import-time failures on
+    systems without Pango/Cairo system libs).
     """
     global HTML  # noqa: PLW0603
     if HTML is None:
         from weasyprint import HTML as _HTML  # lazy import — only when actually rendering
         HTML = _HTML
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    tmp_path = output_path + ".tmp"
-    try:
-        HTML(string=html_str, base_url=".").write_pdf(tmp_path)
-        os.replace(tmp_path, output_path)
-    except Exception:
-        # WR-03: clean up the .tmp file so it does not linger on disk when WeasyPrint fails
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        raise
-    return os.path.getsize(output_path)
+    return HTML(string=html_str, base_url=".").write_pdf()
 
 
-def generate_report(
+def _resolve_talents(db: Session, talent_ids: "list[int] | str") -> list[Talent]:
+    """Resolve the report target into an ordered list of Talent rows.
+
+    talent_ids is either the literal "all" (every active talent, name-sorted) or a
+    list of talent ids. Raises ValueError(f"Talent {id} not found") on a bad id.
+    """
+    if talent_ids == "all":
+        return (
+            db.query(Talent)
+            .filter(Talent.active.is_(True))
+            .order_by(Talent.name)
+            .all()
+        )
+    talents: list[Talent] = []
+    for tid in talent_ids:
+        talent = db.get(Talent, tid)
+        if talent is None:
+            raise ValueError(f"Talent {tid} not found")
+        talents.append(talent)
+    return talents
+
+
+def _talent_ids_label(talent_ids: "list[int] | str", talents: list[Talent]) -> str:
+    """The stored regenerate key: "all" or a comma-joined list of talent ids."""
+    if talent_ids == "all":
+        return "all"
+    return ",".join(str(t.id) for t in talents)
+
+
+def generate_report_pdf(
     db: Session,
-    talent_id: int,
+    talent_ids: "list[int] | str",
     period_value: str,
     start: date | None = None,
     end: date | None = None,
 ) -> dict:
-    """Orchestrate: build payload → call Claude → render PDF → upsert Report row.
+    """Render the report PDF in memory and upsert its metadata row (Fase 9.5).
 
-    Fase 7: period_value is the period label ("YYYY-MM" or "YYYY-QN"). It is used
-    as the report identifier (filename, Report.month column, upsert key). start/end
-    are the inclusive period bounds for the won_time-scoped figures; when omitted
-    they are derived from period_value (month vs quarter inferred from "Q"), so
-    legacy positional callers passing just a month string keep working.
+    talent_ids: "all" (consolidated over every active talent) or a list of ids
+    (single or multi). period_value is the period label ("YYYY-MM" / "YYYY-QN").
 
-    Returns a dict matching the ReportOut schema shape, including a 'narrative' sub-dict.
-    Raises ValueError(f"Talent {talent_id} not found") if the talent doesn't exist.
-    Raises ValueError("Claude returned non-JSON") if Claude's response cannot be parsed.
+    The PDF is NOT written to disk — it is returned as bytes for streaming and can
+    be regenerated later from the stored row (regenerate_report_pdf). The row keeps
+    only metadata: talent_ids label, single talent_id (None when consolidated),
+    month, byte size, and the content sha256.
+
+    Returns {report_id, filename, pdf_bytes, content_hash, file_size_bytes,
+             talent_ids, talent_id, month, is_consolidated}.
+    Raises ValueError if a talent id is unknown or the target resolves to empty.
     """
-    talent = db.get(Talent, talent_id)
-    if talent is None:
-        raise ValueError(f"Talent {talent_id} not found")
+    talents = _resolve_talents(db, talent_ids)
+    if not talents:
+        raise ValueError("No talents to report")
 
     if start is None or end is None:
         period_type = "quarter" if "Q" in period_value else "month"
         start, end = periods_service.parse_period(period_type, period_value)
 
-    # 1. Build Python-computed payload
-    payload = _build_payload(db, talent, period_value, start, end)
+    ctx = build_report_context(db, talents, period_value, start, end)
+    pdf_bytes = _render_pdf_bytes(render_report_html(ctx))
+    content_hash = hashlib.sha256(pdf_bytes).hexdigest()
+    file_size_bytes = len(pdf_bytes)
 
-    # 2. Call Claude for 3 narrative prose sections
-    narrative = _call_claude(payload)
+    ids_label = _talent_ids_label(talent_ids, talents)
+    is_consolidated = ctx["is_consolidated"]
+    # Single owning talent only when exactly one target talent (keeps the FK/history
+    # link); consolidated reports store talent_id = None.
+    single_talent_id = talents[0].id if (talent_ids != "all" and len(talents) == 1) else None
 
-    # 3. Render HTML → PDF
-    template = _jinja_env.get_template("reports/template.html")
-    html_str = template.render(
-        talent_name=talent.name,
-        month=period_value,
-        narrative=narrative,
-        data=payload,
-    )
-    file_path = f"reports/{_slug(talent)}/{period_value}.pdf"
-    file_size_bytes = _render_pdf(html_str, file_path)
+    if is_consolidated:
+        filename = f"reporte-consolidado-{period_value}.pdf"
+    else:
+        filename = f"reporte-{filename_slug(talents[0].name)}-{period_value}.pdf"
 
-    # 4. Upsert Report row (upsert semantics: overwrite if same talent_id+period exists).
-    # The `month` column stores the period label (now also "YYYY-QN" for quarters).
-    existing = (
-        db.query(Report)
-        .filter(Report.talent_id == talent_id, Report.month == period_value)
-        .first()
-    )
+    # Upsert overwrites in place. Single-talent rows are keyed on (talent_id, month)
+    # — the table's unique constraint — so a legacy row (talent_ids NULL) is reused
+    # instead of colliding. Consolidated rows (talent_id NULL) key on (talent_ids,
+    # month), since SQLite treats NULL talent_id as distinct.
+    if single_talent_id is not None:
+        existing = (
+            db.query(Report)
+            .filter(Report.talent_id == single_talent_id, Report.month == period_value)
+            .first()
+        )
+    else:
+        existing = (
+            db.query(Report)
+            .filter(Report.talent_ids == ids_label, Report.month == period_value)
+            .first()
+        )
     if existing is not None:
-        existing.file_path = file_path
+        existing.talent_id = single_talent_id
+        existing.file_path = None
         existing.file_size_bytes = file_size_bytes
+        existing.content_hash = content_hash
         existing.generated_at = datetime.utcnow()
-        db.commit()
-        db.refresh(existing)
         report = existing
     else:
         report = Report(
-            talent_id=talent_id,
+            talent_id=single_talent_id,
+            talent_ids=ids_label,
             month=period_value,
-            file_path=file_path,
+            file_path=None,
             file_size_bytes=file_size_bytes,
+            content_hash=content_hash,
             generated_at=datetime.utcnow(),
         )
         db.add(report)
-        db.commit()
-        db.refresh(report)
+    db.commit()
+    db.refresh(report)
 
     return {
-        "id": report.id,
-        "talent_id": report.talent_id,
-        "talent_name": talent.name,
-        "month": report.month,
-        "generated_at": report.generated_at,
-        "file_path": report.file_path,
-        "file_size_bytes": report.file_size_bytes,
-        "narrative": narrative,
+        "report_id": report.id,
+        "filename": filename,
+        "pdf_bytes": pdf_bytes,
+        "content_hash": content_hash,
+        "file_size_bytes": file_size_bytes,
+        "talent_ids": ids_label,
+        "talent_id": single_talent_id,
+        "month": period_value,
+        "is_consolidated": is_consolidated,
     }
+
+
+def regenerate_report_pdf(db: Session, report: Report) -> tuple[bytes, str]:
+    """Re-render a stored report's PDF on demand (Fase 9.5 — no disk persistence).
+
+    Reconstructs the target from the row's talent_ids label and period (month),
+    re-renders, and returns (pdf_bytes, filename). Raises ValueError if a talent
+    referenced by the row no longer exists.
+    """
+    label = report.talent_ids
+    if label == "all":
+        talent_ids: "list[int] | str" = "all"
+    elif label:
+        talent_ids = [int(x) for x in label.split(",") if x]
+    elif report.talent_id is not None:
+        # Legacy row created before talent_ids existed — fall back to the FK.
+        talent_ids = [report.talent_id]
+    else:
+        raise ValueError("Report row has no talent target to regenerate")
+
+    result = generate_report_pdf(db, talent_ids, report.month)
+    return result["pdf_bytes"], result["filename"]
 
 
 def list_reports(db: Session) -> list[dict]:
     """Return all Report rows ordered by generated_at desc, with talent_name resolved.
 
-    Each entry matches the ReportHistoryItem schema shape.
+    Consolidated rows (talent_id is None) are labelled "Consolidado". Each entry
+    matches the ReportHistoryItem schema shape.
     """
     reports = (
         db.query(Report)
@@ -375,8 +253,11 @@ def list_reports(db: Session) -> list[dict]:
 
     result = []
     for report in reports:
-        talent = db.get(Talent, report.talent_id)
-        talent_name = talent.name if talent is not None else "Sin talento"
+        if report.talent_id is None:
+            talent_name = "Consolidado"
+        else:
+            talent = db.get(Talent, report.talent_id)
+            talent_name = talent.name if talent is not None else "Sin talento"
         result.append(
             {
                 "id": report.id,
@@ -389,3 +270,207 @@ def list_reports(db: Session) -> list[dict]:
         )
 
     return result
+
+
+# =============================================================================
+# Fase 9.4 — Redesigned data-driven report (no Claude narrative, D8).
+# These assembly helpers reuse the SAME services the "Por Talento" dashboard tab
+# consumes, so the PDF is a 1:1 data match (D1). They do NOT touch the DB.
+# =============================================================================
+
+
+def filename_slug(name: str) -> str:
+    """Filesystem/URL-safe slug: lowercase, accents stripped, hyphen-separated.
+
+    'Emicánico Pérez' -> 'emicanico-perez'. Empty/garbage collapses to 'talento'.
+    """
+    import unicodedata
+
+    normalized = unicodedata.normalize("NFKD", name or "")
+    ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_only).strip("-").lower()
+    return slug or "talento"
+
+
+def _period_label(period_value: str) -> str:
+    """'2026-06' -> 'Junio 2026'; '2026-Q2' -> 'Q2 2026'; passthrough otherwise."""
+    m = re.fullmatch(r"(\d{4})-(0[1-9]|1[0-2])", period_value or "")
+    if m:
+        return f"{_MONTHS_ES[int(m.group(2)) - 1]} {m.group(1)}"
+    q = re.fullmatch(r"(\d{4})-Q([1-4])", period_value or "")
+    if q:
+        return f"Q{q.group(2)} {q.group(1)}"
+    return period_value or ""
+
+
+def _format_won_date(iso_str: str | None) -> str:
+    """ISO 'YYYY-MM-DDThh:mm:ss' -> 'D mmm YYYY' in Spanish (e.g. '15 jun 2026')."""
+    if not iso_str:
+        return "—"
+    try:
+        d = datetime.fromisoformat(iso_str.replace("Z", "").split("T")[0])
+    except ValueError:
+        return "—"
+    return f"{d.day} {_MONTHS_ES[d.month - 1][:3].lower()} {d.year}"
+
+
+def _signed_deal_estado(card: "TrelloCard | None", start: date, end: date) -> tuple[str, str]:
+    """Badge (css class, label) for a signed deal, aligned to the KPI semantics (P3).
+
+    'Cobrado' is shown ONLY when the card is 'cerrado' AND its collection_date is
+    within the report month — matching the "Cobrado este mes" KPI. A deal collected
+    in a different month reads 'En ejecución', not 'Cobrado', so the table total no
+    longer contradicts the headline KPI.
+    """
+    if card is None:
+        return "firmado", "Firmado"
+    if card.list_state == "cerrado":
+        if card.collection_date and start <= card.collection_date <= end:
+            return "cobrado", "Cobrado"
+        return "ejecucion", "En ejecución"  # collected in a different month
+    if card.list_state == "cobranza":
+        return "cobranza", "Por cobrar"
+    return "ejecucion", "En ejecución"
+
+
+def _talent_projection_70(db: Session, talent: Talent) -> list[dict]:
+    """Forward-only 4-month projection of the talent's 70% still to be collected (P4).
+
+    Same universe as account_status 'proximos_meses' — ejecucion/cobranza cards
+    whose resolved collection_date is today or later — bucketed by month. This keeps
+    the projection bars consistent with the "por cobrar próximos meses" tile (a card
+    due earlier this month is overdue, not projected).
+    """
+    import calendar
+
+    from app.services.trello_service import _sliding_window_months, resolve_collection_date
+
+    today = date.today()
+    window = _sliding_window_months(today)
+    labels = [f"{calendar.month_abbr[d.month]} {d.year}" for d in window]
+    sums = {lbl: 0.0 for lbl in labels}
+
+    rows = (
+        db.query(TrelloCard, Deal)
+        .join(Deal, TrelloCard.deal_id == Deal.id)
+        .filter(Deal.talent_id == talent.id)
+        .all()
+    )
+    for card, deal in rows:
+        if card.list_state not in ("ejecucion", "cobranza"):
+            continue
+        resolved = card.collection_date or resolve_collection_date(None, deal)
+        if resolved < today:
+            continue  # overdue, not projected (P4 — align with proximos_meses)
+        lbl = f"{calendar.month_abbr[resolved.month]} {resolved.year}"
+        if lbl in sums:
+            sums[lbl] += kpi_service._talent_70(deal)
+
+    return [
+        {"month": lbl, "estimado70": sums[lbl], "is_current": i == 0,
+         "has_data": sums[lbl] > 0}
+        for i, lbl in enumerate(labels)
+    ]
+
+
+def build_talent_report(db: Session, talent: Talent, start: date, end: date) -> dict:
+    """Assemble one talent's TALENT-FACING dataset (Fase 9.7, audience = talent).
+
+    Only talent-appropriate figures — all money in the talent's 70% share. No
+    pipeline, TA commission, funnel, prospectos/calificados, lost donut, or the
+    payment-calendar placeholder (those are TA-internal and were removed).
+
+    Data sources:
+      - kpi_service.compute_talent_facing_kpis -> Row 1 (firmadas/cobrado/por cobrar, 70%)
+      - kpi_service.account_status_breakdown -> Row 2 "Estado de tus cuentas" (70%)
+      - won deals in period + Trello card    -> Row 3 detail table (70% + estado)
+      - _talent_projection_70                -> page-2 projection (70%, forward-only)
+    """
+    talent_kpis = kpi_service.compute_talent_facing_kpis(db, talent.id, start, end)
+    account_status = kpi_service.account_status_breakdown(db, talent.id)
+
+    # Row 3 — campañas firmadas del mes, newest first, con su 70% y estado (badge).
+    start_dt = datetime(start.year, start.month, start.day)
+    end_excl = datetime(end.year, end.month, end.day) + timedelta(days=1)
+    won_rows = (
+        db.query(Deal)
+        .filter(
+            Deal.talent_id == talent.id,
+            Deal.status == "won",
+            Deal.won_time.isnot(None),
+            Deal.won_time >= start_dt,
+            Deal.won_time < end_excl,
+        )
+        .order_by(Deal.won_time.desc())
+        .all()
+    )
+    signed = []
+    for d in won_rows:
+        card = db.query(TrelloCard).filter(TrelloCard.deal_id == d.id).first()
+        cls, label = _signed_deal_estado(card, start, end)
+        signed.append({
+            "title": d.title,
+            "date": _format_won_date(d.won_time.isoformat() if d.won_time else None),
+            "value70": kpi_service._talent_70(d),
+            "estado_cls": cls,
+            "estado_label": label,
+        })
+    signed_total_70 = sum(s["value70"] for s in signed)
+
+    projection70 = _talent_projection_70(db, talent)
+
+    return {
+        "talent_name": talent.name,
+        "slug": filename_slug(talent.name),
+        "talent_kpis": talent_kpis,               # Row 1 (70%)
+        "account_status": account_status,         # Row 2 (70%)
+        "signed_deals": signed,                   # Row 3 detail
+        "signed_count": len(signed),
+        "signed_total_70": signed_total_70,
+        "projection70": projection70,             # page 2
+        "projection70_svg": report_charts.talent_projection_svg(projection70),
+    }
+
+
+def build_report_context(
+    db: Session,
+    talents: list[Talent],
+    period_value: str,
+    start: date,
+    end: date,
+    now: datetime | None = None,
+) -> dict:
+    """Build the full document context (cover + one page per talent).
+
+    Single talent -> cover shows that talent's name and headline KPIs.
+    Multiple talents ('all') -> cover title is 'Reporte consolidado' and the
+    headline KPIs are summed across talents (D2/D7).
+
+    `now` overrides the generation timestamp — used by the golden-file test to
+    render a deterministic cover (D10).
+    """
+    talent_reports = [build_talent_report(db, t, start, end) for t in talents]
+
+    is_consolidated = len(talents) > 1
+    title = "Reporte consolidado" if is_consolidated else (
+        talents[0].name if talents else "Reporte"
+    )
+
+    now = now or datetime.utcnow()
+    return {
+        # Fase 9.7 (P1): the cover is branding-only — no sensitive KPIs (those are
+        # 100%/all-time; the talent-facing 70% figures live on the talent pages).
+        "title": title,
+        "is_consolidated": is_consolidated,
+        "talent_count": len(talents),
+        "period_label": _period_label(period_value),
+        "period_value": period_value,
+        "talents": talent_reports,
+        "generated_at": now.strftime("%Y-%m-%d %H:%M"),
+        "generated_stamp": now.strftime("%Y-%m-%d %H:%M UTC"),
+    }
+
+
+def render_report_html(ctx: dict) -> str:
+    """Render the full multi-page report HTML (cover + one page per talent)."""
+    return _jinja_env.get_template("reports/base.html").render(ctx=ctx)

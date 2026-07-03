@@ -1,0 +1,19 @@
+{# Portada — branding only (Fase 9.7 / P1): sin KPIs sensibles.
+   TA badge + nombre + periodo + pie. Los números 70% viven en las páginas del talento. #}
+<div class="cover">
+  <div class="cover-brand">
+    <div class="brand-badge">TA</div>
+    <div class="brand-word">Talent Agency</div>
+  </div>
+
+  <div class="cover-title">{{ ctx.title }}</div>
+  <div class="cover-period">{{ ctx.period_label }}</div>
+
+  {% if ctx.is_consolidated %}
+    <div class="section-title">Resumen de {{ ctx.talent_count }} talentos</div>
+  {% endif %}
+
+  <div class="cover-foot">
+    Santillán Entertainment Group · Inteligencia comercial · Generado {{ ctx.generated_stamp }}
+  </div>
+</div>
