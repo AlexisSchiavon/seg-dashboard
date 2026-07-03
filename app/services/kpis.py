@@ -499,6 +499,9 @@ def account_status_breakdown(
 ) -> dict:
     """The 'Estado de tus cuentas' widget buckets, all in the talent's 70%.
 
+    9.8f: considers ONLY won deals — cards linked to lost/open deals are excluded
+    from every bucket (they are not collectable / not yet signed).
+
       - proximos_meses: ejecucion/cobranza cards whose resolved collection_date is
         today or later (money still to come, any future month).
       - retraso: ONLY 'cobranza' (Trello "Cobrar") cards whose collection_date is in
@@ -519,10 +522,13 @@ def account_status_breakdown(
     today = date.today()
     year = year or today.year
 
+    # 9.8f: only WON deals. A card linked to a lost deal (uncollectable) or an open
+    # deal (not yet signed) must not count toward any 'estado de cuentas' bucket —
+    # this inflated retraso (e.g. DSW $500K→$122K real).
     rows = (
         db.query(TrelloCard, Deal)
         .join(Deal, TrelloCard.deal_id == Deal.id)
-        .filter(Deal.talent_id == talent_id)
+        .filter(Deal.talent_id == talent_id, Deal.status == "won")
         .all()
     )
 

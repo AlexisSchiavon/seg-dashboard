@@ -143,6 +143,21 @@ class TestAccountStatusBreakdown:
         res = kpi_service.account_status_breakdown(db_session, t.id)
         assert res["retraso"]["count"] == 0
 
+    def test_retraso_excludes_non_won_deals(self, db_session):
+        """9.8f: cards on lost (uncollectable) or open (unsigned) deals must not
+        count toward retraso — only won deals do."""
+        t = _talent(db_session)
+        past = date.today() - timedelta(days=30)
+        dw = _deal(db_session, t.id, 9501, 100000.0, add_time="2024-01-01T00:00:00")
+        _card(db_session, "c-won", "cobranza", dw.id, past)
+        dl = _deal(db_session, t.id, 9502, 500000.0, status="lost", add_time="2024-01-01T00:00:00")
+        _card(db_session, "c-lost", "cobranza", dl.id, past)
+        do = _deal(db_session, t.id, 9503, 800000.0, status="open", add_time="2024-01-01T00:00:00")
+        _card(db_session, "c-open", "cobranza", do.id, past)
+        res = kpi_service.account_status_breakdown(db_session, t.id)
+        assert res["retraso"]["count"] == 1                # only the won card
+        assert res["retraso"]["value70"] == 70000.0        # 100000*0.70
+
 
 class TestSignedDealBadge:
     """P3: 'Cobrado' badge only when the card is cerrado AND collected in the month."""

@@ -350,10 +350,12 @@ def _talent_projection_70(db: Session, talent: Talent) -> list[dict]:
     labels = [f"{calendar.month_abbr[d.month]} {d.year}" for d in window]
     sums = {lbl: 0.0 for lbl in labels}
 
+    # 9.8f: only WON deals (keeps this consistent with account_status 'proximos_meses',
+    # which the P4 invariant requires; open/lost deals are not projected income).
     rows = (
         db.query(TrelloCard, Deal)
         .join(Deal, TrelloCard.deal_id == Deal.id)
-        .filter(Deal.talent_id == talent.id)
+        .filter(Deal.talent_id == talent.id, Deal.status == "won")
         .all()
     )
     for card, deal in rows:
