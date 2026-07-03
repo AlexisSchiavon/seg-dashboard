@@ -175,7 +175,8 @@ class TrelloCard(Base):
     list_id: Mapped[str] = mapped_column(String)
     list_name: Mapped[str] = mapped_column(String)
 
-    # Derived from LIST_STATE_MAP in trello.py: ejecucion | cobranza | cerrado
+    # Derived from LIST_STATE_MAP in trello.py:
+    # ejecucion | cobranza | cerrado | omitido  (9.8a: 'omitido' = excluido de todo cálculo)
     list_state: Mapped[str] = mapped_column(String)
 
     # FK to deals.id (local PK, NOT deals.pipedrive_id) — nullable: card may predate sync
