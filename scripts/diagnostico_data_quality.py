@@ -10,14 +10,14 @@ Fase 9.8c — Detección de duplicados con umbral temporal (ver DUP_THRESHOLD_DA
 """
 import sys
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
 DB = "seg.db"
-DEFAULT_OUT = "/tmp/diagnostico_data_seg_2026-07-02.xlsx"
+DEFAULT_OUT = "/tmp/diagnostico_data_seg_2026-07-02_v2.xlsx"
 TODAY = date(2026, 7, 2)
 PIPE = "https://talentagency.pipedrive.com/deal/{}"
 TRELLO = "https://trello.com/c/{}"
@@ -127,12 +127,18 @@ for key, members in groups.items():
             continue
         wo, wd = parse_d(orig["won_time"]), parse_d(dup["won_time"])
         days_between = abs((wd - wo).days) if wo and wd else ""
+        # Acción específica: el artefacto de importación del 8-dic-2025 es el grueso;
+        # los demás son creaciones duplicadas el mismo día pero de otra fecha.
+        if wo == date(2025, 12, 8):
+            accion = "Duplicado de importación del 8 dic 2025 — archivar el más reciente (mantener el original)"
+        else:
+            accion = "Creado el mismo día — verificar si es duplicado y archivar el más reciente"
         h1_total += dup["value"] or 0
         h1_rows.append([
             orig["pipedrive_id"], dup["pipedrive_id"], orig["title"], tname(orig["talent_id"]),
             orig["value"], fmt_d(orig["won_time"]), fmt_d(dup["won_time"]), days_between,
             PIPE.format(orig["pipedrive_id"]), PIPE.format(dup["pipedrive_id"]),
-            "Verificar cuál es el correcto y archivar el otro",
+            accion,
         ])
 h1_rows.sort(key=lambda r: -(r[4] or 0))
 add_sheet(wb, "Duplicados Pipedrive",
@@ -149,9 +155,12 @@ def deal_by_localid(lid):
 
 
 # ============================================================ HOJA 2: Cobranza vencida
-# NOTA (9.8c baseline): esta hoja usa todavía el filtro amplio ejecucion+cobranza;
-# se corrige a cobranza-only en 9.8d.
-cards = list(cur.execute("SELECT * FROM trello_cards WHERE list_state IN ('ejecucion','cobranza')"))
+# 9.8d: SOLO la columna Trello "Cobrar" (list_state='cobranza') vencida, con el mismo
+# saneo que el widget del PDF (9.8b): excluye fechas imposibles (→ Hoja 5), montos en
+# 0, y >180 días (stale / probablemente ya cobrado). Contrato/Enviar factura/Firmar
+# (ejecución), Enviar encuesta (post-cobro→cerrado) y Otros pendientes quedan fuera.
+CUT_180 = TODAY - timedelta(days=180)
+cards = list(cur.execute("SELECT * FROM trello_cards WHERE list_state='cobranza'"))
 h2_rows = []
 h2_total = 0.0
 for c in cards:
@@ -163,6 +172,13 @@ for c in cards:
     cd = parse_d(c["collection_date"])
     if not cd or cd >= TODAY:
         continue
+    ad = parse_d(d["add_time"])
+    if ad and cd < ad:
+        continue  # fecha imposible → se reporta en Hoja 5
+    if (d["value"] or 0) <= 0:
+        continue  # nada real que cobrar
+    if cd < CUT_180:
+        continue  # >180 días — stale / probablemente ya cobrado
     dias = (TODAY - cd).days
     if dias >= 180:
         acc = "Verificar si ya se cobró y no se actualizó. Marcar cerrado o reprogramar."
