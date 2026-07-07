@@ -692,8 +692,8 @@ Sección honesta del estado a 6-jul-2026.
 - **SLA de respuesta (Cláusula Décima Quinta):** **24 horas hábiles** para fallas
   críticas y **72 horas hábiles** para fallas menores.
 - **Canal preferido:** WhatsApp o correo electrónico a Alexis Zamora.
-  - WhatsApp: `[PENDIENTE_ALEXIS]`
-  - Email: `[PENDIENTE_ALEXIS]`
+  - WhatsApp: +522211747662
+  - Email: alexis.schiavon@gmail.com
 - **Prestador:** Alexis Ahkin Schiavon Zamora (desarrollador del sistema).
 
 ---
