@@ -20,5 +20,8 @@ class Settings(BaseSettings):
     TRELLO_BOARD_IDS: str = ""
     ANTHROPIC_API_KEY: str = ""
 
+    # Prompt 3 Feature 1 — audit log retention (days). Weekly cleanup job.
+    AUDIT_LOG_RETENTION_DAYS: int = 90
+
 
 settings = Settings()
