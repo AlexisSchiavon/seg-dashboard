@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.database import get_db
-from app.models import Report, Talent
+from app.models import Report, Talent, User
 from app.schemas.reports import ReportGenerate, ReportHistoryItem
 from app.services import periods as periods_service
 from app.services import reports as reports_service
@@ -85,6 +85,7 @@ def get_available_quarters(db: Session = Depends(get_db)):
 def generate_report(  # MUST be `def`, NOT `async def` — WeasyPrint is blocking I/O
     body: ReportGenerate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Generate a data-driven PDF report and stream it back (Fase 9.5).
 
@@ -145,6 +146,15 @@ def generate_report(  # MUST be `def`, NOT `async def` — WeasyPrint is blockin
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+
+    from app.services.audit import log_action
+    log_action(
+        "REPORT_GENERATED", actor=f"user:{current_user.email}", entity_type="report",
+        entity_id=result.get("report_id"),
+        payload={"talent_ids": result.get("talent_ids"), "month": result.get("month"),
+                 "is_consolidated": result.get("is_consolidated"),
+                 "file_size_bytes": result.get("file_size_bytes")},
+    )
 
     return _pdf_streaming_response(result["pdf_bytes"], result["filename"])
 
