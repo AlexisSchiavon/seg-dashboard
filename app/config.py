@@ -13,11 +13,15 @@ class Settings(BaseSettings):
     # Placeholders for M2-M5 (per ARCHITECTURE.md M1 build-order guidance — define now, unused until later)
     PIPEDRIVE_API_TOKEN: str = ""
     PIPEDRIVE_DOMAIN: str = ""
+    PIPEDRIVE_PIPELINE_ID: int | None = None
+    PIPEDRIVE_STAGE_CONTRATO_ID: int | None = None
     GOOGLE_SHEETS_ID: str = ""
     GOOGLE_SERVICE_ACCOUNT_JSON: str = ""
     TRELLO_API_KEY: str = ""
     TRELLO_TOKEN: str = ""
     TRELLO_BOARD_IDS: str = ""
+    TRELLO_ORG_ID: str = ""
+    TRELLO_WORKSPACE_NAME: str = ""
     ANTHROPIC_API_KEY: str = ""
 
 
