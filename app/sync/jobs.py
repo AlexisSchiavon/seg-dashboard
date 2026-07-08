@@ -483,9 +483,6 @@ def sync_trello(db: Session) -> SyncLog:
     try:
         client = trello._client()
 
-        # Preload all deals once for deal linkage (avoid N+1 queries).
-        all_deals = db.query(Deal).all()
-
         records_synced = 0
         for list_id, state in trello.LIST_STATE_MAP.items():
             cards = trello.get_list_cards(client, list_id)
