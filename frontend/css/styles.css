@@ -2446,3 +2446,39 @@ body {
   vertical-align: middle;
   line-height: 1.4;
 }
+
+/* ===== Salud de datos (Prompt 3, Feature 2) ===== */
+.salud-header{color:var(--muted,#9aa0aa);font-size:13px;line-height:1.5;}
+.salud-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;}
+.salud-card{cursor:pointer;transition:border-color .15s,transform .05s;}
+.salud-card:hover{border-color:var(--borderH);}
+.salud-card:active{transform:translateY(1px);}
+.salud-card-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.salud-sev{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
+.salud-title{font-weight:600;font-size:14px;line-height:1.25;}
+.salud-count-row{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;}
+.salud-count{font-size:34px;font-weight:700;line-height:1;}
+.salud-value{margin-top:4px;color:#f59e0b;font-weight:600;font-size:14px;}
+.salud-desc{margin-top:8px;color:var(--muted,#9aa0aa);font-size:12px;line-height:1.4;}
+.salud-foot{display:flex;align-items:center;justify-content:space-between;margin-top:12px;}
+.salud-badge{display:inline-block;padding:3px 8px;border-radius:999px;background:var(--bg5);
+  border:1px solid var(--borderM);font-size:11px;color:#cbd5e1;}
+.salud-delta{font-size:12px;font-weight:600;}
+.salud-delta.up{color:#ef4444;} .salud-delta.down{color:#10b981;}
+.spark{opacity:.85;}
+/* Drawer */
+.drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;z-index:60;}
+.drawer-overlay.open{display:block;}
+.drawer{position:absolute;top:0;right:0;height:100%;width:min(460px,92vw);background:var(--bg2);
+  border-left:1px solid var(--borderM);padding:18px;overflow-y:auto;box-shadow:-8px 0 24px rgba(0,0,0,.4);}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.drawer-title{font-weight:700;font-size:16px;}
+.drawer-close{background:none;border:none;color:#cbd5e1;font-size:26px;line-height:1;cursor:pointer;}
+.drawer-sub{color:var(--muted,#9aa0aa);font-size:12px;margin:6px 0 14px;}
+.drawer-item{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:10px 0;border-bottom:1px solid var(--border);}
+.drawer-item-title{font-size:13px;}
+.drawer-item-links{margin-top:3px;font-size:12px;}
+.drawer-item-links a{color:#60a5fa;text-decoration:none;}
+.drawer-item-links a:hover{text-decoration:underline;}
+.drawer-item-val{color:#e2e8f0;font-size:13px;font-weight:600;white-space:nowrap;}

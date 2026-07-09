@@ -221,3 +221,21 @@ class AuditLog(Base):
     entity_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class HealthCheckSnapshot(Base):
+    """Historical snapshot of a data-health check (Prompt 3, Feature 2).
+
+    One row per check per run. `resolved_delta` = count now − count in the
+    previous snapshot (negative means problems were resolved).
+    """
+    __tablename__ = "health_check_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    check_id: Mapped[str] = mapped_column(String, index=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)
+    affected_value: Mapped[float] = mapped_column(Float, default=0.0)
+    snapshot_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    resolved_delta: Mapped[int | None] = mapped_column(Integer, nullable=True)

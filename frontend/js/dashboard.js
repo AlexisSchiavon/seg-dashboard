@@ -141,6 +141,8 @@ function setPage(name, e) {
     loadReportTalents();
     loadReportPeriods();   // Fase 7: populate the won-based month/quarter picker
     loadReportHistory();
+  } else if (name === "salud") {
+    loadSalud();
   } else if (name === "agent") {
     initAgentTab();
   }

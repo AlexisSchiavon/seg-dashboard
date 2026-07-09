@@ -60,6 +60,18 @@ def _purge_audit_logs():
     purge_old_logs()
 
 
+def _run_health_snapshots():
+    """Hourly data-health checks + snapshot (emits DATA_HEALTH_ALERT on growth)."""
+    from app.services.health_checks import save_snapshots
+    db = SessionLocal()
+    try:
+        save_snapshots(db)
+    except Exception:  # noqa: BLE001 — health snapshots must never crash the scheduler
+        pass
+    finally:
+        db.close()
+
+
 def start():
     scheduler.add_job(
         _run_all_syncs,
@@ -74,6 +86,14 @@ def start():
         "interval",
         weeks=1,
         id="audit_purge",
+        replace_existing=True,
+    )
+    # Prompt 3 Feature 2 — hourly data-health snapshots.
+    scheduler.add_job(
+        _run_health_snapshots,
+        "interval",
+        minutes=60,
+        id="health_snapshots",
         replace_existing=True,
     )
     scheduler.start()
