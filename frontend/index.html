@@ -30,6 +30,7 @@
     <div class="tab" onclick="setPage('funnel', event)">Funnel</div>
     <div class="tab" onclick="setPage('leads', event)">Leads</div>
     <div class="tab" onclick="setPage('reports', event)">Reportes</div>
+    <div class="tab" onclick="setPage('salud', event)">Salud de datos</div>
     <div class="tab" onclick="setPage('agent', event)">Agente</div>
   </div>
 
@@ -471,6 +472,37 @@
     </div>
   </div>
 
+  <!-- ========== SALUD DE DATOS TAB ========== -->
+  <div class="page" id="page-salud">
+    <div class="spacer"></div>
+    <div class="section">
+      <div class="section-title">Salud de datos</div>
+      <div class="salud-header card">
+        Los pendientes de esta sección son responsabilidad operativa del equipo de
+        Talent Agency. Cada problema tiene link directo a Pipedrive o Trello para su
+        resolución. El sistema los detecta y los muestra, pero no puede resolverlos
+        por su cuenta.
+      </div>
+    </div>
+    <div class="section">
+      <div id="salud-grid" class="salud-grid"><!-- populated by loadSalud() --></div>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- Drawer lateral para items de un check -->
+  <div id="salud-drawer-overlay" class="drawer-overlay" onclick="closeSaludDrawer(event)">
+    <aside id="salud-drawer" class="drawer" onclick="event.stopPropagation()">
+      <div class="drawer-head">
+        <div class="drawer-title" id="salud-drawer-title">—</div>
+        <button class="drawer-close" onclick="closeSaludDrawer()">×</button>
+      </div>
+      <div class="drawer-sub" id="salud-drawer-sub"></div>
+      <div id="salud-drawer-items" class="drawer-items"></div>
+    </aside>
+  </div>
+
+  <script src="/js/salud.js?v=20260707"></script>
   <script src="/js/auth.js?v=20260630b"></script>
   <script src="/js/dashboard.js?v=20260630b"></script>
   <script src="/js/leads.js?v=20260630b"></script>
