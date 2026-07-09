@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import String, Text, Boolean, Float, Integer, ForeignKey, DateTime, Date, UniqueConstraint, func
+from sqlalchemy import String, Text, Boolean, Float, Integer, ForeignKey, DateTime, Date, Index, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -193,3 +193,31 @@ class TrelloCard(Base):
     synced_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+class AuditLog(Base):
+    """Forensic audit trail — one row per important action (Prompt 3, Feature 1).
+
+    Written by app/services/audit.py::log_action(). Never blocks the primary
+    operation: if the write fails, the caller logs and continues.
+    """
+    __tablename__ = "audit_log"
+    __table_args__ = (
+        # Composite index for "history of an entity" queries (entity + time desc).
+        Index("ix_audit_entity_history", "entity_type", "entity_id", "timestamp"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    # 'system' | 'user:<email>' | 'sync' | 'manual_console'
+    actor: Mapped[str] = mapped_column(String, index=True, default="system")
+    # TALENT_ASSIGNED | TALENT_REMOVED | SYNC_COMPLETED | SYNC_FAILED |
+    # DATA_HEALTH_ALERT | MANUAL_UPDATE | REPORT_GENERATED | LOGIN | LOGOUT
+    action_type: Mapped[str] = mapped_column(String, index=True)
+    # 'deal' | 'card' | 'talent' | 'report' | 'lead' | 'system'
+    entity_type: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    entity_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)

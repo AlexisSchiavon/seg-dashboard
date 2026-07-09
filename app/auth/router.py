@@ -43,12 +43,16 @@ def login(
         max_age=int(ACCESS_TOKEN_EXPIRE.total_seconds()),
         path="/",
     )
+    from app.services.audit import log_action
+    log_action("LOGIN", actor=f"user:{user.email}", entity_type="system")
     return {"status": "ok"}
 
 
 @router.post("/logout")
 def logout(response: Response, current_user: User = Depends(get_current_user)):
     response.delete_cookie("access_token", path="/")  # D-05
+    from app.services.audit import log_action
+    log_action("LOGOUT", actor=f"user:{current_user.email}", entity_type="system")
     return {"status": "ok"}
 
 

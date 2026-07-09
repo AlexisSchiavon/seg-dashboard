@@ -192,6 +192,7 @@ def sync_pipedrive(db: Session) -> SyncLog:
         }
 
         records_synced = 0
+        talent_changes: list[tuple[int, int | None, int | None]] = []
         for deal in deals:
             pipedrive_id = deal["id"]
             value = float(deal.get("value") or 0)
@@ -247,6 +248,9 @@ def sync_pipedrive(db: Session) -> SyncLog:
             if existing_deal is None:
                 existing_deal = Deal(pipedrive_id=pipedrive_id)
                 db.add(existing_deal)
+                prev_talent_id = None  # new deal — no prior attribution
+            else:
+                prev_talent_id = existing_deal.talent_id
 
             existing_deal.title = deal.get("title", "")
             existing_deal.value = value
@@ -255,6 +259,10 @@ def sync_pipedrive(db: Session) -> SyncLog:
             existing_deal.stage_name = stage_name
             existing_deal.status = status
             existing_deal.talent_id = talent_id
+            # Prompt 3 Feature 1: record only real attribution changes (audited
+            # after the commit succeeds). New deals with no talent are not logged.
+            if prev_talent_id != talent_id and not (prev_talent_id is None and talent_id is None):
+                talent_changes.append((pipedrive_id, prev_talent_id, talent_id))
             existing_deal.commission_amount = commission_amount
             existing_deal.is_sin_cotizar = is_sin_cotizar
             existing_deal.loss_reason = loss_reason
@@ -270,6 +278,18 @@ def sync_pipedrive(db: Session) -> SyncLog:
 
         # 9. Commit deal upserts + stage events.
         db.commit()
+
+        # Prompt 3 Feature 1: audit talent attribution changes after the commit
+        # succeeds. Uses its own session (db=None) so it never affects the sync txn.
+        if talent_changes:
+            from app.services.audit import log_action
+            for pid, old_tid, new_tid in talent_changes:
+                log_action(
+                    "TALENT_ASSIGNED" if new_tid is not None else "TALENT_REMOVED",
+                    actor="sync", entity_type="deal", entity_id=pid,
+                    payload={"before": {"talent_id": old_tid},
+                             "after": {"talent_id": new_tid}},
+                )
 
         # 10. Mark sync success.
         sync_log.status = "success"
