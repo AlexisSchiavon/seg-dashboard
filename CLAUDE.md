@@ -2,10 +2,19 @@
 
 ## ⚠️ RESTRICCIONES CRÍTICAS
 
-Este sistema es SOLO LECTURA para todas las integraciones externas. Bajo ninguna circunstancia modificar, crear o eliminar datos en Pipedrive, Trello o Google Sheets. La única escritura permitida es en la base de datos local SQLite (seg.db).
+Pipedrive y Google Sheets son SOLO LECTURA sin excepción: bajo ninguna circunstancia modificar, crear o eliminar datos en ellos. Para Trello la regla es SOLO LECTURA salvo la ÚNICA excepción autorizada descrita abajo (crear cards nuevas de auto-creación). La única otra escritura permitida es en la base de datos local SQLite (seg.db).
 
-**DECISIÓN ARQUITECTURAL PERMANENTE — `TRELLO_AUTO_CREATE_ENABLED = False`**
-El módulo de auto-creación de tarjetas en Trello (Plan 04-03) debe permanecer desactivado para siempre. La creación de tarjetas cuando un deal llega a "Contrato y factura" ya la maneja el sistema de Fase 2 Talent que corre en producción. El SEG Dashboard es SOLO LECTURA para Trello y Pipedrive — únicamente sincroniza el estado de tarjetas existentes, nunca las crea. No cambiar este flag a `True` bajo ninguna circunstancia.
+**REVOCACIÓN (2026-07-13) — auto-creación de cards en Trello vive AQUÍ, gated por `settings.TRELLO_AUTO_CREATE_ENABLED`**
+La antigua "decisión permanente" de mantener `TRELLO_AUTO_CREATE_ENABLED = False` para siempre queda REVOCADA. Su premisa era falsa: el discovery del 2026-07-13 encontró que el M2 de fase_2_talent (que supuestamente manejaba esto en producción) **nunca se desplegó** y usaba el trigger incorrecto (stage 9 "Contrato y factura"), cuando la evidencia de `deal_stage_events` muestra que ~25% de los deals se marcan `won` desde etapas anteriores. Por eso a TA "se le escapaban" cards.
+
+La auto-creación ahora vive en seg-dashboard con **alcance estrictamente limitado**:
+- Trigger: `Deal.status == 'won'` (reconciliación en `sync_trello`, cada 30 min → inmune a webhooks perdidos / Bug A).
+- **Solo CREAR cards nuevas** en la whitelist `trello.allowed_create_list_ids()` (lista Contrato de prod + lista sandbox opcional). Cualquier `list_id` fuera de la whitelist falla con `ValueError` — nunca fallback. NUNCA mover/editar/archivar/borrar cards.
+- Idempotencia doble: registro local `trello_cards` + escaneo en vivo del marcador `[seg:deal_id=N]` en Trello.
+- Kill switch por env: `TRELLO_AUTO_CREATE_ENABLED` (default `False`). Habilitar en prod es un acto deliberado de configuración tras validación en sandbox (Fase C).
+- **Pipedrive y Google Sheets siguen 100% read-only** — a diferencia del M2 de fase_2_talent, esta implementación NO escribe notas de vuelta en Pipedrive.
+
+El M2 de fase_2_talent (`feature/m2-pipedrive-trello`) queda **DEPRECADO / NO DESPLEGAR**: desplegarlo duplicaría cards.
 
 <!-- GSD:project-start source:PROJECT.md -->
 ## Project
