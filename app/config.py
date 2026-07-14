@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     TRELLO_BOARD_IDS: str = ""
     TRELLO_ORG_ID: str = ""
     TRELLO_WORKSPACE_NAME: str = ""
+
+    # --- Trello auto-create (Fase 10 / Módulo 4) -------------------------
+    # Master kill switch. MUST stay False until Phase C sandbox validation
+    # passes. Enabling this is the formal reversal of the old "permanent"
+    # TRELLO_AUTO_CREATE_ENABLED=False decision (see CLAUDE.md).
+    TRELLO_AUTO_CREATE_ENABLED: bool = False
+    # Target list for auto-created cards. Empty → code default CONTRATO_LIST_ID
+    # (prod). Set to a sandbox list id for Phase C controlled testing.
+    TRELLO_AUTOCREATE_LIST_ID: str = ""
+
     ANTHROPIC_API_KEY: str = ""
 
     # Prompt 3 Feature 1 — audit log retention (days). Weekly cleanup job.
