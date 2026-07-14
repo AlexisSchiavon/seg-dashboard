@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 import bleach
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.integrations import pipedrive, sheets, trello
 from app.models import Deal, DealStageEvent, Lead, SyncLog, Talent, TalentProduct, TrelloCard
 from app.services import talents as talents_service
@@ -73,13 +74,6 @@ def _sanitize_email_body(raw: str | None) -> tuple[str | None, bool]:
     # Cut at the byte cap, then back off to a valid UTF-8 char boundary.
     truncated = encoded[:_EMAIL_MAX_BYTES].decode("utf-8", errors="ignore")
     return truncated, True
-
-# DECISIÓN PERMANENTE: este flag debe permanecer en False indefinidamente.
-# La creación de tarjetas en Trello cuando un deal llega a "Contrato y factura"
-# ya la maneja el sistema de Fase 2 Talent que corre en producción. El SEG
-# Dashboard es SOLO LECTURA para Trello y Pipedrive — únicamente sincroniza
-# el estado de tarjetas existentes, nunca las crea.
-TRELLO_AUTO_CREATE_ENABLED = False
 
 COMMISSION_RATE = 0.70
 
@@ -527,10 +521,16 @@ def sync_trello(db: Session) -> SyncLog:
 
         db.commit()
 
-        if TRELLO_AUTO_CREATE_ENABLED:
-            # Reconciliation: auto-create Contrato-list cards for won deals with no card.
-            # Idempotency guard (T-04-07 / Pitfall 1): build the set of already-linked
-            # pipedrive_ids from TrelloCard rows before querying won deals.
+        if settings.TRELLO_AUTO_CREATE_ENABLED:
+            # Reconciliation (Fase 10 / Módulo 4): auto-create ONE card per won
+            # deal that has none. Polling-based → immune to Bug A (missed webhooks).
+            # Trigger is status='won' (NOT stage 9) — verified against
+            # deal_stage_events: ~25% of wins are marked won from earlier stages.
+            target_list_id = (
+                settings.TRELLO_AUTOCREATE_LIST_ID or ""
+            ).strip() or trello.CONTRATO_LIST_ID
+
+            # Idempotency check #1 — local trello_cards registry.
             linked_pipedrive_ids: set[int] = {
                 row[0]
                 for row in db.query(TrelloCard.pipedrive_deal_id_desc)
@@ -544,50 +544,89 @@ def sync_trello(db: Session) -> SyncLog:
                 .all()
             }
 
-            won_deals = db.query(Deal).filter(Deal.status == "won").all()
-            for won_deal in won_deals:
-                # Skip if already linked by pipedrive_deal_id_desc or by deal_id.
-                if (
-                    won_deal.pipedrive_id in linked_pipedrive_ids
-                    or won_deal.id in linked_deal_ids
-                ):
-                    continue
-
-                desc = trello_service._make_card_desc(won_deal.pipedrive_id)
-                response = trello.create_card(
-                    client,
-                    trello.CONTRATO_LIST_ID,
-                    won_deal.title,
-                    desc=desc,
+            # Idempotency check #2 — live Trello marker scan of the target list.
+            # If the scan fails, skip ALL creates this run (never risk duplicates).
+            try:
+                live_marker_ids: set[int] | None = trello.list_marker_pipedrive_ids(
+                    client, target_list_id
                 )
-
-                collection_date = trello_service.resolve_collection_date(
-                    response.get("due"), won_deal
+            except Exception as exc:  # noqa: BLE001 — a scan failure must not create dupes
+                logger.error(
+                    "auto-create: live marker scan failed, skipping creates: %s", exc
                 )
+                live_marker_ids = None
 
-                card_id_new = response.get("id")
-                if card_id_new is None:  # WR-02: malformed Trello response, skip this card
-                    continue
+            if live_marker_ids is not None:
+                # Talent id → name map for descriptions (single query).
+                talent_names: dict[int, str] = {
+                    t.id: t.name for t in db.query(Talent).all()
+                }
+                won_deals = db.query(Deal).filter(Deal.status == "won").all()
+                for won_deal in won_deals:
+                    # Skip if already linked locally or already present live in Trello.
+                    if (
+                        won_deal.pipedrive_id in linked_pipedrive_ids
+                        or won_deal.id in linked_deal_ids
+                        or won_deal.pipedrive_id in live_marker_ids
+                    ):
+                        continue
 
-                new_card = TrelloCard(
-                    trello_card_id=card_id_new,
-                    name=won_deal.title,
-                    list_id=trello.CONTRATO_LIST_ID,
-                    list_name="Contrato",
-                    list_state="ejecucion",
-                    deal_id=won_deal.id,
-                    pipedrive_deal_id_desc=won_deal.pipedrive_id,
-                    collection_date=collection_date,
-                )
-                db.add(new_card)
+                    talent_name = (
+                        talent_names.get(won_deal.talent_id)
+                        if won_deal.talent_id
+                        else None
+                    )
+                    desc = trello_service.build_auto_card_desc(
+                        won_deal, talent_name, settings.PIPEDRIVE_DOMAIN
+                    )
+                    # No due date: expected_collection_date is unreliable/empty; the
+                    # CARDS_COBRAR_SIN_DUE_DATE health check surfaces this so TA sets it.
+                    response = trello.create_card(
+                        client, target_list_id, won_deal.title, desc=desc
+                    )
 
-                # Add to guard sets so subsequent won_deals in the same run are checked.
-                linked_pipedrive_ids.add(won_deal.pipedrive_id)
-                linked_deal_ids.add(won_deal.id)
+                    card_id_new = response.get("id")
+                    if card_id_new is None:  # WR-02: malformed Trello response, skip
+                        continue
 
-                records_synced += 1
+                    collection_date = trello_service.resolve_collection_date(
+                        response.get("due"), won_deal
+                    )
+                    new_card = TrelloCard(
+                        trello_card_id=card_id_new,
+                        name=won_deal.title,
+                        list_id=target_list_id,
+                        list_name="Contrato",
+                        list_state="ejecucion",
+                        deal_id=won_deal.id,
+                        pipedrive_deal_id_desc=won_deal.pipedrive_id,
+                        collection_date=collection_date,
+                    )
+                    db.add(new_card)
 
-            db.commit()
+                    # Update guard sets so later deals in this run are checked too.
+                    linked_pipedrive_ids.add(won_deal.pipedrive_id)
+                    linked_deal_ids.add(won_deal.id)
+                    live_marker_ids.add(won_deal.pipedrive_id)
+                    records_synced += 1
+
+                    from app.services.audit import log_action
+
+                    log_action(
+                        "TRELLO_CARD_CREATED",
+                        actor="system",
+                        entity_type="deal",
+                        entity_id=won_deal.pipedrive_id,
+                        payload={
+                            "trello_card_id": card_id_new,
+                            "list_id": target_list_id,
+                            "title": won_deal.title,
+                            "value": won_deal.value,
+                        },
+                        db=db,
+                    )
+
+                db.commit()
         sync_log.status = "success"
         sync_log.finished_at = datetime.now(timezone.utc)
         sync_log.records_synced = records_synced
