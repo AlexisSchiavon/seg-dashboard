@@ -24,6 +24,7 @@ MAX_PAYLOAD_BYTES = 10 * 1024  # 10 KB
 ACTION_TYPES = frozenset({
     "TALENT_ASSIGNED", "TALENT_REMOVED", "SYNC_COMPLETED", "SYNC_FAILED",
     "DATA_HEALTH_ALERT", "MANUAL_UPDATE", "REPORT_GENERATED", "LOGIN", "LOGOUT",
+    "TRELLO_CARD_CREATED",
 })
 
 # Keys whose values must never be persisted (compared case-insensitively).
