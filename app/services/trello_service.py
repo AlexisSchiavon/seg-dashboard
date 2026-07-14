@@ -145,6 +145,25 @@ def _make_card_desc(pipedrive_deal_id: int, extra_desc: str = "") -> str:
     return header
 
 
+def build_auto_card_desc(deal, talent_name: str | None, pipedrive_domain: str) -> str:
+    """Build the auto-created card description: marker + monto + talento + link.
+
+    The [seg:deal_id=N] marker is FIRST (round-trips via _extract_deal_id_from_desc
+    for idempotency). No untrusted content goes inside the marker line.
+    """
+    monto = f"{int(deal.value or 0):,} {deal.currency or 'MXN'}"
+    talento = talent_name or "Sin talento asignado"
+    link = f"https://{pipedrive_domain}.pipedrive.com/deal/{deal.pipedrive_id}"
+    body = "\n".join([
+        f"Monto: {monto}",
+        f"Talento: {talento}",
+        f"Deal en Pipedrive: {link}",
+        "",
+        "— Tarjeta creada automáticamente por SEG Dashboard —",
+    ])
+    return _make_card_desc(deal.pipedrive_id, extra_desc=body)
+
+
 def _month_label(d: date) -> str:
     """Return a 'Mon YYYY' label for a date, e.g. 'Jun 2026'.
 
