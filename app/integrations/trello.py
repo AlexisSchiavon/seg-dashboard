@@ -16,6 +16,7 @@ import httpx
 
 from app.config import settings
 from app.integrations.base import get_with_retry
+from app.services.trello_service import _extract_deal_id_from_desc
 
 BASE_URL = "https://api.trello.com/1"
 
@@ -84,6 +85,22 @@ def get_list_cards(client: httpx.Client, list_id: str) -> list[dict]:
     params = {**_auth_params(), "fields": "id,name,due,desc"}
     resp = get_with_retry(client, f"/lists/{list_id}/cards", params)
     return resp.json()
+
+
+def list_marker_pipedrive_ids(client: httpx.Client, list_id: str) -> set[int]:
+    """Return the set of pipedrive_ids already present as [seg:deal_id=N]
+    markers in the live cards of a Trello list.
+
+    This is the SECOND idempotency check (live Trello) that complements the
+    local trello_cards registry — it prevents duplicates even if the local
+    registry lost the link.
+    """
+    ids: set[int] = set()
+    for card in get_list_cards(client, list_id):
+        pid = _extract_deal_id_from_desc(card.get("desc"))
+        if pid is not None:
+            ids.add(pid)
+    return ids
 
 
 def create_card(
