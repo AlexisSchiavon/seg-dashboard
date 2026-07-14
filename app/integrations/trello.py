@@ -117,10 +117,20 @@ def create_card(
     whitelist FALLA con ValueError (no fallback). Pipedrive/Sheets siguen
     read-only.
     """
+    # Guard (a) — list-ID whitelist. UNCONDITIONAL and FIRST: a card can never be
+    # created outside allowed_create_list_ids(), regardless of any flag.
     if list_id not in allowed_create_list_ids():
         raise ValueError(
             f"Trello list {list_id!r} is not in the auto-create whitelist "
             f"{sorted(allowed_create_list_ids())}. Refusing to create card."
+        )
+    # Guard (b) — master kill switch, enforced HERE too (defense in depth), not
+    # only in the reconciliation caller. It is impossible to reach the POST below
+    # with the flag off, even via a direct create_card() call.
+    if not settings.TRELLO_AUTO_CREATE_ENABLED:
+        raise RuntimeError(
+            "create_card() called while TRELLO_AUTO_CREATE_ENABLED is False. "
+            "Auto-create is the ONLY authorized external write and it is disabled."
         )
     body: dict[str, str] = {"idList": list_id, "name": name, "desc": desc, "pos": "top"}
     if due:

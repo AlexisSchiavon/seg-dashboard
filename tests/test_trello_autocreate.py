@@ -25,6 +25,17 @@ def test_create_card_rejects_non_whitelisted_list(monkeypatch):
     client.close()
 
 
+def test_create_card_blocked_by_flag_even_for_whitelisted_list(monkeypatch):
+    """Guard (b): with the kill switch OFF, even a whitelisted list_id cannot
+    reach the Trello POST. Proves the flag gates the write, not just the caller."""
+    monkeypatch.setattr(trello.settings, "TRELLO_AUTOCREATE_LIST_ID", "")
+    monkeypatch.setattr(trello.settings, "TRELLO_AUTO_CREATE_ENABLED", False)
+    client = httpx.Client(base_url=trello.BASE_URL)
+    with pytest.raises(RuntimeError, match="TRELLO_AUTO_CREATE_ENABLED is False"):
+        trello.create_card(client, trello.CONTRATO_LIST_ID, "Some Deal")
+    client.close()
+
+
 def test_list_marker_pipedrive_ids_parses_markers(monkeypatch):
     fake_cards = [
         {"id": "a", "name": "Deal A", "desc": "[seg:deal_id=526]\n\nmonto..."},

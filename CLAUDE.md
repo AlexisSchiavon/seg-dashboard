@@ -2,7 +2,9 @@
 
 ## ⚠️ RESTRICCIONES CRÍTICAS
 
-Pipedrive y Google Sheets son SOLO LECTURA sin excepción: bajo ninguna circunstancia modificar, crear o eliminar datos en ellos. Para Trello la regla es SOLO LECTURA salvo la ÚNICA excepción autorizada descrita abajo (crear cards nuevas de auto-creación). La única otra escritura permitida es en la base de datos local SQLite (seg.db).
+**REGLA DE SUPERFICIE DE ESCRITURA (una sola línea):** Pipedrive y Google Sheets: read-only SIEMPRE, sin excepciones. Trello: read-only EXCEPTO `create_card` en la lista whitelisteada (`trello.allowed_create_list_ids()`) bajo `TRELLO_AUTO_CREATE_ENABLED`. La única otra escritura permitida es la base de datos local SQLite (`seg.db`). Esta invariante está blindada por el test estructural `tests/test_write_surface.py`, que truena en rojo si aparece cualquier otra escritura externa en `app/integrations/`.
+
+Pipedrive y Google Sheets son SOLO LECTURA sin excepción: bajo ninguna circunstancia modificar, crear o eliminar datos en ellos. Para Trello la regla es SOLO LECTURA salvo la ÚNICA excepción autorizada descrita abajo (crear cards nuevas de auto-creación).
 
 **REVOCACIÓN (2026-07-13) — auto-creación de cards en Trello vive AQUÍ, gated por `settings.TRELLO_AUTO_CREATE_ENABLED`**
 La antigua "decisión permanente" de mantener `TRELLO_AUTO_CREATE_ENABLED = False` para siempre queda REVOCADA. Su premisa era falsa: el discovery del 2026-07-13 encontró que el M2 de fase_2_talent (que supuestamente manejaba esto en producción) **nunca se desplegó** y usaba el trigger incorrecto (stage 9 "Contrato y factura"), cuando la evidencia de `deal_stage_events` muestra que ~25% de los deals se marcan `won` desde etapas anteriores. Por eso a TA "se le escapaban" cards.
