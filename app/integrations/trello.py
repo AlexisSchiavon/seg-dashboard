@@ -23,6 +23,20 @@ BASE_URL = "https://api.trello.com/1"
 # Decision D-46: CONTRATO_LIST_ID is the first list in the ejecucion state.
 CONTRATO_LIST_ID = "69312ac640ae158381706ff8"
 
+
+def allowed_create_list_ids() -> frozenset[str]:
+    """List IDs into which auto-create may write.
+
+    Always includes the prod Contrato list. If TRELLO_AUTOCREATE_LIST_ID is
+    set (Phase C sandbox), that list is also allowed. Any create targeting a
+    list outside this set is a programming error and must fail hard.
+    """
+    ids = {CONTRATO_LIST_ID}
+    sandbox = (settings.TRELLO_AUTOCREATE_LIST_ID or "").strip()
+    if sandbox:
+        ids.add(sandbox)
+    return frozenset(ids)
+
 # Maps Trello list IDs (from the verified live board 69312a9d5523703a1ce1a413)
 # to their canonical state values used in TrelloCard.list_state.
 #
@@ -79,14 +93,21 @@ def create_card(
     desc: str = "",
     due: str | None = None,
 ) -> dict:
-    """PERMANENTEMENTE DESACTIVADO — ver CLAUDE.md y TRELLO_AUTO_CREATE_ENABLED.
+    """Create ONE Trello card in a whitelisted list (Fase 10 / Módulo 4).
 
-    La creación de tarjetas en Trello la maneja el sistema de Fase 2 Talent en
-    producción. El SEG Dashboard es SOLO LECTURA para Trello. Esta función existe
-    solo como referencia de la API; su invocación es un error de programación.
+    ALCANCE ESTRICTO: crear cards nuevas SOLO en allowed_create_list_ids().
+    Nunca mover/editar/archivar/borrar cards. Cualquier list_id fuera de la
+    whitelist FALLA con ValueError (no fallback). Pipedrive/Sheets siguen
+    read-only.
     """
-    raise RuntimeError(
-        "create_card() está permanentemente desactivado. "
-        "El SEG Dashboard es SOLO LECTURA para Trello (ver CLAUDE.md). "
-        "La creación de tarjetas la maneja el sistema de Fase 2 Talent."
-    )
+    if list_id not in allowed_create_list_ids():
+        raise ValueError(
+            f"Trello list {list_id!r} is not in the auto-create whitelist "
+            f"{sorted(allowed_create_list_ids())}. Refusing to create card."
+        )
+    body: dict[str, str] = {"idList": list_id, "name": name, "desc": desc, "pos": "top"}
+    if due:
+        body["due"] = due
+    resp = client.post("/cards", params=_auth_params(), json=body)
+    resp.raise_for_status()
+    return resp.json()

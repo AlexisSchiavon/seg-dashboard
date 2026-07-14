@@ -264,18 +264,16 @@ def test_sync_trello_source_filter_isolated(db_session, mock_trello_transport, s
 
 
 # ---------------------------------------------------------------------------
-# DECISIÓN PERMANENTE: auto-creación de tarjetas DESACTIVADA (ver CLAUDE.md)
-# create_card() siempre lanza RuntimeError — el sistema de Fase 2 Talent
-# maneja la creación en producción. Tests documentan esta invariante.
+# Fase 10 / Módulo 4: auto-creación de tarjetas HABILITADA pero de alcance
+# estricto — CREATE-only en la whitelist, gated por settings.TRELLO_AUTO_CREATE_ENABLED
+# (default False). Reversión formal de la antigua decisión "permanente" tras
+# descubrir que fase_2_talent M2 nunca se desplegó y usaba el trigger incorrecto.
 # ---------------------------------------------------------------------------
 
 
-def test_create_card_is_permanently_disabled():
-    """create_card() debe lanzar RuntimeError sin importar los parámetros.
-
-    Documenta la decisión arquitectural permanente: el SEG Dashboard es
-    SOLO LECTURA para Trello. Intentar crear una tarjeta es un error de
-    programación, no un estado de error de negocio.
+def test_create_card_rejects_lists_outside_whitelist():
+    """create_card() debe fallar con ValueError si el list_id no está en la
+    whitelist de auto-creación — nunca fallback, nunca escritura fuera de alcance.
     """
     import httpx
     import pytest
@@ -283,23 +281,17 @@ def test_create_card_is_permanently_disabled():
     from app.integrations.trello import create_card
 
     dummy_client = httpx.Client()
-    with pytest.raises(RuntimeError, match="permanentemente desactivado"):
+    with pytest.raises(ValueError, match="not in the auto-create whitelist"):
         create_card(dummy_client, list_id="any-list", name="any-name")
 
 
-def test_auto_create_flag_is_always_false():
-    """TRELLO_AUTO_CREATE_ENABLED debe ser False en el módulo sin modificar.
-
-    Cualquier cambio accidental a True en jobs.py debe detectarse aquí
-    en la suite de tests antes de llegar a producción.
+def test_auto_create_disabled_by_default():
+    """El kill switch defaults OFF. Habilitarlo es un acto deliberado de
+    configuración (env), la reversión formal de la vieja decisión permanente-False.
     """
-    import app.sync.jobs as jobs
+    from app.config import Settings
 
-    assert jobs.TRELLO_AUTO_CREATE_ENABLED is False, (
-        "TRELLO_AUTO_CREATE_ENABLED se cambió a True — esto viola la "
-        "decisión permanente documentada en CLAUDE.md. "
-        "La creación de tarjetas la maneja el sistema de Fase 2 Talent."
-    )
+    assert Settings(_env_file=None).TRELLO_AUTO_CREATE_ENABLED is False
 
 
 def test_card_desc_contains_deal_id(db_session, mock_trello_transport, seed_deals):
