@@ -7,6 +7,8 @@ def test_autocreate_defaults_are_safe():
     assert s.TRELLO_AUTO_CREATE_ENABLED is False
     # Empty target list means "use the code default (prod Contrato list)".
     assert s.TRELLO_AUTOCREATE_LIST_ID == ""
+    # No date floor by default → automatic reconciliation is a no-op (fail-safe).
+    assert s.TRELLO_AUTOCREATE_MIN_WON_DATE == ""
 
 
 def test_autocreate_can_be_enabled_via_env(monkeypatch):

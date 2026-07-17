@@ -19,7 +19,7 @@ header is a secret).
 """
 import logging
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import bleach
 from sqlalchemy.orm import Session
@@ -530,6 +530,22 @@ def sync_trello(db: Session) -> SyncLog:
                 settings.TRELLO_AUTOCREATE_LIST_ID or ""
             ).strip() or trello.CONTRATO_LIST_ID
 
+            # FAIL-SAFE date floor. If TRELLO_AUTOCREATE_MIN_WON_DATE is unset the
+            # automatic reconciliation creates NOTHING — this prevents a mass
+            # backfill of all historical won deals (many already carded manually)
+            # when the flag is first enabled. The targeted backfill script is the
+            # only path allowed to create pre-cutoff cards, for its approved ids.
+            min_won_raw = (settings.TRELLO_AUTOCREATE_MIN_WON_DATE or "").strip()
+            min_won_date: date | None
+            if not min_won_raw:
+                logger.info(
+                    "auto-create: TRELLO_AUTOCREATE_MIN_WON_DATE unset — skipping all "
+                    "automatic creates (fail-safe)."
+                )
+                min_won_date = None
+            else:
+                min_won_date = date.fromisoformat(min_won_raw)
+
             # Idempotency check #1 — local trello_cards registry.
             linked_pipedrive_ids: set[int] = {
                 row[0]
@@ -556,13 +572,17 @@ def sync_trello(db: Session) -> SyncLog:
                 )
                 live_marker_ids = None
 
-            if live_marker_ids is not None:
+            if live_marker_ids is not None and min_won_date is not None:
                 # Talent id → name map for descriptions (single query).
                 talent_names: dict[int, str] = {
                     t.id: t.name for t in db.query(Talent).all()
                 }
                 won_deals = db.query(Deal).filter(Deal.status == "won").all()
                 for won_deal in won_deals:
+                    # Date floor: only deals won on/after the configured cutoff.
+                    # Deals with no won_time cannot be date-guarded → skip them.
+                    if won_deal.won_time is None or won_deal.won_time.date() < min_won_date:
+                        continue
                     # Skip if already linked locally or already present live in Trello.
                     if (
                         won_deal.pipedrive_id in linked_pipedrive_ids

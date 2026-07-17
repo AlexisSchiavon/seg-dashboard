@@ -14,6 +14,8 @@ def _enable_autocreate(monkeypatch):
     monkeypatch.setattr(jobs.settings, "TRELLO_AUTO_CREATE_ENABLED", True)
     monkeypatch.setattr(jobs.settings, "TRELLO_AUTOCREATE_LIST_ID", "")
     monkeypatch.setattr(jobs.settings, "PIPEDRIVE_DOMAIN", "talentagency")
+    # Permissive date floor so the reconciliation actually runs in these tests.
+    monkeypatch.setattr(jobs.settings, "TRELLO_AUTOCREATE_MIN_WON_DATE", "2000-01-01")
 
 
 def _stub_trello(monkeypatch, created, existing_marker_ids=None):
@@ -84,6 +86,52 @@ def test_skips_when_live_marker_already_present(db_session, monkeypatch, _enable
     _stub_trello(monkeypatch, created, existing_marker_ids={551})  # exists live, not in DB
     jobs.sync_trello(db_session)
     assert len(created) == 0  # live-marker idempotency prevented duplicate
+
+
+def test_min_won_date_unset_is_failsafe_creates_nothing(db_session, monkeypatch):
+    """Fail-safe: flag ON but MIN_WON_DATE empty → reconciliation creates nothing."""
+    monkeypatch.setattr(jobs.settings, "TRELLO_AUTO_CREATE_ENABLED", True)
+    monkeypatch.setattr(jobs.settings, "TRELLO_AUTOCREATE_LIST_ID", "")
+    monkeypatch.setattr(jobs.settings, "PIPEDRIVE_DOMAIN", "talentagency")
+    monkeypatch.setattr(jobs.settings, "TRELLO_AUTOCREATE_MIN_WON_DATE", "")  # unset
+    d = Deal(pipedrive_id=700, title="Y", value=1.0, currency="MXN", stage_id=9,
+             stage_name="Contrato", status="won", talent_id=None,
+             update_time="2026-07-06T00:00:00Z",
+             won_time=datetime(2026, 7, 6, tzinfo=timezone.utc))
+    db_session.add(d)
+    db_session.commit()
+    created = []
+    _stub_trello(monkeypatch, created)
+    jobs.sync_trello(db_session)
+    assert len(created) == 0
+
+
+def test_deal_won_before_min_date_is_skipped(db_session, monkeypatch, _enable_autocreate):
+    monkeypatch.setattr(jobs.settings, "TRELLO_AUTOCREATE_MIN_WON_DATE", "2026-07-01")
+    d = Deal(pipedrive_id=701, title="Old win", value=1.0, currency="MXN", stage_id=9,
+             stage_name="Contrato", status="won", talent_id=None,
+             update_time="2026-06-16T00:00:00Z",
+             won_time=datetime(2026, 6, 16, tzinfo=timezone.utc))  # before cutoff
+    db_session.add(d)
+    db_session.commit()
+    created = []
+    _stub_trello(monkeypatch, created)
+    jobs.sync_trello(db_session)
+    assert len(created) == 0
+
+
+def test_deal_won_on_or_after_min_date_is_created(db_session, monkeypatch, _enable_autocreate):
+    monkeypatch.setattr(jobs.settings, "TRELLO_AUTOCREATE_MIN_WON_DATE", "2026-07-01")
+    d = Deal(pipedrive_id=702, title="New win", value=1.0, currency="MXN", stage_id=9,
+             stage_name="Contrato", status="won", talent_id=None,
+             update_time="2026-07-06T00:00:00Z",
+             won_time=datetime(2026, 7, 6, tzinfo=timezone.utc))  # after cutoff
+    db_session.add(d)
+    db_session.commit()
+    created = []
+    _stub_trello(monkeypatch, created)
+    jobs.sync_trello(db_session)
+    assert len(created) == 1
 
 
 def test_disabled_flag_creates_nothing(db_session, monkeypatch):

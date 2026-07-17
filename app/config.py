@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     # Target list for auto-created cards. Empty → code default CONTRATO_LIST_ID
     # (prod). Set to a sandbox list id for Phase C controlled testing.
     TRELLO_AUTOCREATE_LIST_ID: str = ""
+    # FAIL-SAFE date floor (YYYY-MM-DD). The AUTOMATIC reconciliation only
+    # considers won deals with won_time >= this date. Empty/unset → the
+    # reconciliation creates NOTHING (prevents a mass-backfill of all historical
+    # won deals — many of which already have manual cards — when the flag is
+    # first enabled in prod). The targeted backfill script bypasses this on
+    # purpose for its explicit, manually-approved id list.
+    TRELLO_AUTOCREATE_MIN_WON_DATE: str = ""
 
     ANTHROPIC_API_KEY: str = ""
 
