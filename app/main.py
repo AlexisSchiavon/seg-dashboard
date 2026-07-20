@@ -6,7 +6,18 @@ from fastapi.staticfiles import StaticFiles
 
 from app.auth import router as auth_router
 from app.config import settings
-from app.routers import agent, audit, dashboard, data_health, health, leads, reports, sync, talents
+from app.routers import (
+    agent,
+    audit,
+    dashboard,
+    data_health,
+    health,
+    insights,
+    leads,
+    reports,
+    sync,
+    talents,
+)
 from app.sync import scheduler as sync_scheduler
 
 logger = logging.getLogger(__name__)
@@ -48,6 +59,7 @@ app.include_router(reports.router)
 app.include_router(agent.router)
 app.include_router(audit.router)
 app.include_router(data_health.router)
+app.include_router(insights.router)
 
 # Static frontend mount MUST come last — registered after API routers so it
 # does not shadow /auth/*, /talents, /health, /sync, /dashboard, /leads, /reports, /agent, or /api/audit.
