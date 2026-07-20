@@ -239,3 +239,19 @@ class HealthCheckSnapshot(Base):
         DateTime(timezone=True), server_default=func.now(), index=True
     )
     resolved_delta: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class InsightsCache(Base):
+    """Cache of AI-generated executive insights for the Resumen (Módulo 1).
+
+    One row per cache_key (e.g. 'resumen'). content_json holds the list of
+    insight dicts. Regenerated when older than 1h or on explicit regenerate.
+    """
+    __tablename__ = "insights_cache"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cache_key: Mapped[str] = mapped_column(String, unique=True, index=True)
+    content_json: Mapped[str] = mapped_column(Text)
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
