@@ -129,6 +129,7 @@ function setPage(name, e) {
   // Load data for the activated tab
   if (name === "overview") {
     loadSummary();
+    loadInsights();
   } else if (name === "funnel") {
     loadFunnel();
   } else if (name === "talent") {
@@ -1409,4 +1410,5 @@ async function loadTalentDetail(talentId) {
 document.addEventListener("DOMContentLoaded", () => {
   loadSyncStatus();
   loadSummary(); // Load Resumen tab on initial page load
+  loadInsights(); // Insights por IA (Módulo 1)
 });

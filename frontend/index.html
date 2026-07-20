@@ -46,6 +46,21 @@
       <button class="btn primary" id="sync-btn" onclick="triggerSync()">Sincronizar ahora</button>
     </div>
 
+    <!-- Insights por IA (Módulo 1) — generados por el agente, cache 1h -->
+    <div class="section" id="insights-section">
+      <div class="insights-head">
+        <div class="section-title">Insights</div>
+        <div class="insights-meta">
+          <span id="insights-updated" class="insights-updated"></span>
+          <button class="btn insights-regen" id="insights-regen-btn"
+                  onclick="regenerateInsights()" title="Regenerar insights">↻ Regenerar</button>
+        </div>
+      </div>
+      <div id="insights-container">
+        <!-- Populated by loadInsights() -->
+      </div>
+    </div>
+
     <!-- KPI grid: 4 tiles — Pipeline total (accent), En negociación (amber), Cerrados (purple), En campaña (green) -->
     <div class="section">
       <div class="kpi-grid" id="kpi-grid">
@@ -505,6 +520,7 @@
   <script src="/js/salud.js?v=20260707"></script>
   <script src="/js/auth.js?v=20260630b"></script>
   <script src="/js/dashboard.js?v=20260630b"></script>
+  <script src="/js/insights.js?v=20260719"></script>
   <script src="/js/leads.js?v=20260630b"></script>
   <script src="/js/reports.js?v=20260702-96"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>

@@ -2482,3 +2482,29 @@ body {
 .drawer-item-links a{color:#60a5fa;text-decoration:none;}
 .drawer-item-links a:hover{text-decoration:underline;}
 .drawer-item-val{color:#e2e8f0;font-size:13px;font-weight:600;white-space:nowrap;}
+
+/* ===== Insights por IA (Módulo 1 / Resumen) ===== */
+.insights-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.insights-meta{display:flex;align-items:center;gap:10px;}
+.insights-updated{font-size:12px;color:#94a3b8;}
+.btn.insights-regen{padding:5px 12px;font-size:12px;background:var(--card2,#1a2233);
+  border:1px solid var(--border,#2a3548);color:#cbd5e1;}
+.btn.insights-regen:hover{border-color:var(--accent);color:var(--accent);}
+.btn.insights-regen:disabled{opacity:.5;cursor:not-allowed;}
+.insights-list{display:flex;flex-direction:column;gap:10px;}
+.insight-card{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:12px;
+  background:var(--card,#141b2b);border:1px solid var(--border,#2a3548);border-left-width:4px;}
+.insight-card .insight-icon{flex:0 0 22px;height:22px;width:22px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;margin-top:1px;}
+.insight-title{font-weight:700;font-size:14px;color:#e8eefb;margin-bottom:2px;}
+.insight-text{font-size:13px;color:#a9b4c7;line-height:1.4;}
+.insight-card.positivo{border-left-color:var(--green);}
+.insight-card.positivo .insight-icon{background:var(--greenD);color:var(--greenT);}
+.insight-card.neutro{border-left-color:#64748b;}
+.insight-card.neutro .insight-icon{background:rgba(100,116,139,.15);color:#94a3b8;}
+.insight-card.atencion{border-left-color:var(--amber);}
+.insight-card.atencion .insight-icon{background:var(--amberD);color:var(--amberT);}
+.insight-card.alerta{border-left-color:var(--red);}
+.insight-card.alerta .insight-icon{background:var(--redD);color:var(--redT);}
+.insight-card.skeleton{border-left-color:#2a3548;flex-direction:column;}
+.insights-empty{color:#94a3b8;font-size:13px;padding:14px 16px;}
