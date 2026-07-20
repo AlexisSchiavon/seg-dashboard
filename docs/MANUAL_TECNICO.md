@@ -439,8 +439,10 @@ incluye métodos de escritura (p. ej. `create_card`), no deben invocarse.
 
 ## 5.4 Claude (Anthropic API)
 
-- **Uso:** exclusivamente el **agente conversacional** del Módulo 6
-  (`app/routers/agent.py`, `app/services/agent.py`).
+- **Uso:** (1) el **agente conversacional** del Módulo 6
+  (`app/routers/agent.py`, `app/services/agent.py`) y (2) los **Insights por IA
+  del Resumen** (Módulo 1, `app/routers/insights.py`, `app/services/insights.py`),
+  que **reutilizan el mismo agente** (no construyen IA nueva).
 - **Modelo:** `claude-sonnet-4-6` (leído de `app/services/agent.py`).
 - **Patrón:** bucle *tool-use* agentic. Claude nunca inventa cifras: recibe los
   resultados de *tools* de solo lectura y solo sintetiza prosa.
@@ -456,6 +458,26 @@ incluye métodos de escritura (p. ej. `create_card`), no deben invocarse.
 - **Nota importante:** el **Módulo 5 (Reportes PDF) NO usa Claude**. Es un pivote
   documentado de Fase 9.5a: el reporte es 100 % calculado en Python (sin narrativa
   de IA). Véase §13 y la auditoría de contrato.
+
+### 5.4.1 Insights por IA del Resumen — costo y caché
+
+- **Endpoint:** `GET /api/insights/resumen` (autenticado). Reutiliza el agente
+  (`agent_service.chat`) con un prompt fijo acotado a **≤4 consultas de tools**
+  (dentro del techo `MAX_TOOL_CALLS = 5`), y parsea el JSON que devuelve.
+- **Caché (tabla `insights_cache`):** el resultado se cachea **1 hora** por
+  `cache_key='resumen'`. La carga normal del Resumen NO llama a Claude si el
+  caché es fresco (`cached: true`).
+- **Costo:** cada **regeneración** = **1 llamada** a la API de Claude (el agente
+  puede hacer hasta 5 sub-llamadas internas de tool-use por regeneración). Con
+  caché de 1 h y el botón "Regenerar" limitado a **1 por minuto por usuario**,
+  el tope práctico es de **~10–24 regeneraciones/día por usuario**. Para varios
+  usuarios el caché es compartido (misma `cache_key`), así que el costo real
+  suele ser mucho menor.
+- **Tolerancia a fallos:** si el agente falla o no devuelve JSON válido, el
+  endpoint responde **HTTP 200** con `{"insights": [], "error": "no disponible"}`
+  — el Resumen nunca se rompe. El fallo se registra en el log.
+- **Migración:** `f4a1b2c3d4e5_add_insights_cache` (encadenada tras
+  `c9f5a2b3d4e8`).
 
 ---
 
