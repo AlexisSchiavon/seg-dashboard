@@ -8,7 +8,14 @@ con su estado y si son candidatos a corrección.
 ## 2026-07-17 — `resolve_deal_id` (fuzzy match, umbral 0.70) vincula cards al deal equivocado
 
 **Severidad:** media-alta (afecta atribución de cobranza en el dashboard, no solo el backfill).
-**Estado:** detectado durante Fase D (backfill Trello). Candidato a corrección en Fase 10.
+**Estado:** **auto-create RESUELTO (2026-07-22)** — la reconciliación de auto-create y el
+script de backfill **ya NO usan el vínculo fuzzy como criterio de salto**. La idempotencia
+ahora es **basada en hecho**: evento `TRELLO_CARD_CREATED` en `audit_log` (permanente, excluido
+del purge) + escaneo del marcador `[seg:deal_id=N]` en Trello vivo. Esto arregló el falso
+positivo (Maka 177, campaña real saltada) y evita recrear cards que un usuario borró (Leilani).
+`resolve_deal_id` (fuzzy) **sigue existiendo** para vincular cards manuales al deal en el sync
+normal (atribución de cobranza) — ese uso aún es candidato a mejora (umbral/segundas señales),
+pero ya NO puede impedir la creación de una tarjeta.
 
 ### Qué pasó
 Durante la verificación del backfill de auto-creación de cards, el matcher
