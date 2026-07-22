@@ -89,6 +89,21 @@ def test_idempotent_when_marker_present(db_session, monkeypatch, _cfg):
     assert summary["skipped_existing"] == [526]
 
 
+def test_skips_when_audit_event_exists(db_session, monkeypatch, _cfg):
+    """Backfill must honor the durable audit fact: if the system already created
+    a card for this deal (even if later deleted), do not recreate it."""
+    from app.models import AuditLog
+    _seed(db_session, 421, "Festival x Talento")
+    db_session.add(AuditLog(action_type="TRELLO_CARD_CREATED", actor="system",
+                            entity_type="deal", entity_id="421"))
+    db_session.commit()
+    created = []
+    _stub_trello(monkeypatch, created)  # no live marker (card was deleted)
+    summary = bf.run_backfill(db_session, client=None, pipedrive_ids=[421], confirm=True, out=lambda s: None)
+    assert created == []
+    assert summary["skipped_existing"] == [421]
+
+
 def test_missing_deal_is_skipped(db_session, monkeypatch, _cfg):
     created = []
     _stub_trello(monkeypatch, created)

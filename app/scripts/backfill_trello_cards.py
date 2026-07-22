@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import SessionLocal
 from app.integrations import trello
-from app.models import Deal, Talent, TrelloCard
+from app.models import AuditLog, Deal, Talent, TrelloCard
 from app.services import trello_service
 from app.services.audit import log_action
 
@@ -47,7 +47,16 @@ def run_backfill(
     with keys: created, skipped_existing, skipped_missing."""
     target_list_id = (settings.TRELLO_AUTOCREATE_LIST_ID or "").strip() or trello.CONTRATO_LIST_ID
 
-    # Live-marker idempotency (the ONLY dedup check this script keeps).
+    # Idempotency, consistent with the reconciliation:
+    #  1. FACT: this system already created a card for the deal (audit_log).
+    #  2. Live [seg:deal_id] marker present in the target list.
+    created_pipedrive_ids: set[int] = {
+        int(row[0])
+        for row in db.query(AuditLog.entity_id)
+        .filter(AuditLog.action_type == "TRELLO_CARD_CREATED", AuditLog.entity_id.isnot(None))
+        .all()
+        if str(row[0]).isdigit()
+    }
     live_marker_ids = trello.list_marker_pipedrive_ids(client, target_list_id)
 
     talent_names = {t.id: t.name for t in db.query(Talent).all()}
@@ -61,6 +70,10 @@ def run_backfill(
         if deal is None:
             out(f"[skip] pid={pid}: no existe en la DB — omitido")
             summary["skipped_missing"].append(pid)
+            continue
+        if pid in created_pipedrive_ids:
+            out(f"[skip] pid={pid}: el sistema ya creó una card antes (audit_log) — no recrear")
+            summary["skipped_existing"].append(pid)
             continue
         if pid in live_marker_ids:
             out(f"[skip] pid={pid}: ya existe card con marcador [seg:deal_id={pid}] en Trello")
