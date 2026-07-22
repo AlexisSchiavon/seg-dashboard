@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from app.integrations import trello
-from app.models import Deal, Talent, TrelloCard
+from app.models import AuditLog, Deal, Talent, TrelloCard
 from app.sync import jobs
 
 
@@ -132,6 +132,73 @@ def test_deal_won_on_or_after_min_date_is_created(db_session, monkeypatch, _enab
     _stub_trello(monkeypatch, created)
     jobs.sync_trello(db_session)
     assert len(created) == 1
+
+
+def _won_deal(pid, title, value=100000.0):
+    return Deal(pipedrive_id=pid, title=title, value=value, currency="MXN", stage_id=9,
+                stage_name="Contrato", status="won", talent_id=None,
+                update_time="2026-07-21T00:00:00Z",
+                won_time=datetime(2026, 7, 21, tzinfo=timezone.utc))
+
+
+# --- Fact-based idempotency: the three real prod scenarios ----------------
+
+def test_maka_fuzzy_trellocard_link_does_not_block(db_session, monkeypatch, _enable_autocreate):
+    """Maka 177: a preexisting card of a DIFFERENT campaign fuzzy-linked to this
+    deal (trello_cards.deal_id set, no [seg] marker) must NOT block creation.
+    Fuzzy similarity is no longer a skip criterion."""
+    d = _won_deal(177, "Maka Octubre - Ds Dw", value=200000.0)
+    db_session.add(d)
+    db_session.flush()
+    db_session.add(TrelloCard(
+        trello_card_id="old_maka_card", name="Maka - DS y DW",
+        list_id="listX", list_name="Enviar encuesta", list_state="cerrado",
+        deal_id=d.id, pipedrive_deal_id_desc=None, collection_date=None,
+    ))
+    db_session.commit()
+
+    created = []
+    _stub_trello(monkeypatch, created)  # no live marker
+    jobs.sync_trello(db_session)
+    assert len(created) == 1
+    assert created[0]["name"] == "Maka Octubre - Ds Dw"
+
+
+def test_loreal_creates_even_when_unmarked_manual_card_exists(db_session, monkeypatch, _enable_autocreate):
+    """Loreal 401: an unmarked manual card of the same campaign exists in another
+    list. Accepted trade-off — the system still creates (a one-time duplicate TA
+    can delete). Idempotency is fact-based, not similarity-based."""
+    d = _won_deal(401, "Loreal x Talento")
+    db_session.add(d)
+    db_session.add(TrelloCard(
+        trello_card_id="manual_loreal", name="Loreal — campaña previa",
+        list_id="finalizados", list_name="Finalizados", list_state="cerrado",
+        deal_id=None, pipedrive_deal_id_desc=None, collection_date=None,
+    ))
+    db_session.commit()
+
+    created = []
+    _stub_trello(monkeypatch, created)
+    jobs.sync_trello(db_session)
+    assert len(created) == 1  # accepted duplicate
+
+
+def test_deleted_autocard_not_recreated_via_audit(db_session, monkeypatch, _enable_autocreate):
+    """Leilani deleted the auto-card (421 Festival). The audit_log
+    TRELLO_CARD_CREATED event is the durable fact — even with the card gone from
+    Trello (no live marker), the system must NEVER recreate it."""
+    d = _won_deal(421, "Festival x Talento", value=50000.0)
+    db_session.add(d)
+    db_session.add(AuditLog(
+        action_type="TRELLO_CARD_CREATED", actor="system",
+        entity_type="deal", entity_id="421",
+    ))
+    db_session.commit()
+
+    created = []
+    _stub_trello(monkeypatch, created)  # card deleted → no live marker
+    jobs.sync_trello(db_session)
+    assert len(created) == 0  # audit fact blocks recreation
 
 
 def test_disabled_flag_creates_nothing(db_session, monkeypatch):

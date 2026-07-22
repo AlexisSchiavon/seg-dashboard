@@ -26,7 +26,16 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.integrations import pipedrive, sheets, trello
-from app.models import Deal, DealStageEvent, Lead, SyncLog, Talent, TalentProduct, TrelloCard
+from app.models import (
+    AuditLog,
+    Deal,
+    DealStageEvent,
+    Lead,
+    SyncLog,
+    Talent,
+    TalentProduct,
+    TrelloCard,
+)
 from app.services import talents as talents_service
 from app.services import trello_service
 
@@ -546,18 +555,23 @@ def sync_trello(db: Session) -> SyncLog:
             else:
                 min_won_date = date.fromisoformat(min_won_raw)
 
-            # Idempotency check #1 — local trello_cards registry.
-            linked_pipedrive_ids: set[int] = {
-                row[0]
-                for row in db.query(TrelloCard.pipedrive_deal_id_desc)
-                .filter(TrelloCard.pipedrive_deal_id_desc.isnot(None))
+            # Idempotency check #1 — FACT-BASED: has THIS system already created a
+            # card for this pipedrive_id? The audit_log TRELLO_CARD_CREATED event
+            # is the durable fact (excluded from purge). It survives card deletion,
+            # so a card a user deletes is NEVER recreated (Leilani). This replaces
+            # the old fuzzy resolve_deal_id skip, which failed both ways: it missed
+            # real campaigns (Maka 177) and duplicated (Loreal 401). Similarity is
+            # NO LONGER a skip criterion — an occasional manual-card duplicate (that
+            # TA deletes once) is preferred over dropping a real won deal.
+            created_pipedrive_ids: set[int] = {
+                int(row[0])
+                for row in db.query(AuditLog.entity_id)
+                .filter(
+                    AuditLog.action_type == "TRELLO_CARD_CREATED",
+                    AuditLog.entity_id.isnot(None),
+                )
                 .all()
-            }
-            linked_deal_ids: set[int] = {
-                row[0]
-                for row in db.query(TrelloCard.deal_id)
-                .filter(TrelloCard.deal_id.isnot(None))
-                .all()
+                if str(row[0]).isdigit()
             }
 
             # Idempotency check #2 — live Trello marker scan of the target list.
@@ -583,10 +597,10 @@ def sync_trello(db: Session) -> SyncLog:
                     # Deals with no won_time cannot be date-guarded → skip them.
                     if won_deal.won_time is None or won_deal.won_time.date() < min_won_date:
                         continue
-                    # Skip if already linked locally or already present live in Trello.
+                    # Skip ONLY on a fact: this system already created a card for
+                    # this deal (audit), or a live card already carries our marker.
                     if (
-                        won_deal.pipedrive_id in linked_pipedrive_ids
-                        or won_deal.id in linked_deal_ids
+                        won_deal.pipedrive_id in created_pipedrive_ids
                         or won_deal.pipedrive_id in live_marker_ids
                     ):
                         continue
@@ -625,8 +639,7 @@ def sync_trello(db: Session) -> SyncLog:
                     db.add(new_card)
 
                     # Update guard sets so later deals in this run are checked too.
-                    linked_pipedrive_ids.add(won_deal.pipedrive_id)
-                    linked_deal_ids.add(won_deal.id)
+                    created_pipedrive_ids.add(won_deal.pipedrive_id)
                     live_marker_ids.add(won_deal.pipedrive_id)
                     records_synced += 1
 
