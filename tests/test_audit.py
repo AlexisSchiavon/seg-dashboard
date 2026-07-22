@@ -151,6 +151,24 @@ def test_purge_old_logs(db_session):
     assert db_session.query(AuditLog).count() == 1
 
 
+def test_purge_never_deletes_trello_card_created(db_session):
+    """TRELLO_CARD_CREATED is the durable idempotency fact for auto-create — it
+    must survive the retention purge forever, so deleted cards are never recreated."""
+    old_card = AuditLog(action_type="TRELLO_CARD_CREATED", actor="system",
+                        entity_type="deal", entity_id="421",
+                        timestamp=datetime.now(timezone.utc) - timedelta(days=400))
+    old_login = AuditLog(action_type="LOGIN", actor="system",
+                         timestamp=datetime.now(timezone.utc) - timedelta(days=400))
+    db_session.add_all([old_card, old_login])
+    db_session.commit()
+
+    deleted = audit_service.purge_old_logs(db=db_session)
+    assert deleted == 1  # only the LOGIN purged
+    remaining = db_session.query(AuditLog).all()
+    assert len(remaining) == 1
+    assert remaining[0].action_type == "TRELLO_CARD_CREATED"
+
+
 # ------------------------------- endpoint ------------------------------------
 
 class TestAuditEndpoint:

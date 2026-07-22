@@ -143,8 +143,15 @@ def list_logs(
     return rows, total, next_cursor
 
 
+# Action types that must NEVER be purged: they are durable facts other logic
+# depends on. TRELLO_CARD_CREATED is the idempotency source of truth for Trello
+# auto-create — purging it would let the system recreate a card a user deleted.
+NON_PURGEABLE_ACTION_TYPES = frozenset({"TRELLO_CARD_CREATED"})
+
+
 def purge_old_logs(db: Session | None = None) -> int:
-    """Delete audit rows older than AUDIT_LOG_RETENTION_DAYS (default 90).
+    """Delete audit rows older than AUDIT_LOG_RETENTION_DAYS (default 90),
+    EXCEPT durable-fact action types (NON_PURGEABLE_ACTION_TYPES).
 
     Returns the number of rows deleted. Safe to call from a scheduled job.
     """
@@ -153,7 +160,12 @@ def purge_old_logs(db: Session | None = None) -> int:
     close_after = db is None
     db = db or SessionLocal()
     try:
-        result = db.execute(delete(AuditLog).where(AuditLog.timestamp < cutoff))
+        result = db.execute(
+            delete(AuditLog).where(
+                AuditLog.timestamp < cutoff,
+                AuditLog.action_type.notin_(NON_PURGEABLE_ACTION_TYPES),
+            )
+        )
         db.commit()
         return result.rowcount or 0
     finally:
