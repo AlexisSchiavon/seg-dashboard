@@ -16,7 +16,7 @@ from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
 
 from app.models import Deal, Talent
-from app.services.funnel import talent_funnel
+from app.services.funnel import talent_funnel, _trello_stage_aggregates
 
 
 def global_kpis(db: Session) -> dict:
@@ -49,15 +49,13 @@ def global_kpis(db: Session) -> dict:
     ).filter(Deal.status == "won").one()
     won_count, won_value = won_row[0], won_row[1] or 0.0
 
-    # En campaña — open deals in "En ejecución" stage (Trello-sourced; 0 until Phase 4)
-    campana_row = db.query(
-        func.count(Deal.id),
-        func.coalesce(func.sum(Deal.value), 0.0),
-    ).filter(
-        Deal.stage_name == "En ejecución",
-        Deal.status == "open",
-    ).one()
-    campana_count, campana_value = campana_row[0], campana_row[1] or 0.0
+    # En campaña — tarjetas de Trello en la lista de ejecución (misma fuente y
+    # semántica que la etapa "En ejecución" del Funnel, Fase 6). Antes consultaba
+    # Deal.stage_name == "En ejecución", etapa que no existe en Pipedrive, por lo
+    # que siempre devolvía 0.
+    campana_count, campana_value = _trello_stage_aggregates(db).get(
+        "En ejecución", (0, 0.0)
+    )
 
     return {
         "kpis": [

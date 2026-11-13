@@ -137,26 +137,44 @@ def test_cerrados_kpi(seed_deals):
 # ---------------------------------------------------------------------------
 
 def test_en_campana_kpi(db_session):
-    """En campaña KPI counts deals with stage_name='En ejecución' and status=open."""
-    deal = Deal(
-        pipedrive_id=7001,
-        title="Deal en campaña",
-        value=30000.0,
-        currency="MXN",
-        stage_id=5,
-        stage_name="En ejecución",
-        status="open",
-        talent_id=None,
-        commission_amount=21000.0,
-        is_sin_cotizar=False,
+    """En campaña KPI = Trello cards in 'ejecucion' (same source as the Funnel stage).
+
+    A Pipedrive deal whose stage_name happens to be "En ejecución" must NOT count:
+    that stage does not exist in Pipedrive; the KPI is Trello-sourced (Fase 6).
+    """
+    from app.models import TrelloCard
+
+    won = Deal(
+        pipedrive_id=7001, title="Deal ganado en campaña", value=30000.0,
+        currency="MXN", stage_id=4, stage_name="Contrato", status="won",
+        talent_id=None, commission_amount=21000.0, is_sin_cotizar=False,
         update_time="2026-06-01T10:00:00Z",
     )
-    db_session.add(deal)
+    stray = Deal(
+        pipedrive_id=7002, title="Deal con etapa inexistente", value=99999.0,
+        currency="MXN", stage_id=5, stage_name="En ejecución", status="open",
+        talent_id=None, commission_amount=0.0, is_sin_cotizar=False,
+        update_time="2026-06-01T10:00:00Z",
+    )
+    db_session.add_all([won, stray])
+    db_session.commit()
+    db_session.add_all([
+        TrelloCard(trello_card_id="c-ejec", name="Deal ganado en campaña",
+                   list_id="L1", list_name="Ejecución", list_state="ejecucion",
+                   deal_id=won.id),
+        TrelloCard(trello_card_id="c-orf", name="Card huérfana",
+                   list_id="L1", list_name="Ejecución", list_state="ejecucion",
+                   deal_id=None),
+        TrelloCard(trello_card_id="c-cobr", name="En cobranza",
+                   list_id="L2", list_name="Cobranza", list_state="cobranza",
+                   deal_id=None),
+    ])
     db_session.commit()
 
     result = kpi_service.global_kpis(db_session)
     tile = next(t for t in result["kpis"] if t["label"] == "En campaña")
-    assert tile["count"] == 1
+    # 2 cards in ejecucion (one orphan counts, contributes $0), cobranza excluded
+    assert tile["count"] == 2
     assert tile["value"] == pytest.approx(30000.0)
 
 
